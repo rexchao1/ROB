@@ -18,6 +18,3 @@ brain/dash/art/alt/
 # The operator's picks, saved by the brain (tuning, and ROB's personality and voice).
 gamemaster.settings.json
 gamemaster.rob.json
-
-# The Pi relay bundle (qnx/relay.sh setup): private keys.
-.qnx-connect/
