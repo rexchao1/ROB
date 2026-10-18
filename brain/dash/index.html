@@ -62,7 +62,8 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 }
 
 /* ---------- top bar ---------- */
-.top { display: flex; align-items: center; gap: 12px; padding: max(16px, env(safe-area-inset-top)) 32px 0; position: relative; z-index: 5; }
+/* one container for the top bar, the lobby and the game screen, so they share a left edge */
+.top { display: flex; align-items: center; gap: 12px; padding: max(16px, env(safe-area-inset-top)) 32px 0; position: relative; z-index: 5; max-width: 1200px; margin: 0 auto; }
 .brand { font-weight: 700; font-size: 15px; letter-spacing: .12em; white-space: nowrap; }
 .top .spacer { flex: 1; }
 .conn { font-size: 15px; font-weight: 600; color: var(--red); }
@@ -130,7 +131,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 /* ---------- in game ---------- */
 .game {
   height: calc(100dvh - 56px); min-height: 600px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
-  padding: 16px 32px max(24px, env(safe-area-inset-bottom));
+  padding: 16px 32px max(24px, env(safe-area-inset-bottom)); max-width: 1200px; margin: 0 auto;
 }
 .meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 14px; color: var(--text-2); }
 .meta b, .meta .chip { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
