@@ -98,3 +98,12 @@ Feature: Twenty Questions
     When three minutes pass with nothing said
     Then the players hear the host say "I'll be here when you're back."
     And the game is over with no winner
+
+  @D105 @D104
+  Scenario: A guess the table does not know is not decided by the model
+    Given a fake talk model answers the host with "yes"
+    And the host is thinking of a dog
+    When the player asks "is it a kazoo?"
+    Then the players hear the host say "Nope, not a kazoo."
+    And one question has been used
+    And the game is not over

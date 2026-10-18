@@ -10,13 +10,13 @@ The fence for the game master, scoped 2026-10-18 in a deliberately short intervi
 
 ## Deferred — each with its reopening condition
 
-- **Wavelength, then the live banter model, then Imposter**, in that order, if the build runs short; Mafia with the private screen, heads-down catching and voice votes is never cut. Reopens phase by phase as time allows; anything unbuilt at the deadline is recorded here by the build. (D33, D32, 2026-10-18)
+- **Wavelength, then the live banter model, then Imposter**, in that order, if the build runs short; Mafia with the private screen, heads-down catching and voice votes is never cut. Nothing was cut: all three were built and bound before the deadline, so the review proposes closing this deferral and keeping D32's cut order for a future build. (D33, closed by D107 proposed, 2026-10-18)
 
-- **Head pats, "louder" and "quieter", sound and mood, playing again with scores, players' names.** Asked for after the welcome; seats keep their numbers meanwhile. Reopens when Rex picks one up after trying the welcome on the robot. (D44, 2026-10-18)
+- **Head pats, "louder" and "quieter", mood, playing again with scores, players' names.** Asked for after the welcome; seats keep their numbers meanwhile. Reopens when Rex picks one up after trying the welcome on the robot. Sound cues are proposed back in by the review (`docs/SOUND-CUES.md`): the rest stays deferred. (D44, amended by D108 proposed, 2026-10-18)
 
 - **Scripted lines per personality, the one callback to a moment from earlier in the game, switching the personality by voice.** Workstream X built the five personalities as a talk style, a ring colour and a voice; these three were left. Reopens when Rex picks one up. (D82, 2026-10-18)
 
-- **"Say that again", "count again", "more time" with a deadline the page can show, taking back a wrong heads-up warning, a `listening_for` field in the reported state.** The robot should do each by voice first; the page leaves them out until it can. Reopens one by one as the robot learns the phrase. (D83, 2026-10-18)
+- **"Count again", "more time" with a deadline the page can show, taking back a wrong heads-up warning, a `listening_for` field in the reported state.** The robot should do each by voice first; the page leaves them out until it can. "Say that again" left the list when Rex built it on 2026-10-18 ~05:30. Reopens one by one as the robot learns the phrase. (D83, amended by D112, 2026-10-18)
 
 - **The Wordle grid on the robot's own screen.** Rex asked for it in green, yellow and gray; the build reports the board to the dashboard only. Reopens when a `show_board` for the robot's screen is built. (D84, 2026-10-18)
 

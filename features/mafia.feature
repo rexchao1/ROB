@@ -40,6 +40,45 @@ Feature: Mafia
       | sixty seconds        | One minute left.          |
       | one hundred twenty seconds | Time. Let's vote.   |
 
+  @D87
+  Scenario: A sentence that mentions starting over is talk, not a reset
+    Given it is morning and the day phase has begun
+    When someone says "i think we should start over with the accusations"
+    Then the game goes on and the players hear the host say "One minute left." sixty seconds after the day began
+
+  @D88
+  Scenario: Restart the round starts the night again
+    Given it is morning and the day phase has begun
+    When someone says "restart the round"
+    Then the players hear the host say "Okay, this round again."
+    And the players hear the host say "Everyone, heads down."
+
+  @D92
+  Scenario: The group may vote early by saying so
+    Given it is morning and the day phase has begun
+    When thirty seconds have passed and someone says "let's vote"
+    Then the players hear the host say "Okay, let's vote."
+
+  @D92
+  Scenario: A sentence about not being ready does not end the day
+    Given it is morning and the day phase has begun
+    When someone says "i'm not ready to vote"
+    Then the game goes on and the players hear the host say "One minute left." sixty seconds after the day began
+
+  @D99
+  Scenario: Ten rounds without a win is a draw
+    Given nine rounds have passed with nobody killed and every vote tied
+    When the tenth day's vote ties
+    Then the players hear the host say "That's enough rounds for one night. Let's call it a draw."
+    And the game is over with no winner
+
+  @D102
+  Scenario: The Doctor is asked every night, dead or alive
+    Given Player five was killed in the first night
+    When the second night comes and nobody whispers
+    Then the players hear the host say "Mafia, once more, quietly. Who?"
+    And the players hear the host say "Doctor, once more, quietly. Who?"
+
   @D18
   Scenario: The eliminated player's role is revealed
     Given a day phase vote eliminated Player four

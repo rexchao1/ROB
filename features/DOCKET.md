@@ -669,3 +669,264 @@ D84 2026-10-18 [I]
   serves: N2
   touches: D69
 # BUILD-PLAN.md, X5 "done without show_board".
+
+# Review R, proposals (Linus, 2026-10-18 ~08:00). Each entry below is a ruling the review proposes after reading the code against the contract (docs/REVIEW-2026-10-18.md names the finding behind each). All are [I]: proposed, unratified; Rex rules. Where an entry amends a signed ruling the amendment is the proposal, and the signed text stands until he does. The scenarios that cite them are held in the wip register; the code that would make them green is on the branch abdd/3-src.
+
+D85 2026-10-18 [I]
+  resp: the referee's Table takes calls only from a referee that holds the shared token; the token is required, generated at the brain's first start and carried to the Pi by the deploy script, never optional; a call that could hold the Table for long (a wait or a listen) is capped at the longest listen the gateway allows [I]
+  -> structural
+  serves: N1
+  touches: D45 D46
+# REVIEW A1: brain/remote.py binds 0.0.0.0 with no token by default; any phone on the game's Wi-Fi can take the Table over, turn the boot referee off, speak through the robot and park the worker thread.
+
+D86 2026-10-18 [I]
+  resp: a write from the operator's page (a key, a setting, typed hearing, a game, the head, the volume, content, a rig) carries a secret the brain minted at this start and printed with the page's address; a write without it is refused, whatever its origin, and the page's answers are readable by the page's own origin only; rigging a game is possible in test mode only [I]
+  -> structural
+  serves: N3
+  touches: D78 D79 D80 D81
+# REVIEW A2, A3: the keys route's guard compares Origin with Host and nothing else; every other write route has no check at all and answers any origin; a page the operator has open, or any phone on the network under --host 0.0.0.0, can set the robot's token, rig the Mafia, speak and read the camera.
+
+D87 2026-10-18 [I]
+  pre:   a game is in progress and the host is listening, during the day's discussion or a clue or a vote [I]
+  trig:  someone says a sentence that merely contains `start over`, `reset`, `restart` or `stop playing`, such as `i think we should start over with the accusations` or `don't reset` [I]
+  resp:  the game goes on: a stop or a reset is heard only as a short plain command, at most five words with no negation, said on its own; a sentence that contains the word is talk [I]
+  sib:   none -- the rule names its own negative; D57 is the wanted command
+  serves: N1
+  touches: D18 D27 D38 D57
+# REVIEW B1: wants_to_stop and wants_to_reset match substrings at every listen; a clue of "restart" ended Wavelength in a trace.
+
+D88 2026-10-18 [I]
+  pre:   Mafia, a night or a day in progress [I]
+  trig:  someone says `restart the round` on its own [I]
+  resp:  the host starts the current round again from its night, with the same roles and nothing undone from earlier rounds, and says so; `reset` alone still goes to the welcome [I]
+  sib:   none -- a restart undoes nothing that could fail
+  serves: N1
+  touches: D27 D36 D57 D87
+# REVIEW B2: D27 and D36 (ratified) let the group restart a round; the code reads the phrase as a full reset to the welcome and has no round restart.
+
+D89 2026-10-18 [I] amends D6
+  pre:   the host has counted five faces and said so [I]
+  trig:  someone says `there are six of us` [I]
+  resp:  the game does not start: the host says `I only see five. Who's hiding?` and listens again; a plain go-ahead with no `no` or `not` in it accepts the host's count; a disagreement with no number in it gets a second sweep; after three disagreements the host says `Let's try again when everyone's ready.` and no game starts; silence after the mismatch line is not agreement [I]
+  sib:   none -- the mismatch is itself the failure case; its outcomes are in resp
+  serves: N1
+  touches: D5 D6 D59
+# REVIEW B3: agrees() takes "no that's not right" as a go-ahead and the game starts on the host's count; the go-ahead, the give-up after three tries and silence-as-agreement were all unruled though the code and a test (test_games_common.py L29-37, labelled D6) assert them.
+
+D90 2026-10-18 [I]
+  pre:   the host has counted five faces and said so [I]
+  trig:  someone says a count below it, `we're four` [I]
+  resp:  the host says `I see five. Is someone just watching?`, sweeps once more in case a face was a bystander's, and starts on the count the group confirms [I]
+  sib:   none -- the mirror of D6, with no failure of its own
+  serves: N1
+  touches: D6 D89
+# REVIEW B3: the line exists (lines.see_more, "not ruled" in its own docstring); the code does not sweep again.
+
+D91 2026-10-18 [I]
+  pre:   a day phase vote has begun and the host has asked `Player one, who?` [I]
+  trig:  the answer names two seats, negates one, or corrects itself, `players three and four`, `anyone but four`, `player four, no wait, two` [I]
+  resp:  the vote is asked for once more; a vote names exactly one living seat; a soundalike (`for`, `too`, `won`) counts only right after `player`, `number` or `seat`; `me too` is not a vote [I]
+  sib:   none -- the re-ask is the failure handling and is in resp
+  serves: N1
+  touches: D12 D26
+# REVIEW B4: seat_said reads "me too" as seat two, "everyone except player four" as four and keeps the first number of a correction; test_ears.py asserts the soundalike readings.
+
+D92 2026-10-18 [I]
+  pre:   Mafia, the day's discussion is running [I]
+  trig:  someone says `let's vote` or `we're ready to vote` on its own, before the time is up [I]
+  resp:  the host says `Okay, let's vote.` and runs the vote; a longer or negated sentence (`i'm not ready to vote`, `we're ready to hear from player two`) is talk; the halfway call is still said when the vote comes after the half [I]
+  sib:   none -- the negated sentence is in resp
+  serves: N1
+  touches: D12 D18
+# REVIEW B5: wants_to_vote is a substring test, so "we're ready to hear from player two" skips the day and its halfway call; the early vote itself was unruled.
+
+D93 2026-10-18 [I] amends D72
+  pre:   a game is in progress [I]
+  trig:  someone says `pause`, `hold on`, `hang on`, `one sec` or `wait` on its own at any listen [I]
+  resp:  the host holds the game as D72 says; `resume`, `unpause`, `we're back` or `keep going`, a tap on its head or the page's Resume carries on; `let's go` is a yes, never a resume; in Hot Seat a hold word pauses the clock instead of counting as an answer or a miss; a stop or a reset said while paused is heard [I]
+  sib:   none -- the pause has no failure case beyond the phrases in resp
+  serves: N1
+  touches: D66 D72
+# REVIEW B6: the plan says "pause (or hold on)" but only "pause" and "hold the game" pause; Hot Seat counts "hold on" as an answer and puts "wait" out; "let's go" is at once a yes, an agree and a resume.
+
+D94 2026-10-18 [I]
+  pre:   the host is listening for a game's name, idle or in the welcome [I]
+  trig:  a game's name is said inside other talk, `that was a hot seat`, `i have twenty questions about this`, `put it in poster form` [I]
+  resp:  no game starts: a game starts on its name said as a request or as the whole utterance (`let's play mafia`, `mafia`, `wordle please`); a doubtful hearing gets `Mafia? Say yes to play it.` and a yes starts it [I]
+  sib:   none -- the confirm is the failure handling and is in resp
+  serves: N1
+  touches: D39 D49 D58
+# REVIEW B7: game_named fires on the name anywhere, split forms included, and the welcome starts that game at once.
+
+D95 2026-10-18 [I]
+  pre:   Wavelength, the group has talked it over [I]
+  trig:  someone says the guess as {seven | seven out of ten | nine, no, eight} or inside a longer sentence [I]
+  resp:  the guess is the one number in a short answer; `out of ten` is dropped; a correction takes the later number; a number inside a longer sentence (`it's definitely hot, like an eight`) is talk and the host waits for the answer [I]
+  spread: A guess is read from a short answer
+  sib:   none -- an answer the host cannot read is asked for again, D21's outline
+  serves: N1
+  touches: D21
+# REVIEW B8: number_said answers None for "seven out of ten" and scores the first number it hears while the group is still talking.
+
+D96 2026-10-18 [I] amends D5
+  pre:   five friends are seated around a table with the host at one end, facing in [I]
+  trig:  someone says `let's play Mafia` [I]
+  resp:  the host sweeps its head across its whole range, far left to far right, with a photo at each step, finds five faces, and says `Five of you. Player one is on my left, then two, three, four, five going clockwise.`; the seat numbers are what the host uses for the rest of the game; the robot's head stops at ninety degrees each way, so a full circle is out of reach and the host belongs at the end of the table [I]
+  sib:   D6
+  serves: N1
+  touches: D1 D5 D47
+# REVIEW C1: "a full circle" is held to the code only by the binding's comment (hosting.steps.ts L52-54); BUILD-PLAN "Sweeping (03:30)" measured the ±90 limit. The sentence in hosting.feature changes with this entry.
+
+D97 2026-10-18 [I] amends D12
+  pre:   a day phase vote has begun with five living players, two of them sitting out this round [I]
+  trig:  the host turns to each living player not sitting out, says `Player one, who?`, and each says a seat number [I]
+  resp:  the host repeats the tally out loud; a seat named by more than half of the players who may vote this round is eliminated and the host announces it; a top seat short of that gets `Nobody has a majority. Nobody leaves.`; players sitting out neither vote nor count toward the half [I]
+  sib:   D13
+  serves: N1
+  touches: D11 D12 D13
+# REVIEW C2: the code counts the majority over all living players, sit-outs included, so a 2-1 vote of five living with two sitting out eliminates nobody; no test or scenario fails when the majority becomes a plurality (mutation probe e).
+
+D98 2026-10-18 [I]
+  pre:   the welcome has counted the table [I]
+  trig:  a game is named for a table of {four | three | two | one} [I]
+  resp:  each game has a smallest table: Mafia four (one Mafia and one Doctor up to six, two Mafia from seven), Imposter three, Wavelength two, Hot Seat two, Wordle one, Twenty Questions one; a table below it hears `Mafia needs at least four players.` and the host offers a game the count can play [I]
+  spread: Each game has a smallest table
+  sib:   none -- the too-few line is the failure handling and is in resp
+  serves: N1 N2
+  touches: D15 D20 D21 D48 D66 D69
+# REVIEW C3: lines.MINIMUM and mafia_count carry these numbers; D15 rules five and seven-plus only, and test_games_mafia.py asserts four and six.
+
+D99 2026-10-18 [I]
+  pre:   Mafia, ten rounds played and neither side has won [I]
+  trig:  the tenth day ends without a win [I]
+  resp:  the host says `That's enough rounds for one night. Let's call it a draw.` and the game ends with no winner [I]
+  sib:   none -- a cap on rounds has no failure case
+  serves: N1
+  touches: D19
+# REVIEW C4: Options.max_rounds and lines.DRAW, asserted by a unit test, bound by no scenario.
+
+D100 2026-10-18 [I]
+  pre:   Wavelength, the psychic has given a clue [I]
+  trig:  nobody says a number the host can read within eight listens, with `What's your number?` asked once halfway [I]
+  resp:  the host says `No guess. Zero points.`, then the target, and the round scores zero [I]
+  sib:   none -- the zero is the failure handling itself
+  serves: N1
+  touches: D21 D95
+# REVIEW C4: eight listens of six seconds, asserted by test_games_wavelength.py, bound by no scenario.
+
+D101 2026-10-18 [I]
+  pre:   Imposter, clues have been given and the vote has run [I]
+  trig:  the vote ties, or no seat has a majority [I]
+  resp:  nobody is eliminated: the host says the tally and the tie or no-majority line, then `The Imposter survives. It was Player three.` and the word, and the round ends [I]
+  sib:   none -- the tie is the failure case of D13 and this names its Imposter outcome
+  serves: N1
+  touches: D13 D20
+# REVIEW C4: D13 says a tie eliminates nobody and stops; D20 names the survive line for "anyone else voted out"; the code says the survive line on a tie too.
+
+D102 2026-10-18 [I] amends D16
+  pre:   Mafia, night, heads down; Player one is the Mafia and Player five is the Doctor [I]
+  trig:  the host says `Mafia, whisper your target.` and Player one quietly says `Player four`; the host says `Doctor, whisper who you save.` and Player five quietly says `Player two` [I]
+  resp:  at morning the host says `Player four was killed in the night.` and Player four is out; every night the host asks each role once and, when it hears nothing, once more, whether or not the role is still in, so the asks give nothing away; a dead player's silence is the table's rule, not the host's, since the host cannot tell voices apart [I]
+  sib:   D17
+  serves: N1
+  touches: D9 D11 D15 D16 D26
+# REVIEW C5: the second ask is said only when nothing valid was heard, so "Doctor, once more, quietly" after the Doctor's death tells the table which role is gone; D16's "stays silent for the rest of the game" is unenforceable by the host.
+
+D103 2026-10-18 [I] amends D21
+  pre:   Wavelength with five players; Player five is the psychic in the first round; the spectrum is `cold - hot` [I]
+  trig:  Player five leans in and sees the target `7` on a scale of one to ten, gives a clue, the group discusses, and someone says `six` [I]
+  resp:  the host scores the round as ten minus the distance between the target and the guess, says `Nine points.`, keeps a running total, rotates the psychic in seat order from the first round's psychic (five, one, two), and after three rounds announces the total; the psychic who would lead a fourth round is Player three [I]
+  why:   the one-to-ten scale, the scoring rule and three rounds are the interviewer's, accepted at D21; the first-round psychic moves to five so the scenario's words and the code agree without a rig [I]
+  sib:   none -- failure cases are D8 and D100
+  spread: A spoken guess scores by distance from the target
+  serves: N1
+  touches: D7 D21
+# REVIEW C6: wavelength.feature's Background names Player two as the psychic while its third scenario wants Player three next; the binding rigs psychic five (wavelength.steps.ts L4-7). This entry moves the fact into the text.
+
+D104 2026-10-18 [I]
+  resp: a model may advise a yes or a no; code decides: a guess in Twenty Questions wins only when it names the secret or one of its aliases, and a question the table cannot answer and the model answers is `sort of` at most, never a win or a loss; in Hot Seat an answer on no list counts unless it is on another category's list, and a model's `no` makes the host ask the table `Does that count?` and take the group's answer [I]
+  -> structural
+  serves: N2
+  touches: D14 D42 D63 D67
+# REVIEW C7, C8: a model "yes" to "is it a kazoo" won a game against a secret dog; a model "no" eliminates a Hot Seat player.
+
+D105 2026-10-18 [I]
+  pre:   Twenty Questions with the player guessing; the host is thinking of a dog [I]
+  trig:  the player asks `is it a kazoo?` and a talk model answers yes [I]
+  resp:  the host says `Nope, not a kazoo.` and one question is used; code compared the guess with the secret and the model's yes decided nothing [I]
+  sib:   none -- the wrong guess is itself the failure case, decided by code
+  serves: N2
+  touches: D63 D104
+
+D106 2026-10-18 [I]
+  pre:   Hot Seat, the category is fruits, a talk model answers [I]
+  trig:  a player says `rambutan`, which is on no list, and the model answers no [I]
+  resp:  the host asks the table `Rambutan? Does that count?` and takes the group's yes or no; the model's no alone puts nobody out [I]
+  sib:   D67
+  serves: N2
+  touches: D66 D67 D104
+
+D107 2026-10-18 [I] amends D33
+  resp: nothing was cut: Wavelength, the live talk and Imposter were all built and bound before the deadline, so the deferral of D33 is closed; the cut order of D32 stays as the rule for a future build that runs short [I]
+  -> fence-deferred cut-order
+  serves: N1
+  touches: D32 D33
+# AUDIT, rulings: a deferral whose condition is moot stood unrevised on the fence.
+
+D108 2026-10-18 [I] amends D44
+  resp: sound cues come into this build, reopening the sound half of D44: a short cue at the moments the script already marks (a game's start, the deal, night, morning, a death, a save, the vote, a tie, a reveal, a win, Hot Seat's go and out, Wordle's feedback, pause and resume), each under two seconds except three ambiences under three, never played under speech, made once from `CC0` libraries or generated with the team's ElevenLabs key and cached beside the recorded lines, off with one flag; a cue decides nothing and a missing cue never stops a game; head pats, `louder` and `quieter`, mood, playing again with scores and players' names stay deferred [I]
+  -> fence-deferred welcome-extras
+  serves: N1
+  touches: D14 D30 D44 D73
+# Rex asked for sound effects (relayed by Linus, 2026-10-18); docs/SOUND-CUES.md is the research. Proposed, unratified: Rex picks the cue list.
+
+# Rex's commit 3ae4edc (2026-10-18 ~05:30, "Voice control, the talk fixed, tabbed settings" in DASHBOARD-PLAN.md), pushed after this review began. Transcribed here the same way as D45 to D81: [I>V] where the plan records Rex's words, built as written.
+
+D109 2026-10-18 [I>V]
+  pre:   a game has started and the host has said `Player two, lean in.` [I>V]
+  trig:  nobody comes close for a few seconds and Player two says `I'm looking` or `show me`, or taps the host's head [I>V]
+  resp:  the card shows for about four seconds whether or not the camera sees a close face; `got it`, `next` or `done` moves the deal on; after ten seconds with nobody close the host says `Player two, lean in close, or say show me.`; `stop the game` or `reset` said during a deal ends the game, over the remote Table too [I>V]
+  why:   the four seconds and the ten are the build's numbers (brain/host.py TRUST, REPROMPT) [I]
+  sib:   none -- D8 stays the private screen's failure case; a spoken show is the player's own choice
+  serves: N1
+  touches: D7 D8 D72
+# Rex: "ROB waits for exactly one response (the lean-in above all)". A spoken show bypasses D7's one-face rule for four seconds; flagged for Rex in the review as a privacy trade-off he chose.
+
+D110 2026-10-18 [I>V] amends D72
+  pre:   a game is in progress, a lean-in included [I>V]
+  trig:  someone says `pause`, `shut up`, `be quiet`, `hush`, or a bare `stop` or `wait` with at most a word of filler (`okay stop`, `rob, wait`) [I>V]
+  resp:  the host holds the game as D72 says; `hold on` is not a pause but the welcome's `not now`; `stop the game` ends the game, never pauses it; the resume words stay those of D72, and the point of D93 that `let's go` is a yes, not a resume, stands [I>V]
+  sib:   none -- a stop or reset while paused is handled in D72
+  serves: N1
+  touches: D58 D72 D93
+# Rex, after a test game: "pause", "stop" and "shut up" went unheard while it waited for a lean-in. This replaces the phrase list the review proposed in D93.
+
+D111 2026-10-18 [I>V]
+  pre:   the host is running [I>V]
+  trig:  someone says `change your speaker to the Mac`, `speaker mac`, or `use your own speaker`, `speaker robot` [I>V]
+  resp:  the voice moves live to the Mac's audio output (`Okay, I'll talk through the Mac.`) or back to the robot's speaker (`Okay, back to my own speaker.`) while the robot keeps moving its mouth; the page has the same switch and the pick is kept with ROB's others; a sentence that merely mentions a speaker is not a command [I>V]
+  sib:   none -- the non-command sentence is the rule's own negative
+  serves: N1 N3
+  touches: D75 D77
+# Rex: "change your speaker to the Mac" and a speaker setting; the robot's one-watt speaker is quiet in a hall.
+
+D112 2026-10-18 [I>V] amends D83
+  resp: `say that again`, `can you repeat`, `what did you say` make the host say its last line again, at any listen, so this leaves the product-fixes deferral; `count again`, `more time` with a deadline the page can show, taking back a wrong heads-up warning and a `listening_for` field stay deferred [I>V]
+  -> fence-deferred product-fixes
+  serves: N3
+  touches: D79 D83
+
+D113 2026-10-18 [I>V]
+  resp: the talk reaches the model: the request is shaped per model (no temperature where Claude refuses it, an effort where the model takes one), the page has an AI tab with the provider, the model, the effort, the last call's result and a Test button, and ROB's own tab holds the personality, the voice and the speaker; a key not tied to a workspace needs its workspace id beside it [I>V]
+  -> structural
+  serves: N1 N3
+  touches: D40 D74 D75 D81
+# What the log showed Rex: every Anthropic call answered HTTP 400 (temperature), so every line had been scripted. Not yet tried against the real API ("stubbed HTTP only").
+
+D114 2026-10-18 [I>V]
+  pre:   the host has just said a line [I>V]
+  trig:  someone says `say that again` [I>V]
+  resp:  the host says its last line once more [I>V]
+  sib:   none -- a repeat has no failure case
+  serves: N1
+  touches: D112

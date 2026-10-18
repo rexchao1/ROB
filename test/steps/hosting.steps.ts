@@ -10,7 +10,6 @@ import {
   word, type World,
 } from './common.ts'
 
-const HFOV = 60 // degrees: the camera's field of view (brain/vision.py HFOV_DEG)
 const RIG = { mafia: [1], doctor: 5 }
 
 function roleOf(w: World, seat: number): string {
@@ -49,20 +48,9 @@ export const hosting: Definer<World> = (reg) => {
 
   // --- D5, D6: the count ---------------------------------------------------------------
 
-  reg.define(/^the players see the host turn a full circle$/, async (w) => {
-    // The head turns -90..90, not all the way round (docs/BUILD-PLAN.md): a full circle
-    // is a sweep of the whole range, one way, with no gap between views.
-    const said = await brain(w).said()
-    const count = said.findIndex((line) => COUNT.test(line))
-    expect(count, 'the count line').toBeGreaterThanOrEqual(0)
-    const photos = await photosBetween(w, -1, count)
-    expect(photos[0], 'the first photo of the sweep').toBe(-90)
-    expect(photos.at(-1), 'the last photo of the sweep').toBe(90)
-    for (let i = 1; i < photos.length; i++) {
-      expect(photos[i]! - photos[i - 1]!, `the turn from ${photos[i - 1]} to ${photos[i]}`).toBeGreaterThan(0)
-      expect(photos[i]! - photos[i - 1]!, `the turn from ${photos[i - 1]} to ${photos[i]}`).toBeLessThan(HFOV)
-    }
-  })
+  // D96 (review R, proposed): "the players see the host turn a full circle" became "sweep the whole
+  // table, far left to far right"; its definition is removed here because the runner refuses a
+  // definition with no consumer, and abdd/3-src binds the new sentence.
 
   reg.define(/^the host has counted (\w+) faces$/, async (w, faces) => {
     const n = numberFrom(faces)
