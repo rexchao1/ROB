@@ -55,6 +55,7 @@ The orienting document for the agents that build the game master, with the human
 - Hot Seat for two or more: five seconds in the first round, a second less each round, never under three; out on silence, a pass, a repeat or an answer that does not count; a tie after twelve rounds. [ruled: D66, D67, D68]
 - Wordle, out loud, for one or more: six guesses said or spelled, feedback spoken short with the heard word first, a word not known uses no guess, the last guess confirmed, turns for a group; the grid reaches the dashboard, not the robot's screen. [ruled: D69, D70, D71]
 - Every game plays offline from its built-in tables; a model only words a question or picks from a fixed set of answers. [ruled: D42, D63]
+- Proposed (review R, unratified): short sound cues at the script's marked moments, never under speech, CC0 or generated once and cached, off with one flag, deciding nothing (`docs/SOUND-CUES.md`). [ruled: D108]
 - Proposed (review R, unratified): a model advises, code decides: a Twenty Questions guess wins only by naming the secret; a Hot Seat answer the model doubts is put to the table. [ruled: D104]
 
 ## The operator's dashboard
