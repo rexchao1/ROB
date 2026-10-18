@@ -842,7 +842,8 @@ function setScene(scene) {
 function render() {
   const s = state; if (!s) return;
   const g = gameOf(s);
-  const inGame = !!g && !(g.over && dismissed === keyOf(g));
+  const welcome = !!g && !g.game && g.phase === "welcome"; // the host counting and chatting before a game
+  const inGame = !!g && !welcome && !(g.over && dismissed === keyOf(g));
   const name = (g && g.game) || lastGameName || starting;
   document.body.dataset.screen = inGame ? "game" : "idle";
   const paused = s.paused === true, asleep = !paused && s.asleep === true;
@@ -856,7 +857,7 @@ function render() {
   const tone = inGame && !g.over ? (TONE[g.phase] || "idle") : "idle";
   if (document.body.dataset.tone !== tone) document.body.dataset.tone = tone;
   setScene(inGame ? sceneFor(name, g.phase) : "lobby");
-  if (inGame) { starting = null; renderGame(s, g, name); } else renderIdle(s);
+  if (inGame) { starting = null; renderGame(s, g, name); } else renderIdle(s, welcome ? g : null);
   renderRobot(s);
   renderDrawer(s);
 }
@@ -925,14 +926,16 @@ function renderRobot(s) {
 
 // ---------- idle: the welcome over the robot ----------
 const IDLE_WORDS = "What are we playing?";
-function renderIdle(s) {
+function renderIdle(s, welcome) {
   if (starting && Date.now() - startingT > 15000) starting = null;
   const ph = $("phase");
   if (ph.textContent !== IDLE_WORDS) { ph.textContent = IDLE_WORDS; ph.classList.remove("swap"); void ph.offsetWidth; ph.classList.add("swap"); }
   $("gName").hidden = true; $("meta").innerHTML = ""; $("steps").innerHTML = ""; stepsKey = "";
   $("banner").hidden = true; $("foldWrap").hidden = false;
   $("games").querySelectorAll("[data-game]").forEach((b) => b.classList.toggle("starting", b.dataset.game === starting));
-  renderSeats(s, {});
+  // seats appear only as the host finds them (its count) or is told how many there are; before that, nobody
+  if (welcome && welcome.seats > 0) renderSeats(s, { seats: welcome.seats });
+  else renderSeats(Object.assign({}, s, { seats: [], seats_info: [] }), {});
   renderActions(s, { phase: "idle" });
   const now = Date.now() / 1000;
   const p = s.photo;
