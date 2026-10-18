@@ -111,6 +111,14 @@ def abandon(table: Table, state: State) -> None:
     state.report(table)
 
 
+OUTCOMES = {  # how a game came out, for the last quip: only what was just said out loud, never who
+    "mafia": "the Mafia won",
+    "village": "the village won",
+    "players": "the players won",
+    "imposter": "the Imposter got away",
+}
+
+
 def decided(table: Table, state: State, winner: str | None) -> None:
     """The game is over, reported before the host reveals how (Table.reveal holds the
     card a moment), so the state does not lag the line; finish() follows."""
@@ -125,7 +133,8 @@ def finish(table: Table, state: State, winner: str | None, rng: random.Random) -
     decided(table, state, winner)
     table.mood("win")
     table.say(lines.flavor("win", rng))
-    table.quip("win", game=state.game)
+    outcome = OUTCOMES.get(winner or "", "someone won" if winner else None)  # a seat (Hot Seat's winner) never goes to a quip
+    table.quip("win", game=state.game, **({"outcome": outcome} if outcome else {}))
     table.say(lines.GOOD_GAME)
 
 

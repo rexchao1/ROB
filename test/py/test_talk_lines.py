@@ -33,7 +33,7 @@ def test_a_long_reply_keeps_the_sentences_that_fit_and_leaves_off_one_cut_short(
 def test_a_line_is_dropped_only_when_its_first_sentence_will_not_do():
     assert talk.fit(" ".join(["word"] * (talk.MAX_WORDS + 1)) + ".") is None
     assert talk.fit("Player three looks like they know the rules. Anyway, Mafia?") is None
-    assert talk.fit("Ha, nice one. Player three looks ready. Anyway, Mafia?") == "Ha, nice one."
+    assert talk.fit("Ha, nice one. Player three looks ready. Anyway, Mafia?") == "Nice one."  # the stock opener goes too
     assert talk.fit("Great question! Mafia is fun.") is None
 
 
@@ -46,7 +46,7 @@ def test_the_welcome_prompt_carries_the_talk_so_far_and_says_what_the_games_are(
     assert "ROB: Hey, I'm ROB. What are we playing?\nThem: hold on" in prompt
     assert 'Just now someone said: "uh, how are you?"' in prompt
     assert "In Imposter, everyone gets the same secret word" in prompt and "Want to play it?" not in prompt
-    assert "Respond to what they actually said first" in prompt
+    assert "Answer what they said first" in prompt
     settings.current.persona = "spooky"
     assert "campy horror narrator" in t._system()  # noqa: SLF001
 

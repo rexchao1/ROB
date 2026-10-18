@@ -343,6 +343,39 @@ def test_listening_takes_its_window_on_the_clock_in_pieces_the_gateway_allows(ho
     assert [c["args"]["duration_ms"] for c in _calls(fake, "listen")] == [30000, 15000]
 
 
+def test_after_a_listen_the_ring_turns_back_while_the_line_is_made(host, fake):
+    from brain.voice import VoiceError
+
+    turned = threading.Event()
+    leds = host.body.leds
+
+    def ring(colors):
+        leds(colors)
+        turned.set()
+
+    class Slow:
+        def pcm(self, text):
+            assert turned.wait(5), "the ring waited for the line's audio"
+            return TestVoice().pcm(text)
+
+    host.body.leds = ring
+    host.voice = Slow()
+    host._listening = True  # as a listen leaves it
+    host.say("Mafia it is.")
+    tools = [c["tool"] for c in fake.device.calls]
+    assert tools.index("set_all_leds") < tools.index("pcm") and _said(fake) == ["Mafia it is."]
+
+    class Broken:
+        def pcm(self, text):
+            raise VoiceError("no voice")
+
+    host.voice = Broken()
+    host._listening = True
+    with pytest.raises(VoiceError):
+        host.say("Wordle it is.")
+    assert _said(fake) == ["Mafia it is."]
+
+
 def test_mood_keeps_the_hosts_face_and_colours_the_ring(host, fake, clock):
     Worker(clock, host.mood, "night")
     assert fake.device.face == "idle"

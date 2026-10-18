@@ -43,6 +43,7 @@ import numpy as np
 
 from brain import cards as cardset
 from brain import ears, games, lines, personas, settings, vision
+from brain.banter import Recap
 from brain.body import Body, BodyError
 from brain.clock import Clock, ClockCancelled, VirtualClock
 from brain.games.common import GameStopped
@@ -169,6 +170,7 @@ class Host:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._started = threading.Event()
+        self.recap = Recap()  # the game so far, for the quips: RAM only, forgotten when the game ends
         self.clear()
 
     def clear(self) -> None:
@@ -186,6 +188,7 @@ class Host:
         self._loaded_path: str | None = None
         self._loading: threading.Thread | None = None
         self._load_error: Exception | None = None
+        self.recap.clear()
 
     def _log(self, msg: str) -> None:
         self._emit(msg)
@@ -209,12 +212,32 @@ class Host:
     def _speak(self, line: str, mouth: bool = True) -> None:
         """Say a line; the host's own lines (the pause, the speaker) come here directly,
         so "say that again" still repeats the game's. mouth=False: a card is up, so the
-        robot's mouth stays still (a mouth frame would cover it)."""
+        robot's mouth stays still (a mouth frame would cover it). Right after a listen the ring
+        turns back while the line's audio is being made, not after, which takes one robot
+        round trip (about 70 ms) off every answer."""
         self._check_stop()
         self._log(f"say: {line}")
         self._note("said", line)
-        pcm = self.voice.pcm(line)
-        self._cue(False)
+        if self._listening and not self.paused:
+            made: dict[str, Any] = {}
+
+            def make() -> None:
+                try:
+                    made["pcm"] = self.voice.pcm(line)
+                except BaseException as e:  # noqa: BLE001 - raised below, on the host's thread
+                    made["error"] = e
+
+            maker = threading.Thread(target=make, name="voice", daemon=True)
+            maker.start()
+            try:
+                self._cue(False)
+            finally:
+                maker.join()
+            if "error" in made:
+                raise made["error"]
+            pcm = made["pcm"]
+        else:
+            pcm = self.voice.pcm(line)
 
         def play() -> None:
             if mouth:
@@ -774,6 +797,8 @@ class Host:
             raise ValueError(f"mood must be one of {MOODS}")
         self._check_stop()
         self.asleep = False  # the ring is the mood's again; a nap after this dims it anew
+        if name == "idle":
+            self.recap.clear()  # every game ends on the idle look (games.play), so its recap goes with it
         self._avatar("idle", "idle")
         self.ring = MOOD_LEDS[name]
         self.body.leds([self.ring])
@@ -786,14 +811,18 @@ class Host:
             self.state = dict(state)
 
     def quip(self, slot: str, **context: Any) -> None:
+        """A quip at a slot the game marks, with the recap of the game so far (public
+        moments and the quips already said), here on the Mac where every quip passes, the
+        referee's too. A quip that repeats one said this game is left unsaid."""
         if self.talk is not None and self.talk.active():  # the cloud talk, when it has a key
             try:
-                line = self.talk.quip(slot, context)
+                line = self.talk.quip(slot, context, self.recap)
             except Exception as e:  # decoration only: a failure says nothing
                 self._log(f"talk failed: {type(e).__name__}: {e}")
                 line = None
         else:
-            line = self.banter.line(slot, context)
+            line = self.banter.line(slot, context, self.recap)
+        line = self.recap.keep(slot, line)
         if line:
             self.say(line)
 
