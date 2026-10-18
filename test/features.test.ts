@@ -23,8 +23,10 @@ const ROOT = resolve(import.meta.dirname, '..')
 const FEATURE_DIR = join(ROOT, 'features')
 
 // The wip register: features (or scenarios) not yet bound. It only shrinks.
-// Every feature file is bound.
-const WIP: WipEntry[] = []
+// The four signed features are bound. The seven below were written by the review
+// of 2026-10-18 from the code built in workstreams W and X and the pause work
+// (DOCKET.md D45 onward); they describe what was built and bind nothing yet.
+const WIP: WipEntry[] = ['welcome', 'twenty-questions', 'hot-seat', 'wordle', 'pausing', 'host-character', 'operator-dashboard']
 
 const definers: Record<string, Definer<World>> = { hosting, imposter, mafia, wavelength }
 

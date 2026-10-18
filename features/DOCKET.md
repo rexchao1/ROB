@@ -322,3 +322,350 @@ D44 2026-10-18 [V]
   -> fence-deferred welcome-extras
   serves: N1
   touches: D38 D43
+
+# Review R, 2026-10-18 ~06:00 PDT (Linus, a cold review of the ROB repo on a branch). Workstreams Q, N, W, X and the pause work were built ahead of the docket: BUILD-PLAN.md recorded Rex's rulings for them and said they would be docketed from D46 when X1 ran; X1 was skipped. The entries below transcribe those recorded rulings ([I>V]: Rex's words as the build wrote them down, built as written; the source section is named in each note) and, where no ruling was recorded, what the code does ([I]: inferred from the code, unratified; the strict lint lists every one of these as a finding until Rex ratifies or vetoes it). Nothing here changes code. The feature files added with these entries (welcome, twenty-questions, hot-seat, wordle, pausing, host-character, operator-dashboard) describe the built behaviour and bind nothing yet: they sit in the wip register.
+
+N2 2026-10-18 [I] user 3
+  need: I need the host to be worth playing with when there are only one or two of us, not only when there are enough for Mafia [I]
+# Inferred from Rex's X rulings (BUILD-PLAN.md, Workstream X: 20 Questions for one player, Wordle for one or more, Hot Seat for two or more) and the welcome's suggestion of Twenty Questions for one player. Rex has not stated this need in his own words.
+
+N3 2026-10-18 [I] operator 3
+  need: I need to see what the host is doing and rescue a game from beside the table when its ears or its eyes fail, without restarting the brain [I]
+# Inferred from DASHBOARD-PLAN.md's goal line ("lets the operator rescue a game when the ears or the eyes fail, and changes the tuning numbers ... without restarting the brain") and Rex's answers at 03:20 and 03:55. The operator is Rex or a teammate at the demo, not a player.
+
+D45 2026-10-18 [I>V] amends D29
+  resp: the body is the StackChan K151 running the stackchan-mcp firmware and gateway; the brain is two boxes: a Mac that runs the gateway, speech-to-text, the voice, vision and the host, and a Raspberry Pi running QNX that runs the rules as the referee and hosts the game's own Wi-Fi network; no phone and no second camera are part of the product [I>V]
+  -> means N1
+  serves: N1
+  touches: D28 D29
+# BUILD-PLAN.md, "Rex's decisions, 2026-10-18 00:15 (these reverse D29 and D31; Linus to be told)". D29 was Linus's [V] ruling; this records Rex's reversal as the build carried it out. Linus is the reviewer here and has not yet ratified it.
+
+D46 2026-10-18 [I>V] amends D31
+  resp: the Pi runs QNX and stays on it: it is the referee (the games, the lines, the parsing and the lobby, standard library Python only) and the access point; speech-to-text, the voice and vision, which have no QNX port, run on the Mac and serve the Table to the referee over HTTP [I>V]
+  -> structural
+  serves: N1
+  touches: D31 D45
+# BUILD-PLAN.md, the same decision; the QNX prize is back in reach, which D31 had given up.
+
+# The welcome (D38 to D43 rule it; the lines and timings below are the build's, brain/games/welcome.py and brain/lines.py).
+
+D47 2026-10-18 [I]
+  pre:   five friends are seated and the host has just started, or someone has said `reset` [I]
+  trig:  the welcome begins [I]
+  resp:  the host says one of its greetings naming itself ROB and saying it is looking, counts with the full sweep, turns to each seat in order and greets it by number, then suggests Mafia for five and ends on a question [I]
+  sib:   D56
+  serves: N1
+  touches: D5 D38 D43
+
+D48 2026-10-18 [I>V]
+  pre:   the welcome has counted the table [I>V]
+  trig:  the host suggests a game for the headcount of {one | two | three or four | five or more} [I>V]
+  resp:  one player is offered Twenty Questions, two Wavelength, three or four Imposter, five or more Mafia; a game not yet built gives way to the first built one the count can play; nobody seen gets `I don't see anyone yet. Sit where I can see you and say reset.` [I>V]
+  spread: The suggestion follows the headcount
+  sib:   none -- a count below every minimum is answered with a line, not a failure
+  serves: N1 N2
+  touches: D38 D47
+# D38 (Rex) rules the three table sizes; Twenty Questions for one player is from Workstream X's "Suggestions and minimums"; the nobody-seen line is the build's.
+
+D49 2026-10-18 [I]
+  pre:   the welcome has suggested a game and asked [I>V]
+  trig:  someone says yes within twenty seconds of the question, or names any game at any time [I>V]
+  resp:  that game starts on the welcome's count when the count is less than two minutes old: no second sweep and no count line; a game named later is counted again [I>V]
+  why:   twenty seconds for a short answer and two minutes for a fresh count are the build's numbers (brain/games/common.py Options), not Rex's [I]
+  sib:   D50
+  serves: N1
+  touches: D39 D47
+
+D50 2026-10-18 [I>V] !
+  pre:   the welcome has counted five [I>V]
+  trig:  someone names a game with a headcount that disagrees, `imposter with six people` [I>V]
+  resp:  no game starts: the count check of D6 runs, the host says `I only see five. Who's hiding?` and the game waits until the spoken number and its count agree [I>V]
+  serves: N1
+  touches: D6 D39 D49
+# D39 (Rex): "the host cannot deal secret cards to people it has not seen".
+
+D51 2026-10-18 [I]
+  pre:   the welcome has suggested a game and asked [I]
+  trig:  someone says no, or asks for something else, within twenty seconds [I]
+  resp:  the host names the other games the count can play and asks which; when the count can play only the suggested game it says so [I]
+  sib:   none -- a no has no failure case; silence is D56
+  serves: N1
+  touches: D39 D48
+
+D52 2026-10-18 [I]
+  pre:   the welcome is listening [I]
+  trig:  someone asks how a game is played, naming it [I]
+  resp:  the host says that game's rules from the script, never from a model, and asks `Want to play it?`; a game registered without a rules line gets a line that states no rule [I]
+  sib:   none -- the rules come from a fixed script, there is no wrong answer to probe
+  serves: N1
+  touches: D14 D39 D42
+
+D53 2026-10-18 [I]
+  pre:   the welcome is listening [I]
+  trig:  someone asks what games the host has [I]
+  resp:  the host lists every game built and names its pick for the count [I]
+  sib:   none -- a fixed list, no failure case
+  serves: N1
+  touches: D39 D48
+
+D54 2026-10-18 [I] !
+  pre:   the welcome is listening [I]
+  trig:  the microphone hears room noise: fewer than three real words with no question pending, or one of the transcriber's phantoms such as `thank you` or `you` [I]
+  resp:  nothing of the reply kind: the host says nothing and keeps listening [I]
+  serves: N1
+  touches: D39
+# D39 (Rex): "background noise gets none"; the three-word floor and the phantom list are the build's (DESIGN.md, chosen).
+
+D55 2026-10-18 [I]
+  pre:   the welcome is listening and no talk model answers [I>V]
+  trig:  someone says something to the host that is neither a game, a count, a yes, a no nor a question about the games [I>V]
+  resp:  the host gives one short playful reply that steers back to picking a game, from the script when no model answers; at most one reply every eight seconds and six in one welcome [I>V]
+  why:   the gap and the cap are the build's numbers (brain/games/common.py Options), not Rex's [I]
+  sib:   D54
+  serves: N1
+  touches: D39 D40 D42
+
+D56 2026-10-18 [I] !
+  pre:   the welcome has asked its question [I>V]
+  trig:  nobody says anything to the host for twenty-five seconds, twice [I>V]
+  resp:  nothing of the chatter kind: one nudge after each quiet stretch, two in all, then the host waits quietly for a game's name and says nothing more [I>V]
+  why:   twenty-five seconds and two nudges are the build's numbers (brain/games/common.py Options), not Rex's [I]
+  serves: N1
+  touches: D39 D47
+
+D57 2026-10-18 [I>V]
+  pre:   a game is in progress [I>V]
+  trig:  someone says `reset`, `start over` or `restart` at any listen [I>V]
+  resp:  the game ends where it is with `Okay, starting over.` and the welcome begins again [I>V]
+  sib:   none -- D27 already allows the group to restart by saying so
+  serves: N1
+  touches: D27 D38 D47
+
+D58 2026-10-18 [I]
+  pre:   the welcome has asked its question [I]
+  trig:  someone says `not now`, `give us a minute` or asks to stop [I]
+  resp:  the host says it will be there and waits quietly for a game's name [I]
+  sib:   none -- a wait has no failure case
+  serves: N1
+  touches: D39 D56
+
+D59 2026-10-18 [I]
+  pre:   the welcome has counted five [I]
+  trig:  someone says a headcount above it, `there are six of us` [I]
+  resp:  the host says `I only see five. Who's hiding?`, waits a moment and counts again, says what it sees now, greets any new seat and suggests again; a count below the host's gets `I see five. Is someone just watching?` and no second look; a count that agrees gets `Yep, five.` [I]
+  sib:   none -- the mismatch itself is the failure case, D6
+  serves: N1
+  touches: D6 D39 D47
+
+D60 2026-10-18 [I]
+  pre:   the host is awake [I]
+  trig:  the host listens, and then speaks [I]
+  resp:  the ring shows the steady listening colour for the whole listen, and the mood's colour again as soon as the host speaks or the mood changes [I]
+  sib:   none -- the ring is cosmetic, D43 rules it, this binds it
+  serves: N1
+  touches: D43
+
+# Workstream X (BUILD-PLAN.md, "Rex's rulings" and "House rules for the host"): three more games and the host's character, built 2026-10-18 ~04:45 without tests.
+
+D61 2026-10-18 [I>V]
+  pre:   one player, or a group playing as one, has picked Twenty Questions [I>V]
+  trig:  the game begins [I>V]
+  resp:  the host asks which way round, `Twenty Questions. Want me to guess yours, or you guess mine?`, and either works; left to the host it picks one and says which [I>V]
+  sib:   none -- either answer is a valid way round; silence is D65
+  serves: N2
+  touches: D48
+
+D62 2026-10-18 [I>V]
+  pre:   Twenty Questions with the host guessing; the player has thought of something and said ready [I>V]
+  trig:  the host asks yes-or-no questions, counting each, and may guess at any point, a guess using a question [I>V]
+  resp:  a right guess ends the game with the host the winner; the twentieth question used up without one ends it with the player the winner, and the host asks what it was [I>V]
+  sib:   none -- a wrong guess is a used question, not a failure case
+  serves: N2
+  touches: D61
+
+D63 2026-10-18 [I>V]
+  pre:   Twenty Questions with the player guessing; code picked the secret from the built-in table before the first question and it never changes [I>V]
+  trig:  the player asks a yes-or-no question, asks for a hint, guesses, or gives up [I>V]
+  resp:  a question about a trait the table knows is answered from the table, `yes`, `no` or `sort of`, and counts; a question the host cannot answer gets `Can't answer that one. Try another way.` and does not count; a hint costs a question; a right guess wins; `I give up`, or the twentieth question used, reveals the secret [I>V]
+  sib:   none -- the uncounted answer is the only failure case and is in resp
+  serves: N2
+  touches: D14 D42 D61
+
+D64 2026-10-18 [I]
+  pre:   Twenty Questions is being played [I>V]
+  trig:  the question count reaches {ten | fifteen | nineteen} [I>V]
+  resp:  the host counts out loud only at those moments: halfway, five left, the last one, and the mood turns tense for the last five [I>V]
+  why:   Rex's house rule ("counts out loud only at the moments that matter: halfway, five left, the last one"); the exact lines are the build's [I]
+  spread: The host counts out loud only at the moments that matter
+  sib:   none -- no count line at any other moment is the rule itself
+  serves: N2
+  touches: D42 D62 D63
+
+D65 2026-10-18 [I]
+  pre:   Twenty Questions is waiting for the player [I>V]
+  trig:  nobody says anything for eight seconds, then twenty, then three minutes [I>V]
+  resp:  a nudge at eight seconds, `Take your time.` at twenty (an offer of a hint instead when the host holds the secret), then quiet; `hold on` or `wait` holds the nudges; after three minutes of silence the host says `I'll be here when you're back.` and the game ends with no winner [I>V]
+  why:   eight and twenty seconds are Rex's house rule ("Reads the room"); three minutes is the build's number [I]
+  sib:   none -- silence handling is itself the failure case
+  serves: N2
+  touches: D39 D61
+
+D66 2026-10-18 [I>V]
+  pre:   two or more players have picked Hot Seat [I>V]
+  trig:  each round the host names a category and turns to each player still in, left to right, saying `Player two, go!` [I>V]
+  resp:  the player names something in the category before the time runs out, {5 seconds} in the first round, a second less each round, never under {3 seconds}; silence, a pass, a repeat or an answer that does not count puts that player out; the last one in wins; a new category comes each round [I>V]
+  why:   the five seconds, the second less each round and the floor of three are Rex's numbers (BUILD-PLAN.md, Workstream X) [I>V]
+  spread: The clock tightens each round
+  sib:   D67
+  serves: N1 N2
+  touches: D12 D48
+
+D67 2026-10-18 [I] !
+  pre:   Hot Seat, the category is fruits [I]
+  trig:  a player says a word from another category's list, or repeats one already said this round [I]
+  resp:  nothing of the point kind: `Already taken.` or `Nope, doesn't count.`, and that player is out; offline an answer on no list counts unless it is on another category's list; with a talk model the model judges yes or no [I]
+  serves: N2
+  touches: D14 D42 D66
+# The build's judging rule (brain/games/hotseat.py). The model judging an elimination is in tension with D14 and D42 (a model never decides a rule); flagged for Rex in the review.
+
+D68 2026-10-18 [I]
+  pre:   Hot Seat with two or more still in [I]
+  trig:  twelve rounds have been played [I]
+  resp:  the host calls it a tie and the game ends with no winner [I]
+  sib:   none -- a cap on rounds has no failure case
+  serves: N2
+  touches: D66
+
+D69 2026-10-18 [I>V]
+  pre:   one or more players have picked Wordle [I>V]
+  trig:  the host picks a secret five-letter word from its built-in list and the table says or spells guesses, six at most [I>V]
+  resp:  a guess the host knows is scored and the feedback is spoken short, the heard word first, then which letters are spot on and which are in there somewhere; a word not on the host's list, or not five letters, uses no guess; `no` right after the feedback undoes a misheard guess for free; the sixth guess is confirmed before it counts; the word guessed wins, six used reveals it [I>V]
+  sib:   D70
+  serves: N2
+  touches: D48
+# Rex's ruling (Workstream X, "Wordle") as built, except the grid: Rex asked for it on the robot's screen; the build puts it on the dashboard only (D84).
+
+D70 2026-10-18 [I] !
+  pre:   Wordle, one guess already made [I]
+  trig:  someone says a word that is not five letters, or a five-letter word the host does not know, or repeats a word already tried [I]
+  resp:  nothing of the scoring kind: `Not in my dictionary. Try another.`, `Didn't catch that. Spell it?` or `Already tried crane.`, and the guess count does not move [I]
+  serves: N2
+  touches: D69
+
+D71 2026-10-18 [I]
+  pre:   Wordle with three players [I]
+  trig:  a guess is scored [I]
+  resp:  the seats take turns in order, the host turning to the next seat and saying whose turn it is, though anyone may say the guess; `what do we know` gets a recap of the board in a few short sentences; `I give up` reveals the word [I]
+  sib:   none -- turn order is a default Rex can change, not a failure case
+  serves: N2
+  touches: D69
+
+# Pause, a quieter lobby and ROB (DASHBOARD-PLAN.md, "Pause, a quieter lobby, simpler settings (Rex, 05:10)" and "ROB (Rex, 05:20)"), built in the second commit, untested.
+
+D72 2026-10-18 [I>V]
+  pre:   a game is in progress [I>V]
+  trig:  someone says `pause` or `hold the game` at any listen [I>V]
+  resp:  the host holds the game: it says `Paused. Say resume or tap my head when you're ready.`, the ring dims, the game's clock stops so a day timer does not run out, and it listens in ten-second windows; `resume`, `we're back`, `keep going`, a tap on its head or the page's Resume carries on with `Okay, back to it.` and the listen that was interrupted runs again; `stop the game` or `reset` said while paused is heard by the game [I>V]
+  sib:   none -- a stop or reset while paused is handled in resp
+  serves: N1
+  touches: D27 D57
+# Rex, 05:10: "pause should hold the game until he says so or taps the robot". The ten-second window is the build's (the robot chimes each time its microphone opens).
+
+D73 2026-10-18 [I]
+  pre:   no game is in progress and the host is listening for a game's name [I>V]
+  trig:  thirty seconds pass with nothing heard [I>V]
+  resp:  the lobby listens in ten-second windows instead of four-second ones, so the robot's microphone chime comes less often, and goes back to short windows at the next word [I>V]
+  why:   thirty seconds and ten seconds are the build's numbers (brain/lobby.py) [I]
+  sib:   none -- a longer listen has no failure case
+  serves: N1
+  touches: D39
+
+# The host's character (BUILD-PLAN.md, Workstream X, "House rules for the host" and "Personalities"; DASHBOARD-PLAN.md, "ROB").
+
+D74 2026-10-18 [I>V]
+  pre:   a talk model is set up and the host asks it for a line [I>V]
+  trig:  the model's line comes back [I>V]
+  resp:  the line is said only if it fits the house rules: one line, two sentences at most, about fifteen words, no assistant phrases (`great question`, `I'd be happy to`, `certainly`, `absolutely`, `as an AI`, `let's dive in`, `feel free`), no emoji, no stage directions, at most one exclamation mark, and no seat named; a line that does not fit is replaced by a scripted one, and so is a slow answer [I>V]
+  sib:   none -- the replacement is the failure case and is in resp
+  serves: N1
+  touches: D14 D40 D42
+# Rex's house rules as the build enforces them in brain/talk.py fit(). "Teases the move, never the person" and "stays quiet while the group talks among themselves" are prompt instructions, not checks.
+
+D75 2026-10-18 [I>V]
+  pre:   the host is running [I>V]
+  trig:  the operator picks one of five personalities (game-show host, deadpan roaster, hype man, spooky narrator, chill friend) on the dashboard [I>V]
+  resp:  the personality changes how the talk model writes, the ring's resting colour and which voice speaks, from the next line on; it never changes a rule or a line the feature files assert; game-show host is the default [I>V]
+  sib:   none -- a pick from a fixed list has no failure case
+  serves: N1 N3
+  touches: D42 D74
+
+D76 2026-10-18 [I>V]
+  pre:   the host is running [I>V]
+  trig:  the welcome greets the table, or someone asks who the host is [I>V]
+  resp:  the host is named ROB: its greetings say so and its talk says it only when asked [I>V]
+  sib:   none -- a name has no failure case
+  serves: N1
+  touches: D38 D47
+
+D77 2026-10-18 [I>V]
+  pre:   the host is running with an ElevenLabs key set [I>V]
+  trig:  the operator picks one of five voices (Chris, Jessica, George, Charlie, Brian) on the dashboard [I>V]
+  resp:  the lines not recorded are spoken live in that voice, and picking one turns the live voice on; the personality and the voice are kept across starts in a file beside the brain [I>V]
+  sib:   none -- without a key the pick is kept and Piper speaks, which resp allows
+  serves: N1 N3
+  touches: D41 D75
+
+# The operator dashboard (DASHBOARD-PLAN.md: Rex's answers 03:20, "Two screens" 03:55, "simpler settings" 05:10).
+
+D78 2026-10-18 [I>V]
+  pre:   the brain is running and a laptop or phone on the same network opens its page [I>V]
+  trig:  the operator looks at the page during a game [I>V]
+  resp:  the page shows the game as it happens: the phase, the seats, who is in and out, the warnings, the last line said and heard, the Wordle board and the Twenty Questions count; it polls about once a second and needs nothing from the internet [I>V]
+  sib:   none -- a read-only view has no failure case
+  serves: N3
+  touches: D45
+
+D79 2026-10-18 [I>V]
+  pre:   the operator's page is open during a game [I>V]
+  trig:  the operator taps a button or types what the table said [I>V]
+  resp:  every in-game button is a phrase the robot already understands by voice, sent as typed hearing; typed hearing is heard at the host's next listen in place of the microphone, so the rules see the same text either way; a phrase the robot cannot understand by voice is not a button [I>V]
+  sib:   none -- the button set is the rule; a missing phrase is on the fence (D83)
+  serves: N3
+  touches: D14 D78
+
+D80 2026-10-18 [I>V]
+  pre:   the operator's page is open [I>V]
+  trig:  the operator enters an API key or token [I>V]
+  resp:  the key is written to the brain's local environment file, owner-readable only, takes effect where it can, and is never shown again: no page, route, log line or event carries its value; the request is refused when it comes from another site's page [I>V]
+  sib:   none -- the refusal is in resp; what else a LAN peer may do is a review finding, not a ruling
+  serves: N3
+  touches: D40 D78
+
+D81 2026-10-18 [I>V]
+  pre:   the operator's page is open [I>V]
+  trig:  the operator changes a tuning number (head pitch, scan step, field of view, face floor, close-face width, listen windows, discussion time) or the volume [I>V]
+  resp:  the change applies live, is saved beside the brain and read at the next start, where a saved setting overrides the matching flag; the volume is set on the robot and never saved [I>V]
+  sib:   none -- a value outside its range is refused with a reason, which is in the API, not a game behaviour
+  serves: N3
+  touches: D78
+
+D82 2026-10-18 [I>V]
+  resp: scripted lines per personality, the one callback to a moment from earlier in the game, and switching the personality by voice (`be spooky`) are not in this build [I>V]
+  -> fence-deferred character-extras
+  serves: N1
+  touches: D44 D75
+# BUILD-PLAN.md, X2 "Left".
+
+D83 2026-10-18 [I>V]
+  resp: `say that again`, `count again`, `more time` during the day with a deadline the page can show, taking back a wrong heads-up warning, and a `listening_for` field in the reported state are for the robot to do by voice first; the page leaves them out until it can [I>V]
+  -> fence-deferred product-fixes
+  serves: N3
+  touches: D9 D18 D79
+# DASHBOARD-PLAN.md, "Product fixes".
+
+D84 2026-10-18 [I]
+  resp: the Wordle grid on the robot's own screen (Rex asked for it in green, yellow and gray) is not in this build; the grid is reported to the dashboard only [I]
+  -> fence-deferred wordle-grid
+  serves: N2
+  touches: D69
+# BUILD-PLAN.md, X5 "done without show_board".

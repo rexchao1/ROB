@@ -1,6 +1,6 @@
 # Out of scope — Game master
 
-The fence for the game master, scoped 2026-10-18 in a deliberately short interview (the visionary declined the checklist sweep and the adversarial pass; the boundary question was not put). Every entry cites the docket ruling it came from and the date it was ratified. Bound scenarios touched: none (a new project).
+The fence for the game master, scoped 2026-10-18 in a deliberately short interview (the visionary declined the checklist sweep and the adversarial pass; the boundary question was not put). Every entry cites the docket ruling it came from and the date it was ratified. Bound scenarios touched: none (a new project). Entries from D82 on were added by the review of 2026-10-18 from the build's own record (BUILD-PLAN.md, DASHBOARD-PLAN.md) and await Rex's ratification.
 
 ## Declined
 
@@ -13,6 +13,12 @@ The fence for the game master, scoped 2026-10-18 in a deliberately short intervi
 - **Wavelength, then the live banter model, then Imposter**, in that order, if the build runs short; Mafia with the private screen, heads-down catching and voice votes is never cut. Reopens phase by phase as time allows; anything unbuilt at the deadline is recorded here by the build. (D33, D32, 2026-10-18)
 
 - **Head pats, "louder" and "quieter", sound and mood, playing again with scores, players' names.** Asked for after the welcome; seats keep their numbers meanwhile. Reopens when Rex picks one up after trying the welcome on the robot. (D44, 2026-10-18)
+
+- **Scripted lines per personality, the one callback to a moment from earlier in the game, switching the personality by voice.** Workstream X built the five personalities as a talk style, a ring colour and a voice; these three were left. Reopens when Rex picks one up. (D82, 2026-10-18)
+
+- **"Say that again", "count again", "more time" with a deadline the page can show, taking back a wrong heads-up warning, a `listening_for` field in the reported state.** The robot should do each by voice first; the page leaves them out until it can. Reopens one by one as the robot learns the phrase. (D83, 2026-10-18)
+
+- **The Wordle grid on the robot's own screen.** Rex asked for it in green, yellow and gray; the build reports the board to the dashboard only. Reopens when a `show_board` for the robot's screen is built. (D84, 2026-10-18)
 
 ## Named assumptions
 
@@ -29,5 +35,5 @@ The fence for the game master, scoped 2026-10-18 in a deliberately short intervi
 
 - Private roles by text message to each player's phone; rejected for the private screen with the one-face lock, which needs no phone numbers. (D7, 2026-10-18)
 - A second camera at table level for eyes-closed detection and raised-hand votes; rejected for the StackChan's own camera alone, which made heads-down and voice votes the rules. (D9, D12, D29, 2026-10-18)
-- The brain on QNX for the hackathon's QNX prize; rejected for a fully offline brain on Raspberry Pi OS. (D31, 2026-10-18)
-- A laptop or a phone hotspot as part of the product; rejected for the brain being its own network. (D28, 2026-10-18)
+- The brain wholly on QNX; rejected at scoping for Raspberry Pi OS, then half taken after all: the Pi runs QNX as the referee and the access point while speech and vision run on a Mac. (D31, amended by D46, 2026-10-18)
+- A laptop or a phone hotspot as part of the product; rejected for the brain being its own network, which the QNX Pi now hosts; the Mac is part of the brain, not a laptop at the table. (D28, D29 amended by D45, 2026-10-18)
