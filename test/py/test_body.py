@@ -232,3 +232,25 @@ def test_speaker_mac_returns_once_the_line_has_played_not_when_afplay_exits(monk
     monkeypatch.setattr(body_module.subprocess, "Popen", Failing)
     with pytest.raises(BodyError):
         Body(Mouth(), "http://127.0.0.1:9/pcm", speaker="mac").play(_tone(0.1, 10_000))
+
+
+def test_a_line_that_can_be_cut_off_streams_whole_when_nobody_cuts_it(fake, body):
+    import threading
+
+    body.play(encode_test_pcm("One at a time."), abort=threading.Event())
+    assert [c["line"] for c in fake.device.calls if c["tool"] == "pcm"] == ["One at a time."]
+
+
+def test_a_streamed_line_stops_once_it_is_cut_off():
+    import threading
+
+    from brain.body import SAMPLE_RATE, STREAM_LEAD, _paced
+
+    abort = threading.Event()
+    sent = []
+    for piece in _paced(b"\0" * SAMPLE_RATE * 2 * 10, abort):  # ten seconds of line
+        sent.append(piece)
+        if len(sent) == 3:
+            abort.set()
+    assert len(sent) == 3
+    assert sum(map(len, sent)) < SAMPLE_RATE * 2 * (STREAM_LEAD + 1)

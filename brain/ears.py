@@ -189,6 +189,12 @@ def _phrase(t: str, phrases: tuple[str, ...]) -> bool:
     return any(f" {p} " in padded for p in phrases)
 
 
+def hard_command(text: str) -> bool:
+    """Words that act whenever they are said, even over the host's own line: a stop, a
+    reset, "go to sleep", or a pause ("pause", "shut up", "be quiet")."""
+    return wants_to_stop(text) or wants_pause(text)
+
+
 def wants_sleep(text: str) -> bool:
     """"Go to sleep", "take a nap": the host ends any game and naps until a tap."""
     return _phrase(" ".join(_tokens(text)), _SLEEP)

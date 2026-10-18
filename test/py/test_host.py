@@ -595,3 +595,46 @@ def test_talk_settings_snapshot_contains_only_choices(host, monkeypatch):
         "talk": "gemini", "talk_model": "gemini-2.5-flash", "effort": "high", "persona": "spooky"}
     host.talk = None
     assert host.talk_settings()["talk"] == "off"
+
+
+def _talking_over(host, monkeypatch, heard):
+    """ROB's line plays until it is cut off, while the Mac's microphone hears `heard`."""
+    plays = []
+
+    def play(pcm, mouth=True, abort=None):
+        plays.append(abort)
+        if abort is not None:
+            assert abort.wait(5), "the line was never cut off"
+
+    monkeypatch.setattr(host, "_barge_in", lambda: True)
+    monkeypatch.setattr(host.body, "play", play)
+    monkeypatch.setattr(host.body, "listen", lambda seconds: heard)
+    return plays
+
+
+def test_stop_said_over_rob_s_line_cuts_it_off_and_ends_the_game(host, monkeypatch):
+    host.state = {"game": "mafia", "phase": "day", "over": False}
+    plays = _talking_over(host, monkeypatch, "rob stop the game")
+    with pytest.raises(GameStopped):
+        host.say("Everyone, talk it over. You have two minutes.")
+    assert len(plays) == 1 and plays[0].is_set()
+
+
+def test_go_to_sleep_over_the_welcome_waits_for_the_next_listen(host, monkeypatch):
+    _talking_over(host, monkeypatch, "go to sleep")
+    host.say("Hey, everybody! I'm ROB.")  # between games nothing is raised
+    assert host._take_injected() == "go to sleep"  # noqa: SLF001 - the lobby hears it next
+
+
+def test_rob_s_own_command_words_never_cut_his_line(host, monkeypatch):
+    plays = []
+    monkeypatch.setattr(host, "_barge_in", lambda: True)
+    monkeypatch.setattr(host.body, "listen", lambda seconds: "sit where i can see you and say reset")
+
+    def play(pcm, mouth=True, abort=None):
+        plays.append(abort)
+        assert not abort.wait(0.3)
+
+    monkeypatch.setattr(host.body, "play", play)
+    host.say("I don't see anyone yet. Sit where I can see you and say reset.")
+    assert not plays[0].is_set()
