@@ -422,6 +422,24 @@ def test_a_game_that_fails_says_so_and_the_host_naps_until_a_tap(host, fake, clo
         host.stop()
 
 
+def test_a_hand_on_the_head_between_games_puts_the_host_to_sleep(host, fake, clock):
+    host.start()
+    try:
+        clock.settle()
+        clock.advance(host.listen_window + 0.5)
+        assert not host.asleep
+        fake.device.touching = True
+        clock.advance(host.listen_window + 1)
+        fake.device.touching = False
+        clock.advance(2)
+        assert host.asleep
+        assert _said(fake) == [lines.NAP]
+        clock.advance(10)
+        assert host.asleep  # the hand that put it to sleep does not wake it
+    finally:
+        host.stop()
+
+
 def test_a_line_typed_while_the_host_naps_wakes_it_and_is_answered(host, fake, clock, monkeypatch):
     played = []
     monkeypatch.setattr(games, "play", lambda name, table, rng, **kw: played.append(name))

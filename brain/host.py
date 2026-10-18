@@ -59,6 +59,7 @@ HEAR_AFTER = 4.0  # nobody close this long after the lean-in line: a short liste
 HEAR_EVERY = 6.0  # and again this often; photos stop while the host listens (one gateway command at a time)
 HEAR_SECONDS = 3.0  # each of those listens
 TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a hand on it is "show me"
+TOUCH_SINCE = 5.0  # between games, a touch this long before a listen began (while ROB talked) still counts
 TRUST = 4.0  # seconds the card stays up on a touch or "show me", the camera or not
 REVEAL_HOLD = 2.0  # seconds a reveal card stays up after its line, before the host's face comes back
 SPEAKERS = ("robot", "mac")
@@ -283,9 +284,16 @@ class Host:
         """What the table says in the next `seconds`. The host's own commands are taken
         here and this listen starts over: "pause" holds everything until "resume" or a
         tap on the head, a speaker change moves the voice, "say that again" repeats the
-        game's last line."""
+        game's last line. Between games a hand on the head is "pause": the lobby and the
+        welcome take it as a nap."""
         while True:
+            start = self.clock.now()
             text = self._hear(seconds)
+            if not self._in_game():
+                now = self.clock.now()
+                if self.body.touched(now - start + TOUCH_SINCE, now):
+                    self._log("head touched: a nap")
+                    return "pause"
             if ears.wants_pause(text) and self._in_game():
                 text = self._pause()
                 if text:  # "stop the game" or "reset" said while paused: the game hears it
