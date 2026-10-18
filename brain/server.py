@@ -50,7 +50,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from brain import dashboard
 from brain.clock import ClockStuck, VirtualClock
-from brain.dash import FACE_STYLE, DashError
+from brain.dash import DashError, face_style
 from brain.keys import KeysError
 from brain.host import Host
 
@@ -221,7 +221,7 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
                     raise _NotFound
                 return 200, jpeg
             if route == ("GET", "/robot"):
-                return 200, {"robot": dash.robot(), "face_style": FACE_STYLE}
+                return 200, {"robot": dash.robot(), "face_style": face_style()}
             if route == ("POST", "/volume"):
                 return 200, dash.set_volume(_json(body).get("volume"))
             if route == ("POST", "/hear"):

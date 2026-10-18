@@ -41,7 +41,7 @@ import cv2
 import numpy as np
 
 from brain import cards as cardset
-from brain import ears, games, lines, settings, vision
+from brain import ears, games, lines, personas, settings, vision
 from brain.body import Body, BodyError
 from brain.clock import Clock, ClockCancelled, VirtualClock
 from brain.games.common import GameStopped
@@ -521,7 +521,7 @@ class Host:
 
     def prepare(self, cards: list[Card]) -> None:
         self._check_stop()
-        path = cardset.write_set(list(cards), self.sets_dir)
+        path = cardset.write_set(list(cards), self.sets_dir, face=personas.get(settings.current.persona).face)  # the personality's colors
         manifest = cardset.read_manifest(path)
         if str(path) == self._loaded_path and self._load_error is None:
             self._manifest = manifest

@@ -13,7 +13,7 @@ real one against the fake gateway.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 MOODS = ("idle", "listening", "night", "day", "tense", "win")
@@ -26,6 +26,11 @@ class Card:
 
     text: str  # the big line: "MAFIA", "beach", "7"
     sub: str | None = None  # an optional small line under it: "cold - hot"
+    # How the card looks: a key of brain.cards.STYLES ("villain", "helper", "town",
+    # "number", "win", "out", ...), its accent color. None lets brain/cards.py pick
+    # from the text (the role cards, a number) or the default. Looks only: two cards
+    # with the same text and sub are the same card whatever their style.
+    style: str | None = field(default=None, compare=False)
 
 
 class Table(Protocol):

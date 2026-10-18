@@ -15,6 +15,7 @@ class Persona:
     eleven_voice: str | None = None  # an ElevenLabs voice id; None uses --eleven-voice
     piper_speaker: int | None = None  # a Piper speaker id; None uses the model's default
     ring: tuple[int, int, int] = (0, 22, 40)  # the ring's resting color
+    face: str = "host"  # the face's colors on the screen: a key of brain.cards.FACE_THEMES
 
 
 PERSONAS: dict[str, Persona] = {
@@ -32,6 +33,7 @@ PERSONAS: dict[str, Persona] = {
             "Dry and deadpan. Roasts bad guesses and slow answers with a straight face, "
             "never the person. Understated, short, sarcastic.",
             ring=(30, 0, 30),
+            face="roaster",
         ),
         Persona(
             "hype",
@@ -39,6 +41,7 @@ PERSONAS: dict[str, Persona] = {
             "Loud, happy energy. Celebrates every good move like a sports announcer, "
             "but still short and still on task.",
             ring=(40, 20, 0),
+            face="hype",
         ),
         Persona(
             "spooky",
@@ -46,6 +49,7 @@ PERSONAS: dict[str, Persona] = {
             "A dramatic, mysterious narrator. Slow, ominous, a little theatrical, "
             "with a wink. Loves suspense and reveals.",
             ring=(20, 0, 40),
+            face="spooky",
         ),
         Persona(
             "chill",
@@ -53,6 +57,7 @@ PERSONAS: dict[str, Persona] = {
             "A laid-back friend hanging out at game night. Relaxed, dry, easygoing, "
             "never pushy.",
             ring=(0, 30, 10),
+            face="chill",
         ),
     )
 }

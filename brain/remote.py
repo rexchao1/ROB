@@ -19,7 +19,7 @@ Table whose every method is one of those calls.
   POST /table/rig    {"game"}      -> {"rig": {...} | null}: the next game's rig
   GET  /table/attached             -> {"attached", "epoch"}
 
-A Card travels as {"text", "sub"}. A GameStopped the host raises (a stop said during
+A Card travels as {"text", "sub", "style"}. A GameStopped the host raises (a stop said during
 the deal) reaches the referee as GameStopped, so its game ends as at any listen. A call is named by (session, id): RemoteTable sends
 the same call again after a dropped connection or a "pending" answer, and the server
 runs it once and answers the repeat from it. With a token, every request carries
@@ -109,7 +109,8 @@ def _dumps(value: Any) -> bytes:
 def _card(value: Any) -> Card:
     if not isinstance(value, dict) or not isinstance(value.get("text"), str) or not isinstance(value.get("sub"), (str, type(None))):
         raise ValueError(f"not a card: {value!r}")
-    return Card(value["text"], value.get("sub"))
+    style = value.get("style")
+    return Card(value["text"], value.get("sub"), style if isinstance(style, str) else None)
 
 
 class _Job:
