@@ -55,13 +55,12 @@ Feature: The welcome
     When someone says "let's play imposter"
     Then the players hear the host say "Let's play Imposter. Everyone gets the same secret word, except one of you: the Imposter."
 
-  @D50 @D6
-  Scenario: A game named with a headcount that disagrees waits for the count to agree
+  @D50 @D116
+  Scenario: A game named with a headcount that disagrees starts on the group's number
     Given five friends are seated around a table with the host in the middle
     And the welcome has suggested Mafia and asked
     When someone says "imposter with six people"
-    Then the players hear the host say "I only see five. Who's hiding?"
-    And no game has started
+    Then the game starts with six players
 
   @D94
   Scenario: A game's name inside other talk does not start it
@@ -115,13 +114,13 @@ Feature: The welcome
     When another twenty-five seconds pass with nothing said
     Then the players hear the host nudge them once more
     When another twenty-five seconds pass with nothing said
-    Then the players hear the host say "I'll take a nap. Tap my head when you want me."
-    And the host does not listen again until someone taps its head
+    Then the players hear the host say "I'll take a nap. Put your hand on top of my head when you want me."
+    And the host does not listen again until someone puts a hand on top of its head
 
-  Scenario: A tap on the head wakes the napping host, which counts and suggests a game
+  Scenario: A hand on top of the head wakes the napping host, which counts and suggests a game
     Given five friends are seated around a table with the host in the middle
     And the host is napping
-    When someone taps the host's head
+    When someone puts a hand on top of the host's head
     Then the players hear the host say it is up
     And the players see the host sweep the whole table
     And the players hear the host suggest Mafia and end on a question
@@ -139,18 +138,17 @@ Feature: The welcome
     Given five friends are seated around a table with the host in the middle
     And the welcome has suggested Mafia and asked
     When someone says "not now"
-    Then the players hear the host say to tap its head when they are ready
+    Then the players hear the host say to put a hand on top of its head when they are ready
     And the players hear no nudge in the next two minutes
-    And the host does not listen again until someone taps its head
+    And the host does not listen again until someone puts a hand on top of its head
 
-  @D59 @D6
-  Scenario: A headcount above the host's gets a second look
+  @D59 @D116
+  Scenario: A headcount above the host's is taken at its word
     Given five friends are seated around a table with the host in the middle
     And the welcome has suggested Mafia and asked
     When someone says "there are six of us"
-    Then the players hear the host say "I only see five. Who's hiding?"
-    And the players see the host sweep the whole table again
-    And the players hear the host say "Hmm, still five."
+    Then the players see no second sweep
+    And the players hear the host suggest Mafia
 
   @D59
   Scenario: A headcount below the host's gets no second look

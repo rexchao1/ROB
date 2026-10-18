@@ -67,6 +67,13 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .brand { font-weight: 700; font-size: 15px; letter-spacing: .12em; white-space: nowrap; }
 .top .spacer { flex: 1; }
 .conn { font-size: 15px; font-weight: 600; color: var(--red); }
+.links { display: flex; gap: 6px; }
+.link { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 16px; background: var(--over); border: 1px solid var(--line); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.link .lv { color: var(--text-2); font-weight: 500; }
+.link[data-s="ok"] .dot { background: var(--green); box-shadow: 0 0 8px rgba(48,209,88,.7); }
+.link[data-s="warn"] .dot { background: var(--amber); }
+.link[data-s="bad"] .dot { background: var(--red); }
 .iconbtn {
   width: 40px; height: 40px; border-radius: var(--r); display: grid; place-items: center; padding: 0;
   background: var(--over); border: 1px solid var(--line-2); color: var(--text);
@@ -353,6 +360,8 @@ details.fold2 > summary::before {
 details[open].fold2 > summary::before { transform: rotate(45deg); }
 details.fold2 > summary:hover { color: var(--text); }
 details.fold2 { margin-top: 8px; }
+details.fold2.quiet { margin-top: 40px; opacity: .35; }
+details.fold2.quiet[open] { opacity: 1; }
 
 /* choice cards: personality, ElevenLabs voices, models */
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
@@ -494,6 +503,9 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
 /* ---------- responsive ---------- */
 @media (max-width: 640px) {
   .top { padding: max(12px, env(safe-area-inset-top)) 16px 0; gap: 8px; }
+  .check { padding-right: 8px; }
+  .link .lv { display: none; }
+  .check + .check { padding-left: 12px; }
   .game { padding: 8px 16px max(16px, env(safe-area-inset-bottom)); height: auto; min-height: calc(100dvh - 56px); grid-template-rows: auto 1fr auto; }
   .meta { font-size: 15px; gap: 8px; }
   .phase { font-size: 64px; }
@@ -543,6 +555,10 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
   <div class="brand">R.O.B</div>
   <span class="spacer"></span>
   <span class="conn" id="conn" role="status" hidden></span>
+  <div class="links" role="status">
+    <span class="link" id="lnRob"><span class="dot"></span>ROB <span class="lv">Checking</span></span>
+    <span class="link" id="lnPi"><span class="dot"></span>Pi <span class="lv">Checking</span></span>
+  </div>
   <button class="pausebtn" id="pauseBtn" hidden>Pause</button>
   <button class="stop" id="stopBtn" hidden>Stop game</button>
   <div class="vol">
@@ -662,6 +678,14 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
         </div>
         <div class="note">The robot's own speaker, set live. On this Mac, ROB plays at the Mac's volume.</div>
       </section>
+      <details class="fold2 quiet" id="moreDet">
+        <summary>More</summary>
+        <section class="sec">
+          <h2>Microphone</h2>
+          <div class="seg fill" id="hMic" role="group" aria-label="Microphone"></div>
+          <div class="note">Which microphone ROB listens with. The first time on this Mac, macOS asks to allow it.</div>
+        </section>
+      </details>
     </div>
 
     <!-- AI: the talk behind ROB's lines -->
@@ -852,13 +876,14 @@ function render() {
   // napping and pausing are things the robot does, not a screen over it
   robotState = asleep ? "asleep" : paused ? "paused" : "";
   document.querySelectorAll(".bot").forEach((b) => { b.classList.toggle("asleep", asleep); b.classList.toggle("paused", paused); });
-  $("robNote").innerHTML = asleep ? "ROB is napping. <b>Tap its head</b> to wake it." : paused ? 'Paused. Say <b>"resume"</b> or <b>tap its head</b>.' : "";
+  $("robNote").innerHTML = asleep ? "ROB is napping. Put <b>a whole hand on its head</b> to wake it." : paused ? 'Paused. Say <b>"resume"</b> or put <b>a hand on its head</b>.' : "";
   document.body.classList.toggle("is-paused", paused || asleep);
   const tone = inGame && !g.over ? (TONE[g.phase] || "idle") : "idle";
   if (document.body.dataset.tone !== tone) document.body.dataset.tone = tone;
   setScene(inGame ? sceneFor(name, g.phase) : "lobby");
   if (inGame) { starting = null; renderGame(s, g, name); } else renderIdle(s, welcome ? g : null);
   renderRobot(s);
+  renderLinks(s);
   renderDrawer(s);
 }
 
@@ -866,12 +891,12 @@ function render() {
 // Geometry from brain/cards.py host_face(): a 160x120 screen, eyes at y 50, mouth at (80, 88).
 function faceSVG(fs) {
   const c = (k, d) => esc((fs && fs[k]) || d);
-  const bg = c("bg", "#0c0c14"), ink = c("ink", "#f5f5f5"), cheek = c("cheek", "#c85a78"), mouth = c("mouth", "#96283c");
+  const bg = c("bg", "#0c0c14"), ink = c("ink", "#f5f5f5"), iris = c("iris", bg), cheek = c("cheek", "#c85a78"), mouth = c("mouth", "#96283c");
   let eyes = "";
   for (const [cx, t] of [[50, 1], [110, -1]]) {
-    eyes += '<line x1="' + (cx - 14) + '" y1="' + (32 + 3 * t) + '" x2="' + (cx + 14) + '" y2="' + (32 - 3 * t) + '" stroke="' + ink + '" stroke-width="3"/>' +
-      '<g class="eo"><circle cx="' + cx + '" cy="50" r="12" fill="' + ink + '"/><circle cx="' + (cx + 2) + '" cy="51" r="5" fill="' + bg + '"/></g>' +
-      '<g class="eh"><path d="M' + (cx - 12) + ' 50 A12 12 0 0 0 ' + (cx + 12) + ' 50 Z" fill="' + ink + '"/><path d="M' + (cx - 3) + ' 50 A5 5 0 0 0 ' + (cx + 7) + ' 50 Z" fill="' + bg + '"/><line x1="' + (cx - 12) + '" y1="50" x2="' + (cx + 12) + '" y2="50" stroke="' + ink + '" stroke-width="2"/></g>' +
+    eyes += '<line x1="' + (cx - 14) + '" y1="' + (30 + 3 * t) + '" x2="' + (cx + 14) + '" y2="' + (30 - 3 * t) + '" stroke="' + ink + '" stroke-width="4" stroke-linecap="round"/>' +
+      '<g class="eo"><circle cx="' + cx + '" cy="50" r="12" fill="' + ink + '"/><circle cx="' + (cx + 2) + '" cy="51" r="8" fill="' + iris + '"/><circle cx="' + (cx + 2) + '" cy="51" r="4" fill="#0c1028"/></g>' +
+      '<g class="eh"><path d="M' + (cx - 12) + ' 50 A12 12 0 0 0 ' + (cx + 12) + ' 50 Z" fill="' + ink + '"/><path d="M' + (cx - 6) + ' 50 A8 8 0 0 0 ' + (cx + 10) + ' 50 Z" fill="' + iris + '"/><line x1="' + (cx - 12) + '" y1="50" x2="' + (cx + 12) + '" y2="50" stroke="' + ink + '" stroke-width="2"/></g>' +
       '<g class="ec"><path d="M' + (cx + 11.3) + ' 48.7 A12 8 0 0 1 ' + (cx - 11.3) + ' 48.7" fill="none" stroke="' + ink + '" stroke-width="3" stroke-linecap="round"/></g>' +
       '<ellipse cx="' + (cx - 4 * t) + '" cy="72" rx="9" ry="5" fill="' + cheek + '"/>';
   }
@@ -940,14 +965,26 @@ function renderIdle(s, welcome) {
   const now = Date.now() / 1000;
   const p = s.photo;
   const robotRecent = (p && now - p.t < 60) || (lastEventT && now - lastEventT < 60);
-  setCheck("ckRobot", !connected ? "bad" : robotRecent || s.mode === "test" ? "" : "idle",
-    !connected ? "Offline" : s.mode === "test" ? "Test mode" : robotRecent ? "Ready" : "Quiet");
+  const away = s.links && (s.links.rob === "away" || s.links.rob === "no gateway");
+  setCheck("ckRobot", !connected || away ? "bad" : robotRecent || s.mode === "test" ? "" : "idle",
+    !connected ? "Offline" : away ? "Not connected" : s.mode === "test" ? "Test mode" : robotRecent ? "Ready" : "Quiet");
   if (p) {
     const n = (p.faces || []).length, old = now - p.t > 90;
     setCheck("ckCam", n ? "" : "warn", !n ? "Nobody seen" : (old ? "Saw " : "Sees ") + n + (n === 1 ? " person" : " people"));
   } else setCheck("ckCam", "idle", "No photo yet");
   setCheck("ckVoice", lastSayT ? "" : "idle", lastSayT ? "Working" : "Not heard yet");
 }
+// the robot on the gateway and the Pi's referee, from state.links
+const ROB_LINK = { connected: ["ok", "Connected"], away: ["bad", "Not on Wi-Fi"], "no gateway": ["bad", "No gateway"], checking: ["", "Checking"] };
+const PI_LINK = { connected: ["ok", "Connected"], waiting: ["warn", "Waiting"], unused: ["", "Not used"] };
+function renderLinks(s) {
+  const l = s.links || {};
+  const rob = !connected ? ["bad", "Unknown"] : ROB_LINK[l.rob] || ["", l.rob || "Unknown"];
+  const pi = !connected ? ["bad", "Unknown"] : PI_LINK[l.pi] || ["", l.pi || "Unknown"];
+  setLink("lnRob", rob, l.rob === "away" ? "The robot is off the gateway: check its power and Wi-Fi" : l.rob === "no gateway" ? "The gateway is not answering" : "");
+  setLink("lnPi", pi, l.pi === "unused" ? "The games run on this Mac" : l.pi === "waiting" ? "Waiting for the Pi's referee to call in" : "");
+}
+function setLink(id, [cls, text], title) { const el = $(id); el.dataset.s = cls; el.lastElementChild.textContent = text; el.title = title; }
 function setCheck(id, cls, text) { const el = $(id); el.className = "check " + cls; el.lastElementChild.textContent = text; }
 function fmtAge(a) { a = Math.max(0, Math.round(a)); return a < 60 ? a + " s" : a < 3600 ? Math.floor(a / 60) + " min" : Math.floor(a / 3600) + " h"; }
 $("games").addEventListener("click", async (e) => {
@@ -1309,6 +1346,7 @@ function renderHost(d) {
   $("hVoiceNote").textContent = voices.length && !elevenOn ? "These voices play once ElevenLabs is on and its key is in Keys." : "";
   $("bSpeaker").hidden = !isList(d.speakers);
   setHTML($("hSpeaker"), (d.speakers || []).map((x) => chip("speaker", x.key, x.label || cap(x.key), (cur.speaker || "robot") === x.key)).join(""));
+  setHTML($("hMic"), [["robot", "Robot"], ["mac", "This Mac"]].map(([k, l]) => chip("mic", k, l, (cur.mic || "mac") === k)).join(""));
 
   // AI: provider, model, effort, status
   const talks = d.talks || [], off = cur.talk === "off";
@@ -1362,11 +1400,12 @@ async function pickHost(e) {
   try {
     await postHost(body);
     if (f === "speaker") toast(k === "mac" ? "ROB plays on this Mac now" : "ROB plays on the robot now");
+    if (f === "mic") toast(k === "mac" ? "ROB listens with this Mac's microphone now" : "ROB listens with the robot's microphone now");
   } catch (err) { toast("Didn't change: " + err.message, true); }
   b.classList.remove("busy"); hostBusy = false;
   loadHost();
 }
-for (const id of ["hPersona", "hEngine", "hEleven", "hSpeaker", "hTalk", "hModels", "hEffort"]) $(id).addEventListener("click", pickHost);
+for (const id of ["hPersona", "hEngine", "hEleven", "hSpeaker", "hMic", "hTalk", "hModels", "hEffort"]) $(id).addEventListener("click", pickHost);
 $("modelForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const inp = $("modelCustom"), v = inp.value.trim(), t = $("modelTick");

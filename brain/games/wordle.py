@@ -16,6 +16,10 @@ State (Table.report): game "wordle", phase "guess" then "over", over, winner
 ("players" or None), and guesses, left, board, turn (the seat whose turn it is, or
 None for one player).
 
+The ending shows on the host's screen while the host says it (Table.reveal): the word
+as solved, or the word as given away. Both are known at the start, so they are
+prepared then and upload while the host explains the game.
+
 A rig fixes the word: {"word": "crane"}. Standard library only (the QNX referee).
 """
 
@@ -29,7 +33,7 @@ from typing import Any
 from brain import ears, lines
 from brain.games.common import Options, State, abandon, finish, hear
 from brain.games.wordle_words import ALLOWED, ANSWERS
-from brain.table import Table
+from brain.table import Card, Table
 
 GUESSES = 6
 LISTEN_SECONDS = 8.0  # one listen for a guess
@@ -259,6 +263,9 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
         raise ValueError(f"a Wordle rig needs a five-letter word: {rig}")
     board: list[list[list[str]]] = []
     tried: list[str] = []
+    solved = Card(answer.upper(), "solved", "win")
+    told = Card(answer.upper(), "was the word", "word")
+    table.prepare([solved, told])
 
     def turn_seat() -> int | None:
         return None if seats == 1 else len(tried) % seats + 1
@@ -298,7 +305,7 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
                 table.say(rng.choice(_NUDGE))
                 nudged = True
             elif silent >= GIVE_UP_LISTENS:
-                table.say(f"I'll take that as a pass. The word was {answer}.")
+                table.reveal(told, f"I'll take that as a pass. The word was {answer}.")
                 abandon(table, state)
                 table.say(lines.GOOD_GAME)
                 return
@@ -306,7 +313,7 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
         silent = 0
 
         if _has(tokens, _GIVE_UP):
-            table.say(f"Fine. The word was {answer}.")
+            table.reveal(told, f"Fine. The word was {answer}.")
             abandon(table, state)
             table.say(lines.GOOD_GAME)
             return
@@ -360,12 +367,12 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
         if word == answer:
             state.over = True
             report()
-            table.say(f"{word.capitalize()}. That's it! {rng.choice(_WIN[len(tried)])}")
+            table.reveal(solved, f"{word.capitalize()}. That's it! {rng.choice(_WIN[len(tried)])}")
             finish(table, state, "players", rng)
             return
         if len(tried) == GUESSES:
             table.say(feedback(word, marks, rng))
-            table.say(f"Out of guesses. The word was {answer}. {rng.choice(_LOSE)}")
+            table.reveal(told, f"Out of guesses. The word was {answer}. {rng.choice(_LOSE)}")
             abandon(table, state)
             table.say(lines.GOOD_GAME)
             return

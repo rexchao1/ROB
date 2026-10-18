@@ -176,3 +176,51 @@ def test_restarted_said_in_passing_is_not_a_reset():
 def test_what_else_asks_for_the_games():
     assert ears.asks_games("what else do you got?")
     assert ears.asks_games("any other games?")
+
+
+@pytest.mark.parametrize("text", ["hi", "hello.", "hey rob", "what's up?", "how are you?", "who are you?", "yo",
+                                  "rob", "a joke?", "are you there?"])
+def test_a_greeting_a_question_to_the_host_or_its_name_counts_unasked(text):
+    assert ears.meaningful(text)
+
+
+@pytest.mark.parametrize("text", ["thank you", "you", "oh", "the name. the name. the name.", "ha ha ha ha",
+                                  " ".join(["so", "then"] * 21)])
+def test_phantoms_and_transcription_junk_never_count(text):
+    assert not ears.meaningful(text) and not ears.meaningful(text, answering=True)
+
+
+def test_a_short_mumble_counts_only_as_an_answer():
+    assert not ears.meaningful("i want...") and ears.meaningful("i want...", answering=True)
+
+
+def test_small_talk_kinds():
+    assert [ears.small_talk(t) for t in ("hey rob", "how's it going?", "who are you", "tell us a joke", "pass the chips")] == [
+        "hello", "how", "who", "joke", None]
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("ROB, remember that we hate Wordle", ("remember", "we hate Wordle")),
+    ("remember we love Mafia", ("remember", "we love Mafia")),
+    ("forget that", ("forget", "")),
+    ("ROB, forget everything!", ("clear", "")),
+    ("what do you remember?", ("recall", "")),
+    ("do you remember Mafia?", None),
+    ("I remember the last game", None),
+])
+def test_memory_commands(text, expected):
+    assert ears.memory_command(text) == expected
+
+
+@pytest.mark.parametrize("text", ["let's end this game please.", "okay, exit the game", "we're done", "stop this game"])
+def test_more_ways_to_end_the_game_are_heard(text):
+    assert ears.wants_to_stop(text) and not ears.wants_sleep(text)
+
+
+@pytest.mark.parametrize("text", ["go to sleep.", "rob, take a nap", "okay go to bed"])
+def test_go_to_sleep_ends_any_game_and_naps(text):
+    assert ears.wants_to_stop(text) and ears.wants_sleep(text) and not ears.wants_to_reset(text)
+
+
+def test_a_stop_phrase_inside_another_word_is_not_a_stop():
+    assert not ears.wants_to_stop("we had a great weekend games night")

@@ -36,3 +36,11 @@ Feature: Imposter
     When a vote ties between Players two and four
     Then the players hear the host say "Two for Player two, two for Player four. It's a tie. Nobody leaves."
     And the players hear the host say "The Imposter survives. It was Player three."
+
+  @D115
+  Scenario: The reveal shows on the host's screen while the host says it
+    Given clues have been given
+    When a vote eliminates Player three
+    Then the host's screen shows "PLAYER 3" and "was the Imposter" while it says "Player three was the Imposter."
+    And the host's screen shows "beach" and "was the word" while it says "The word was beach."
+    And the host's own face is back on its screen afterwards

@@ -86,6 +86,10 @@ def load_env(path: Path | None = None) -> None:
 
 def _write_env(path: Path, updates: dict[str, str | None]) -> None:
     """Set or remove keys in .env, keeping every other line as it was; owner-only."""
+    saved = read_env(path)
+    updates = {name: value for name, value in updates.items() if saved.get(name) != value}
+    if not updates:
+        return
     try:
         lines = path.read_text().splitlines()
     except OSError:

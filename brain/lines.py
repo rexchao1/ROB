@@ -287,8 +287,9 @@ def word_was(word: str) -> str:
 # --- Wavelength (D21) --------------------------------------------------------------
 
 WAVELENGTH_INTRO = (
-    "Let's play Wavelength. One of you sees a number from one to ten on a scale. "
-    "Give a clue, and everyone else guesses the number."
+    "Let's play Wavelength. Each round, everyone but the guesser sees a secret number from one to ten. "
+    "The guesser gives each of you a category, and you name something in it that fits the number: "
+    "one is the least, ten is the most. Then the guesser says the number."
 )
 
 
@@ -296,11 +297,22 @@ def round_line(n: int) -> str:
     return f"Round {number_word(n)}."
 
 
-def psychic_clue(seat: int) -> str:
-    return f"{player(seat)}, give us your clue."
+def guesser_turn(seat: int) -> str:
+    return f"{player(seat)}, you're guessing this round. No peeking at my screen."
 
 
-WAVELENGTH_TALK = "Everyone else, talk it over. Tell me your number when you're ready."
+def ask_category(guesser: int, seat: int) -> str:
+    return f"{player(guesser)}, give {player(seat)} a category."
+
+
+def category_answer(seat: int) -> str:
+    return f"{player(seat)}, name something that fits the number."
+
+
+def guesser_number(seat: int) -> str:
+    return f"{player(seat)}, what's the number?"
+
+
 WAVELENGTH_AGAIN = "What's your number?"
 NO_GUESS = "No guess. Zero points."
 
@@ -342,11 +354,11 @@ def flavor(moment: str, rng: random.Random) -> str:
 # --- the welcome (D38 to D43) ------------------------------------------------------------
 
 GREETINGS = (
-    "Hey, what's up, everyone? I'm ROB. What are we playing? Name a game, or tell me how many of you there are and I'll pick.",
-    "Hey hey, it's game night! ROB here. How many of you are playing? Or just name a game.",
-    "Hey, everybody! I'm ROB, your host. What do you feel like playing? Tell me how many you are and I'll pick one.",
-    "Hey, what's going on? ROB here. Name a game, or tell me how many of you there are.",
-    "Hey there, I'm ROB! What are we playing tonight? Say a game, or how many of you there are.",
+    "Hey, everybody! I'm ROB, and I'm so glad you're here. Pull up a chair, tonight is game night!",
+    "Oh good, people! Hi, I'm ROB, your host. Welcome, welcome, make yourselves at home.",
+    "Hey hey, it's game night! I'm ROB, and I've been waiting all day for you. Come on in.",
+    "Hi, friends! I'm ROB, and I'll be your host tonight. It's really good to see you.",
+    "Well, look who showed up! Welcome! I'm ROB, and I promise to keep score honestly. Mostly.",
 )
 LOOKING = (
     "Okay, let me get a look at you all.",
@@ -445,7 +457,7 @@ def suggestion(seats: int, rng: random.Random) -> str:
     return rng.choice(_suggestions(seats))
 
 
-RULES = {
+RULES = {  # what a game is, said when someone asks; the talk model reads them too (games_about())
     "mafia": (
         "In Mafia, someone's secretly the Mafia and takes a player out every night, while the Doctor tries to save them. "
         "By day you argue it out and vote. Want to play it?"
@@ -455,16 +467,26 @@ RULES = {
         "You each give a one-word clue, then vote on who's faking it. Want to play it?"
     ),
     "wavelength": (
-        "In Wavelength, one of you sees a secret number on a scale and gives a clue. "
-        "Everyone else talks it over and guesses the number. Want to play it?"
+        "In Wavelength, everyone but the guesser sees a secret number from one to ten. "
+        "The guesser gives each of you a category, you name something that fits the number, "
+        "and then the guesser says it. Want to play it?"
     ),
 }
+
+
+_PLAY_IT = " Want to play it?"
 
 
 def rules(game: str) -> str:
     """Asked how a game goes: its RULES line; a game added without one gets a line that
     states no rule (D14)."""
-    return RULES.get(game) or f"{game_name(game)}? Easier to show you than explain. Want to play it?"
+    return RULES.get(game) or f"{game_name(game)}? Easier to show you than explain.{_PLAY_IT}"
+
+
+def games_about() -> str:
+    """What every game built is, one per line, for the talk model, so it can say what a
+    game is without making a rule up (D14): each RULES line without its question."""
+    return "\n".join(rules(game).removesuffix(_PLAY_IT) for game in _registered())
 
 
 def _join(games: list[str], word: str) -> str:
@@ -483,7 +505,15 @@ def fits(seats: int) -> list[str]:
 
 def games_any() -> str:
     """Asked what the host has before anyone said how many: every game built."""
-    return f"I've got {game_names()}. Which one sounds good?"
+    return f"I've got {game_names()}. {MAFIA_NEEDS} Which one sounds good?"
+
+
+MAFIA_NEEDS = "Mafia needs at least four of you."
+
+
+def games_menu() -> str:
+    """The welcome's second line: every game built, Mafia's minimum, and the question."""
+    return f"Tonight I can host {game_names()}. {MAFIA_NEEDS} Pick one, or tell me how many of you there are and I'll choose."
 
 
 def games_list(seats: int) -> str:
@@ -519,13 +549,14 @@ def instead(game: str) -> str:
 
 
 LATER = (
-    "No rush. Tap my head when you're ready to play.",
-    "Cool, I'll take a nap. Tap my head when you want a game.",
+    "No rush. Put your hand on top of my head when you're ready to play.",
+    "Cool, I'll take a nap. Rest your hand on top of my head when you want a game.",
 )
-NAP = "I'll take a nap. Tap my head when you want me."  # the host stops listening until a tap wakes it
+NAP = "I'll take a nap. Put your hand on top of my head when you want me."  # the host stops listening until a touch wakes it
 WOKE = (
-    "I'm up! What are we playing?",
-    "Hey, I'm awake. What do you want to play?",
+    "I'm up, I'm up! What are we playing?",
+    "Oh hey, you're back! What do you want to play?",
+    "Mm, good nap. Okay, what are we playing?",
 )
 
 
@@ -539,7 +570,7 @@ def looking(rng: random.Random) -> str:
 
 
 def woke(rng: random.Random) -> str:
-    """A tap on the head woke the host: "I'm up", and a question."""
+    """A hand on the head woke the host: "I'm up", and a question."""
     return rng.choice(WOKE)
 
 
@@ -559,22 +590,41 @@ def nudges(game: str | None, rng: random.Random) -> list[str]:
     return rng.sample(_nudges(game), 2)
 
 
-def _chat_fallbacks(game: str | None) -> tuple[str, ...]:
-    if game is None:
-        return ("Ha, fair enough. So what are we playing?", "Noted. Now, which game?", "I like you already. Pick a game when you're ready.")
-    g = game_name(game)
+_SMALL_TALK = {  # a scripted answer to the small talk ears.small_talk() names, before the way back to a game
+    "hello": ("Hey yourself! Good to see you.", "Hi! Glad you made it."),
+    "how": ("I'm great, thanks for asking.", "Doing good! Just itching to host something."),
+    "who": ("I'm ROB, your host for game night.", "Name's ROB. I run the games around here."),
+    "joke": ("Why don't robots ever panic? Nerves of steel.", "Why did the robot go on vacation? It needed to recharge."),
+}
+
+
+def _chat_fallbacks(game: str | None, kind: str | None = None) -> tuple[str, ...]:
+    g = game_name(game) if game is not None else None
+    if kind in _SMALL_TALK:
+        back = "What are we playing?" if g is None else f"Want to try {g}?"
+        return tuple(f"{answer} {back}" for answer in _SMALL_TALK[kind])
+    if g is None:
+        return (
+            "Ha, fair enough. So what are we playing?",
+            "I hear you. Anyway, what sounds fun tonight?",
+            "Ha, I like you already. Want to pick a game?",
+        )
     return (
         f"Ha, fair enough. So, {g}?",
-        f"Honestly, same. Anyway, {g}?",
-        f"I like you already. {g}, yes or no?",
-        f"Noted. Now, are we doing {g} or what?",
+        f"I hear you. Anyway, how about {g}?",
+        f"Ha, I like you already. Want to try {g}?",
+        f"Fair! So, are we doing {g} or what?",
     )
 
 
-def chat_fallback(game: str | None, rng: random.Random) -> str:
-    """A reply to small talk when no model answers (no key, offline, slow): short, and
-    back to the game."""
-    return rng.choice(_chat_fallbacks(game))
+def chat_fallback(game: str | None, rng: random.Random, kind: str | None = None, said: Sequence[str] = ()) -> str:
+    """A reply to small talk when no model answers (no key, offline, slow): an answer to
+    a hello, a "how are you", a "who are you" or a joke asked for (`kind`, from
+    ears.small_talk()), else a friendly nod, and back to the game. One not in `said`
+    (the host's recent lines) when there is one."""
+    options = _chat_fallbacks(game, kind)
+    fresh = [line for line in options if line not in said]
+    return rng.choice(fresh or options)
 
 
 def recounted(before: int, after: int) -> str:
@@ -609,6 +659,14 @@ RULES["wordle"] = (
     "In Wordle, I pick a secret five-letter word and you get six guesses. "
     "After each one I tell you which letters are spot on and which are in there somewhere. Want to play it?"
 )
+RULES["hotseat"] = (
+    "In Hot Seat, I call out a category and you take turns naming something in it, fast. "
+    "Freeze, pass or repeat and you're out, and the last one standing wins. Want to play it?"
+)
+RULES["twenty"] = (
+    "In Twenty Questions, one of us thinks of something and the other asks yes or no questions to figure it out. "
+    "You can guess mine, or I'll guess yours. Want to play it?"
+)
 
 
 def fixed_lines(max_seats: int = 10) -> list[str]:
@@ -625,8 +683,8 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         PICK_LIVING, NO_VOTES, DEAL_ROLES, HEADS_DOWN, MAFIA_WHISPER, MAFIA_AGAIN, MAFIA_DOWN,
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
-        WAVELENGTH_TALK, WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
-        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(),
+        WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
+        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(), games_menu(),
     ]
     out += [mafia_intro(1), mafia_intro(2)]
     out += [too_few(g, m) for g, m in MINIMUM.items()]
@@ -636,15 +694,18 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         out += [count_line(n), only_see(n), see_more(n)]
         out += [lean_in(n), lean_in_again(n), come_back(n), who(n), who_again(n), voted_out(n), warn(n), sit_out(n), killed(n)]
         out += [was(n, MAFIA), was(n, DOCTOR), was(n, VILLAGER), village_wins(n), mafia_were([n])]
-        out += [clue(n), was_imposter(n), imposter_survives(n), psychic_clue(n)]
+        out += [clue(n), was_imposter(n), imposter_survives(n), guesser_turn(n), category_answer(n), guesser_number(n)]
+        out += [ask_category(n, k) for k in range(1, max_seats + 1) if k != n]
     out += [target_was(t) for t in range(1, 11)]
     out += [round_line(n) for n in (1, 2, 3)]
     out += [points(s) for s in range(0, 11)]
     out += [total(t) for t in range(0, 31)]
     out += [word_was(w) for w in IMPOSTER_WORDS]
-    out += [RESTARTING, NOBODY_YET, *GREETINGS, *RULES.values(), *LATER, *_nudges(None), *_chat_fallbacks(None)]
+    kinds = (None, *_SMALL_TALK)
+    out += [RESTARTING, NOBODY_YET, *GREETINGS, *RULES.values(), *LATER, *_nudges(None)]
+    out += [line for kind in kinds for line in _chat_fallbacks(None, kind)]
     for game in {**GAME_NAMES, **MINIMUM}:
-        out += [rules(game), instead(game), *_nudges(game), *_chat_fallbacks(game)]
+        out += [rules(game), instead(game), *_nudges(game), *[line for kind in kinds for line in _chat_fallbacks(game, kind)]]
     for n in range(0, max_seats + 1):
         out += [*_suggestions(n), games_list(n)]
         out += [line for g in (suggested(n), None) for line in _declines(n, g)]
@@ -657,3 +718,18 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
             seen.add(line)
             unique.append(line)
     return unique
+
+
+# --- selected group facts --------------------------------------------------------
+MEMORY_SAVED = "Got it. I'll remember that."
+MEMORY_DUPLICATE = "I already remember that."
+MEMORY_FULL = "My memory's full. Ask me to forget something first."
+MEMORY_INVALID = "Keep it to a short group fact, without names, seats or private roles."
+MEMORY_FORGOT = "Forgot the last fact you asked me to remember."
+MEMORY_CLEARED = "Forgot everything, including our game totals."
+MEMORY_EMPTY = "I don't remember any facts yet."
+MEMORY_UNAVAILABLE = "I couldn't save that. Try again later."
+
+
+def memories_remembered(facts: list[str]) -> str:
+    return "Here's what I remember. " + " ".join(facts) if facts else MEMORY_EMPTY

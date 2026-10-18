@@ -42,7 +42,12 @@ _SPLIT_GAMES.update({("twenty", "questions"): "twenty", ("20", "questions"): "tw
 _STOP = (
     "stop the game", "end the game", "quit the game", "cancel the game", "restart the game",
     "restart the round", "start over", "stop playing",
+    "stop this game", "end this game", "quit this game", "cancel this game", "exit the game",
+    "exit this game", "leave the game", "end game", "exit game", "quit game", "stop game",
+    "we're done", "were done", "i'm done playing", "im done playing", "let's stop", "lets stop",
+    "no more games", "enough of this game",
 )
+_SLEEP = ("go to sleep", "go to bed", "take a nap", "nap time", "time for bed", "good night rob", "goodnight rob", "go to sleep rob")
 _VOTE_NOW = ("let's vote", "lets vote", "ready to vote", "vote now", "we're ready", "were ready", "time to vote")
 _AGREE = ("okay", "ok", "fine", "yes", "yeah", "yep", "sure", "start", "go ahead", "let's go", "lets go",
           "never mind", "nevermind", "that's right", "thats right", "correct", "right")
@@ -175,7 +180,24 @@ def agrees(text: str) -> bool:
 def wants_to_stop(text: str) -> bool:
     """The group asks to stop or restart (D27: the group may restart by saying so)."""
     t = " ".join(_tokens(text))
-    return wants_to_reset(text) or any(p in t for p in _STOP)
+    return wants_to_reset(text) or wants_sleep(text) or _phrase(t, _STOP)
+
+
+def _phrase(t: str, phrases: tuple[str, ...]) -> bool:
+    """One of `phrases` in the joined tokens `t`, as whole words ("end game", not "weekend games")."""
+    padded = f" {t} "
+    return any(f" {p} " in padded for p in phrases)
+
+
+def hard_command(text: str) -> bool:
+    """Words that act whenever they are said, even over the host's own line: a stop, a
+    reset, "go to sleep", or a pause ("pause", "shut up", "be quiet")."""
+    return wants_to_stop(text) or wants_pause(text)
+
+
+def wants_sleep(text: str) -> bool:
+    """"Go to sleep", "take a nap": the host ends any game and naps until a tap."""
+    return _phrase(" ".join(_tokens(text)), _SLEEP)
 
 
 _RESET = re.compile(r"\b(?:reset|restart|start (?:over|again)|begin again)\b")  # not "restarted": "you never restarted?" is talk
@@ -356,13 +378,72 @@ def asks_pick(text: str) -> bool:
     return _has(text, _ASK_PICK)
 
 
-def meaningful(text: str, answering: bool = False) -> bool:
-    """Something said to the host, not room noise: three or more real words, or, right
-    after the host asked something, one. Whisper's phantoms for noise ("you", "thank
-    you", "oh") are never meaningful (D43)."""
+_HELLO = ("hi", "hello", "hey", "hiya", "howdy", "yo", "sup", "what's up", "whats up", "wassup", "what up",
+          "good evening", "good morning", "good afternoon", "greetings")
+_HOW = ("how are you", "how are ya", "how you doing", "how're you", "how's it going", "hows it going",
+        "how is it going", "how have you been", "how's your night", "hows your night", "you good", "you okay", "you ok")
+_WHO = ("who are you", "what are you", "what's your name", "whats your name", "what is your name", "who's this",
+        "whos this", "who is this", "introduce yourself")
+_JOKE = ("joke", "jokes", "something funny", "make me laugh", "make us laugh")
+_NAME = {"rob", "robb", "robbie", "robot"}
+_TO_YOU = re.compile(r"^(?:what|who|how|where|why|when|are|can|could|do|did|will|would|have|is)\b.*\b(?:you|your|ya|yourself)\b")
+_RUN_ON = 40  # words: past this, an utterance is the transcriber running on, not something said to the host
+
+
+def small_talk(text: str) -> str | None:
+    """What kind of small talk an utterance is, for the scripted answer to it: "joke"
+    ("tell us a joke"), "who" ("who are you?"), "how" ("how are you?"), "hello" (a
+    short "hi", "hey rob", "what's up"), else None."""
+    if _has(text, _JOKE):
+        return "joke"
+    if _has(text, _WHO):
+        return "who"
+    if _has(text, _HOW):
+        return "how"
+    if _has(text, _HELLO) and len(_tokens(text)) <= 4:
+        return "hello"
+    return None
+
+
+def addressed(text: str) -> bool:
+    """Said to the host, however short: a greeting, "how are you", "who are you", a joke
+    asked for, a question with "you" in it, or its name ("rob", "robot")."""
     tokens = _tokens(text)
-    if not tokens or " ".join(tokens) in _PHANTOMS:
+    return (
+        small_talk(text) is not None
+        or _has(text, _HELLO)
+        or bool(_NAME & set(tokens))
+        or bool(_TO_YOU.search(" ".join(tokens)))
+    )
+
+
+def junk(text: str) -> bool:
+    """What the transcriber writes when it loses the thread, not speech: a run-on past
+    _RUN_ON words, or one short phrase over and over ("the name. the name. the name.";
+    a single word four times)."""
+    tokens = _tokens(text)
+    if len(tokens) > _RUN_ON:
+        return True
+    for n in range(1, 5):
+        times = 4 if n == 1 else 3
+        for i in range(len(tokens) - n * times + 1):
+            phrase = tokens[i : i + n]
+            if all(tokens[i + k * n : i + (k + 1) * n] == phrase for k in range(1, times)):
+                return True
+    return False
+
+
+def meaningful(text: str, answering: bool = False) -> bool:
+    """Something said to the host, not room noise: three or more real words; or one,
+    right after the host asked something; or, asked or not, a greeting, a short question
+    to it ("what's up", "how are you", "who are you") or anything with its name in it.
+    Whisper's phantoms for noise ("you", "thank you", "oh") never are (D43), and neither
+    is transcription junk (junk())."""
+    tokens = _tokens(text)
+    if not tokens or " ".join(tokens) in _PHANTOMS or junk(text):
         return False
+    if addressed(text):
+        return True
     words = [t for t in tokens if t not in _FILLER]
     return len(words) >= (1 if answering else 3)
 
@@ -371,3 +452,23 @@ def wants_to_vote(text: str) -> bool:
     """The group is ready to vote before the day's time is up."""
     t = " ".join(_tokens(text))
     return any(p in t for p in _VOTE_NOW)
+
+
+# --- deliberately selected lasting facts -----------------------------------------
+
+def memory_command(text: str) -> tuple[str, str] | None:
+    """An explicit remember/forget/recall command, before game-name parsing.
+
+    Keep the selected fact's words, but normalize spaces. Never infer a fact from chat.
+    """
+    text = " ".join(text.split()).strip()
+    text = re.sub(r"^(?:(?:hey|okay|please)[, ]+)*(?:rob[, ]+)?", "", text, flags=re.IGNORECASE)
+    plain = text.casefold().rstrip(".!?")
+    if plain in ("forget everything", "forget it all", "forget all your memories"):
+        return "clear", ""
+    if plain in ("forget that", "forget the last thing", "forget the last fact"):
+        return "forget", ""
+    if plain in ("what do you remember", "what do you remember about us", "what have you remembered"):
+        return "recall", ""
+    match = re.fullmatch(r"remember\s+(?:that\s+)?(.+)", text, re.IGNORECASE)
+    return ("remember", match[1].strip()) if match else None

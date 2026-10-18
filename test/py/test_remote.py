@@ -132,7 +132,7 @@ def test_a_reset_mid_game_puts_the_referee_back_to_idle_listening_without_a_word
     assert _tools(fake) == SETUP
     assert call(remote.url, "GET", "/test/state") == (200, {"game": None})
     call(remote.url, "POST", "/test/advance", {"seconds": 5})
-    assert _tools(fake) == [*SETUP, "set_all_leds", "listen"]  # the ring shows it listens (D43), then the idle loop's first window, as with the host alone
+    assert _tools(fake) == [*SETUP, "set_all_leds", "listen", "get_touch_state"]  # the ring shows it listens (D43), the idle loop's first window, then a look for a hand on the head, as with the host alone
     assert remote.referee.epoch != epoch and remote.referee.playing is None
     assert _said(fake) == []
 
@@ -145,6 +145,19 @@ def test_a_rig_reaches_the_referee_and_is_used_once(remote, fake):
     assert remote.tb.host.rigs == {}
     loaded = [c for c in fake.device.calls if c["tool"] == "load_avatar_set" and c.get("error") is None]
     assert loaded and "beach" in str(remote.tb.host._manifest)  # noqa: SLF001
+
+
+def test_the_dashboard_shows_the_pi_waiting_until_the_referee_calls_in(fake, tmp_path):
+    tb = make_test_brain(fake.mcp_url, sets_dir=tmp_path, referee="remote")
+    url = _start(tb.server)
+    try:
+        assert call(url, "GET", "/dash/api/state")[1]["links"]["pi"] == "waiting"
+        tb.table.hello("dash-test")
+        assert call(url, "GET", "/dash/api/state")[1]["links"]["pi"] == "connected"
+    finally:
+        tb.table.stop()
+        tb.server.shutdown()
+        tb.server.server_close()
 
 
 def test_without_a_referee_the_clock_moves_freely_and_the_robot_is_still_set_up(fake, tmp_path):
@@ -200,6 +213,9 @@ class _Recorder:
         self.log.append(("show_private", seat, card))
         return seat != 4
 
+    def reveal(self, card, line):
+        self.log.append(("reveal", card, line))
+
     def listen(self, seconds):
         self.log.append(("listen", seconds))
         self.clock.sleep(seconds)
@@ -254,6 +270,7 @@ def test_every_table_method_reaches_the_table_as_the_rules_called_it(served):
     remote.prepare(cards)
     assert remote.show_private(2, cards[1]) is True
     assert remote.show_private(4, cards[0]) is False
+    remote.reveal(Card("VILLAGE", "wins", "win"), "The village wins.")
     assert remote.listen(0) == "player four"
     assert remote.faces_up() == [2, 5]
     remote.mood("night")
@@ -261,7 +278,8 @@ def test_every_table_method_reaches_the_table_as_the_rules_called_it(served):
     remote.quip("death", game="mafia")
     assert table.log == [
         ("wait", 0), ("say", "Five of you."), ("look", None), ("look", 3), ("count",), ("prepare", cards),
-        ("show_private", 2, cards[1]), ("show_private", 4, cards[0]), ("listen", 0), ("faces_up",), ("mood", "night"),
+        ("show_private", 2, cards[1]), ("show_private", 4, cards[0]),
+        ("reveal", Card("VILLAGE", "wins", "win"), "The village wins."), ("listen", 0), ("faces_up",), ("mood", "night"),
         ("report", {"game": "mafia", "warnings": {"3": 1}, "living": [1, 2]}), ("quip", "death", {"game": "mafia"}),
     ]
 
@@ -508,3 +526,18 @@ def test_the_referee_needs_nothing_but_the_standard_library():
     assert done.returncode == 0 and "--table" in done.stdout, done.stderr
     done = subprocess.run([sys.executable, "-S", "-m", "brain.referee", "--table", "ftp://x"], cwd=ROOT, capture_output=True, text=True, timeout=30)
     assert done.returncode == 2 and "http://HOST:PORT" in done.stderr
+
+
+def test_talk_settings_snapshot_travels_without_keys():
+    class Table(FakeTable):
+        def talk_settings(self):
+            return {"talk": "gemini", "talk_model": "gemini-2.5-flash", "effort": "high", "persona": "host"}
+    server = TableServer(Table(), RealClock(), "127.0.0.1", 0).start()
+    remote = RemoteTable(server.url)
+    try:
+        hello = remote.hello()
+        assert hello["talk_settings"] == server.table.talk_settings()
+        assert remote.talk_settings() == server.table.talk_settings()
+    finally:
+        remote.close()
+        server.stop()

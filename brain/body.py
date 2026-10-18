@@ -41,6 +41,11 @@ PROTOCOL_VERSION = "2025-06-18"  # a handshake revision both mcp 1.x (the gatewa
 FACES = ("idle", "happy", "thinking", "sad", "surprised", "embarrassed", "off")
 SAMPLE_RATE = 16_000
 QUEUE_FULL = -32000
+TOUCH_SAME_EVENT = 0.5  # seconds: two reports of an event this close are the same event
+TOUCH_SLACK = 1.5  # seconds: an event this close to a counted hold is that hold ending
+STREAM_STEP = 0.1  # seconds of audio per piece when a line is streamed so it can be cut off
+STREAM_LEAD = 1.0  # seconds a streamed line runs ahead of real time, so the gateway never runs dry
+PLAYED_AFTER = 0.2  # seconds past a line's length by which this Mac has played it: afplay starts in about 60 ms, the built-in speakers add 13 (measured 2026-10-18)
 
 
 class BodyError(Exception):
@@ -66,11 +71,20 @@ class Gateway:
         self._protocol = PROTOCOL_VERSION
         self._lock = threading.Lock()  # the session handshake and the request ids
         self._next_id = 0
+        self.dropped = False  # a call found the robot gone: on its return it shows its stock face until ROB's set is loaded again
 
     # --- tools -------------------------------------------------------------------
 
     def call(self, name: str, args: dict[str, Any] | None = None, timeout: float | None = None) -> ToolResult:
         """Call one tool and return its answer; raise BodyError on any refusal."""
+        try:
+            return self._call(name, args, timeout)
+        except BodyError as e:
+            if "ESP32" in str(e):
+                self.dropped = True
+            raise
+
+    def _call(self, name: str, args: dict[str, Any] | None, timeout: float | None) -> ToolResult:
         result = self._request("tools/call", {"name": name, "arguments": args or {}}, timeout)
         text = "\n".join(item.get("text", "") for item in result.get("content", []) if item.get("type") == "text")
         images = [base64.b64decode(item["data"]) for item in result.get("content", []) if item.get("type") == "image"]
@@ -227,11 +241,23 @@ class Body:
         self.pitch = int(min(85, max(5, pitch)))
         self.speed = speed
         self.speaker = speaker
+        self._touch_enabled = False  # set_touch_sensor_enabled sent (once a process)
+        self._touch_held = False  # the pads were on at the last read: that touch is counted
+        self._touch_event_at: float | None = None  # when the newest event seen happened
+        self._touch_hold: tuple[float, float] | None = None  # the last counted hold, first and last read on
 
     def setup(self) -> None:
-        """Keep the screen on for the whole game and start blinking."""
+        """Keep the screen on for the whole game and start blinking; the first time, turn
+        the head's touch sensor on too (someone may have switched it off; the robot keeps
+        the setting). A robot without that tool is left as it is."""
         self.gateway.call("set_off_timeout", {"seconds": 0})
         self.blink(True)
+        if not self._touch_enabled:
+            try:
+                self.gateway.call("set_touch_sensor_enabled", {"enabled": True})
+            except BodyError:
+                pass
+            self._touch_enabled = True
 
     def turn(self, yaw: float, speed: str | int | None = None) -> None:
         """Start the head toward `yaw`; returns at once, while it moves. `speed` (degrees
@@ -264,28 +290,41 @@ class Body:
         return image
 
     def listen(self, seconds: float) -> str:
-        """Transcribe the next `seconds` of the microphone (faster-whisper on the gateway)."""
+        """Transcribe the next `seconds` of the microphone (faster-whisper on the gateway).
+        With the mic setting on "mac" the gateway records this Mac's microphone instead
+        of the robot's (scripts/gateway.py; a plain gateway ignores the ask)."""
+        from brain import settings
+
         ms = int(min(30_000, max(100, round(seconds * 1000))))
-        answer = self.gateway.call(
-            "listen",
-            {"duration_ms": ms, "engine": "faster-whisper", "language": "en", "motion": "none"},
-            timeout=ms / 1000 + 60,
-        )
+        args: dict[str, Any] = {"duration_ms": ms, "engine": "faster-whisper", "language": "en", "motion": "none"}
+        if settings.current.mic == "mac":
+            args["source"] = "mac"
+        answer = self.gateway.call("listen", args, timeout=ms / 1000 + 60)
         text = answer.data.get("text", "") if isinstance(answer.data, dict) else ""
         return text if isinstance(text, str) else ""
 
-    def play(self, pcm: bytes) -> None:
-        """Play 16 kHz mono s16le PCM on the speaker; returns once it has played."""
+    def play(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
+        """Play 16 kHz mono s16le PCM on the speaker; returns once it has played. mouth:
+        on the Mac's speaker, move the robot's mouth with it (False while a card is up,
+        since a mouth frame is the whole face and would cover the card). abort: setting
+        it cuts the line off (within about STREAM_LEAD seconds on the robot, at once on
+        the Mac); the robot's line is then streamed at the pace it plays."""
         if not pcm:
             return
         if self.speaker == "mac":
-            self._play_here(pcm)
+            if abort is not None:
+                self._play_here(pcm, mouth=mouth, abort=abort)
+            elif mouth:
+                self._play_here(pcm)
+            else:
+                self._play_here(pcm, mouth=False)
             return
         headers = {"Content-Type": "application/octet-stream", "X-Sample-Rate": str(SAMPLE_RATE), "X-Channels": "1"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         seconds = len(pcm) / (SAMPLE_RATE * 2)
-        req = urllib.request.Request(self.pcm_url, data=pcm, method="POST", headers=headers)
+        data: Any = pcm if abort is None else _paced(pcm, abort)  # an iterable goes out chunked
+        req = urllib.request.Request(self.pcm_url, data=data, method="POST", headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=seconds + 15) as res:
                 res.read()
@@ -294,8 +333,12 @@ class Body:
         except (urllib.error.URLError, OSError) as e:
             raise BodyError(f"POST /pcm: {e}") from None
 
-    def _play_here(self, pcm: bytes) -> None:
-        """Play on this machine's audio output (afplay) while the robot moves its mouth."""
+    def _play_here(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
+        """Play on this machine's audio output (afplay) while the robot moves its mouth;
+        returns once the line has played. afplay lingers about 0.8 s after the sound
+        ends before it exits, so it is waited for only the line's length and
+        PLAYED_AFTER, then left to finish on its own; the WAV is deleted under it, which
+        it does not mind once it has opened it."""
         fd, path = tempfile.mkstemp(suffix=".wav", prefix="gm-line-")
         try:
             with os.fdopen(fd, "wb") as f, wave.open(f, "wb") as w:
@@ -303,16 +346,27 @@ class Body:
                 w.setsampwidth(2)
                 w.setframerate(SAMPLE_RATE)
                 w.writeframes(pcm)
+            played = time.monotonic() + len(pcm) / (SAMPLE_RATE * 2) + PLAYED_AFTER
             try:
                 player = subprocess.Popen(["afplay", path])
             except OSError as e:
                 raise BodyError(f"afplay: {e}") from None
             try:
-                self.gateway.call("set_mouth_sequence", {"steps": mouth_steps(pcm)})
+                if mouth:
+                    self.gateway.call("set_mouth_sequence", {"steps": mouth_steps(pcm)})
             except BodyError:
                 pass  # the line still plays; only the mouth stays still
-            if player.wait() != 0:
-                raise BodyError(f"afplay exited with {player.returncode}")
+            if abort is not None and abort.wait(max(0.0, played - time.monotonic())):
+                player.terminate()  # cut off
+                threading.Thread(target=player.wait, name="afplay", daemon=True).start()
+                return
+            try:
+                code = player.wait(timeout=max(0.0, played - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                threading.Thread(target=player.wait, name="afplay", daemon=True).start()  # reaped when it exits
+                return
+            if code != 0:
+                raise BodyError(f"afplay exited with {code}")
         finally:
             try:
                 os.remove(path)
@@ -340,19 +394,42 @@ class Body:
         else:
             self.gateway.call("set_leds", {"colors": [[int(c) for c in rgb] for rgb in colors[:12]]})
 
-    def touched(self, within: float) -> bool:
-        """The head was touched now or in the last `within` seconds (get_touch_state); a
-        robot that cannot say counts as not touched."""
+    def touched(self, within: float, now: float | None = None) -> bool:
+        """A new touch on the head since the last read (get_touch_state); a robot that
+        cannot say counts as not touched. `now` is the caller's clock in seconds
+        (time.monotonic() when None), used only to place the robot's events in time.
+
+        What the real head does (stackchan-mcp 0.18, measured): only a hand held on it
+        registers, a quick tap never does; the pad then stays on for seconds after the
+        hand leaves, and when it clears the robot reports a "stroke" from a few seconds
+        before. So a touch is an edge, counted once: the pads going from clear to on, or,
+        with the pads clear, an event newer than any seen, no older than `within`
+        seconds, that is not the end of the hold already counted. Until the pads clear
+        again, nothing more counts."""
         try:
             data = self.gateway.call("get_touch_state").data
         except BodyError:
             return False
         if not isinstance(data, dict):
             return False
-        if any(data.get(f"zone{i}") for i in range(3)):
-            return True
+        t = time.monotonic() if now is None else now
         age = data.get("last_event_age_ms")
-        return data.get("last_event") not in (None, "idle") and isinstance(age, (int, float)) and 0 <= age <= within * 1000
+        event_at = None
+        if data.get("last_event") not in (None, "idle") and isinstance(age, (int, float)) and not isinstance(age, bool) and age >= 0:
+            event_at = t - age / 1000
+        newer = event_at is not None and (self._touch_event_at is None or event_at > self._touch_event_at + TOUCH_SAME_EVENT)
+        if newer:
+            self._touch_event_at = event_at
+        if any(data.get(f"zone{i}") for i in range(3)):
+            fresh = not self._touch_held
+            self._touch_held = True
+            self._touch_hold = (t, t) if fresh else (self._touch_hold[0] if self._touch_hold else t, t)
+            return fresh
+        self._touch_held = False
+        if not newer or t - event_at > within:
+            return False
+        hold = self._touch_hold
+        return not (hold and hold[0] - TOUCH_SLACK <= event_at <= hold[1] + TOUCH_SLACK)
 
     def clear_leds(self) -> None:
         self.gateway.call("clear_leds")
@@ -418,3 +495,16 @@ def mouth_steps(pcm: bytes, step_ms: int = 100, max_steps: int = 256) -> list[di
     for step in steps:
         step["duration_ms"] = min(10_000, step["duration_ms"])
     return steps
+
+
+def _paced(pcm: bytes, abort: threading.Event):
+    """`pcm` in STREAM_STEP pieces, sent no more than STREAM_LEAD seconds ahead of the
+    time it plays; ends early, cutting the line off, once `abort` is set."""
+    step = int(SAMPLE_RATE * STREAM_STEP) * 2
+    start = time.monotonic()
+    for i in range(0, len(pcm), step):
+        ahead = i / (SAMPLE_RATE * 2) - (time.monotonic() - start) - STREAM_LEAD
+        if (ahead > 0 and abort.wait(ahead)) or abort.is_set():
+            return
+        yield pcm[i : i + step]
+

@@ -1,5 +1,5 @@
 Feature: Pausing a game
-  "Pause" at any listen holds the game and its clock until "resume", a tap on
+  "Pause" at any listen holds the game and its clock until "resume", a hand on
   the host's head or the page's Resume; the interrupted listen runs again. The
   lobby listens in longer windows once the table has been quiet. Built in the
   second commit without tests; this file describes what was built and binds
@@ -12,7 +12,7 @@ Feature: Pausing a game
   Scenario: Pause holds the game's clock
     Given a game of Mafia is in its day phase, which began thirty seconds ago
     When someone says "pause"
-    Then the players hear the host say "Paused. Say resume or tap my head when you're ready."
+    Then the players hear the host say "Paused. Say resume or put your hand on top of my head when you're ready."
     And the players see the ring dim
     When one hundred seconds pass and someone says "resume"
     Then the players hear the host say "Okay, back to it."
@@ -22,11 +22,11 @@ Feature: Pausing a game
   Scenario: Shut up and a bare stop pause the game too
     Given a game of Mafia is in its day phase
     When someone says "shut up"
-    Then the players hear the host say "Paused. Say resume or tap my head when you're ready."
+    Then the players hear the host say "Paused. Say resume or put your hand on top of my head when you're ready."
     When someone says "we're back"
     Then the players hear the host say "Okay, back to it."
     When someone says "okay stop"
-    Then the players hear the host say "Paused. Say resume or tap my head when you're ready."
+    Then the players hear the host say "Paused. Say resume or put your hand on top of my head when you're ready."
 
   @D110 @D93
   Scenario: Let's go is a yes, not a resume
@@ -37,9 +37,9 @@ Feature: Pausing a game
     Then the players hear the host say "Okay, back to it."
 
   @D72
-  Scenario: A tap on the head resumes
+  Scenario: A hand on top of the head resumes
     Given a game of Mafia is paused
-    When someone taps the host's head
+    When someone puts a hand on top of the host's head
     Then the players hear the host say "Okay, back to it."
 
   @D72

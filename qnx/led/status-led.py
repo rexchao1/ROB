@@ -1,10 +1,10 @@
 """The Pi's status light: one red-yellow-green LED on the GPIO header, showing how far
-the box has come up. Runs on the QNX Pi as qnxuser (in the gpio group), standard
+the box has come up. The colours add up: each stage keeps the ones before it lit. Runs on the QNX Pi as qnxuser (in the gpio group), standard
 library only; qnx/led.sh installs and starts it.
 
-    red     the Pi is on (this program is running)
-    yellow  the Wi-Fi is up: bcm0 has an address, on the hotspot or the gamemaster network
-    green   the robot is on the same Wi-Fi: its MAC answers a ping
+    red                 the Pi is on (this program is running)
+    red, yellow         the Wi-Fi is up: bcm0 has an address, on the hotspot or the gamemaster network
+    red, yellow, green  the robot is on the same Wi-Fi: its MAC answers a ping
 
 Wiring (qnx/README.md, "The status light"): red leg to pin 11 (GPIO17), yellow to
 pin 13 (GPIO27), green to pin 15 (GPIO22), the common (longest) leg to pin 9 (ground),
@@ -29,10 +29,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 PINS = {"red": 17, "yellow": 27, "green": 22}
-POLL = 3.0  # seconds between checks
+POLL = 1.0  # seconds between checks
 PING_WAIT = 2  # seconds a ping waits: the robot's Wi-Fi power save answers in up to ~1 s
 MISSES = 3  # pings in a row the robot may miss before the light goes back to yellow
-SWEEP_EVERY = 20.0  # seconds between looks for the robot's address when it is not known
+SWEEP_EVERY = 10.0  # seconds between looks for the robot's address when it is not known
 SWEEP_MAX = 256  # addresses at most in one look (the gamemaster network is a /24)
 
 
@@ -41,9 +41,11 @@ def gpio(pin: int, value: str) -> None:
         f.write(value)
 
 
-def show(colour: str | None) -> None:
+def show(stage: str | None, alone: bool = False) -> None:
+    """`stage` and every colour before it lit (only `stage` when `alone`); None is all off."""
+    lit = list(PINS)[: list(PINS).index(stage) + 1] if stage else []
     for name, pin in PINS.items():
-        gpio(pin, "on" if name == colour else "off")
+        gpio(pin, "on" if name in lit and (not alone or name == stage) else "off")
 
 
 def run(*cmd: str) -> str:
@@ -138,7 +140,7 @@ def main(argv: list[str]) -> int:
     if args.test:
         for colour in PINS:
             print(colour, flush=True)
-            show(colour)
+            show(colour, alone=True)
             time.sleep(2)
         show(None)
         return 0

@@ -97,3 +97,67 @@ def test_a_referee_picking_up_a_table_naps_first():
     table = FakeTable()
     _lobby(table).run(nap=True)
     assert _kinds(table) == ["sleep"]
+
+
+def test_game_end_clears_dialogue_and_keeps_only_public_history(monkeypatch):
+    from brain.games.welcome import Welcome
+    table = FakeTable()
+    w = Welcome(table, random.Random(1), games.Options(), 4)
+    w._hear("remember we love games", 0)
+    w.memory.append(("them", "private conversation"))
+    def play(name, table, rng, **kw):
+        kw["state"].game = name
+        kw["state"].winner = "village"
+        return "played"
+    monkeypatch.setattr(games, "play", play)
+    lobby = _lobby(table)
+    lobby.play("mafia", "mafia")
+    assert not w.memory
+    assert lobby.facts.remembered() == ["we love games", "mafia: played 1; village won 1."]
+
+
+def test_lobby_teardown_clears_dialogue_but_nap_keeps_it():
+    from brain.games.welcome import Welcome
+    table = FakeTable()
+    w = Welcome(table, random.Random(1), games.Options(), 4)
+    w.memory.append(("them", "hello ROB"))
+    lobby = _lobby(table)
+    lobby._sleep()
+    assert list(w.memory) == [("them", "hello ROB")]
+    lobby.run(nap=True)  # already stopped; teardown still clears the buffer
+    assert not w.memory
+
+
+def test_game_reset_and_disconnect_clear_dialogue_without_saving_roles(monkeypatch):
+    import pytest
+    from brain.games.welcome import Welcome
+    from brain.remote import TableReset
+    table = FakeTable()
+    w = Welcome(table, random.Random(1), games.Options(), 4)
+    w.memory.append(("them", "hello ROB"))
+    def play(*args, **kwargs):
+        raise TableReset()
+    monkeypatch.setattr(games, "play", play)
+    lobby = _lobby(table)
+    with pytest.raises(TableReset):
+        lobby.play("mafia", "mafia")
+    assert not w.memory
+    assert lobby.facts.remembered() == []
+
+
+def test_a_stopped_game_goes_back_to_listening_awake_then_naps_after_the_quiet(monkeypatch):
+    _played(monkeypatch, outcome="stopped")
+    table = FakeTable().hear("let's play imposter")
+    _lobby(table).run()
+    assert table.said == [lines.NAP]  # no nap line straight after the stop
+    kinds = _kinds(table)
+    first_sleep = kinds.index("sleep")
+    assert kinds[1:first_sleep].count("listen") >= 2  # awake and listening for a game's name first
+
+
+def test_go_to_sleep_mid_game_naps_right_after_the_stop(monkeypatch):
+    _played(monkeypatch, outcome="slept")
+    table = FakeTable().hear("let's play imposter")
+    _lobby(table).run()
+    assert table.said == [lines.NAP]
+    assert _kinds(table)[-1] == "sleep" and "listen" not in _kinds(table)[_kinds(table).index("say"):]

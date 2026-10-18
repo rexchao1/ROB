@@ -26,15 +26,19 @@ def test_d5_the_host_counts_the_table_and_numbers_the_seats():
     assert t.state["game"] == "mafia" and t.state["living"] == [1, 2, 3, 4, 5]
 
 
-def test_d6_a_spoken_count_that_disagrees_stops_the_start():
+def test_d6_a_spoken_count_that_disagrees_wins_over_the_sweep():
     t = FakeTable(5)
-    t.reply(lines.count_line(5), "there are six of us", "", "")
+    t.reply(lines.count_line(5), "there are six of us")
     state = State()
-    n = gather(t, "mafia", "", state, Options())
-    assert n is None
-    assert "I only see five. Who's hiding?" in t.said
-    assert all(r["game"] is None for r in t.reports)  # no game has started, ever
-    assert t.said[-1] == lines.COUNT_GIVE_UP
+    assert gather(t, "mafia", "", state, Options()) == 6
+    assert state.seats == 6 and lines.only_see(5) not in t.said
+    assert [kind for _, kind, _ in t.log].count("count") == 1  # no second sweep
+
+
+def test_after_a_sweep_a_count_said_with_the_request_wins():
+    t = FakeTable(counts=[6])
+    assert gather(t, "mafia", "mafia, there are six of us", State(), Options(), counted=5) == 6
+    assert lines.only_see(5) not in t.said
 
 
 def test_a_count_said_with_the_request_is_taken_at_its_word_with_no_sweep():
@@ -50,26 +54,6 @@ def test_a_number_said_with_the_request_replaces_the_groups_earlier_word():
     t = FakeTable()
     assert gather(t, "imposter", "imposter with six people", State(), Options(), counted=4, seen=False) == 6
     assert t.said == []
-
-
-def test_after_a_sweep_a_count_said_with_the_request_still_has_to_agree():
-    t = FakeTable(counts=[6])
-    assert gather(t, "mafia", "mafia, there are six of us", State(), Options(), counted=5) == 6
-    assert t.said[:2] == [lines.only_see(5), lines.count_line(6)]
-
-
-def test_d6_the_group_can_accept_the_hosts_count():
-    t = FakeTable(5)
-    t.reply(lines.count_line(5), "there are six of us")
-    t.reply(lines.only_see(5), "okay fine")
-    assert gather(t, "mafia", "", State(), Options()) == 5
-
-
-def test_d6_the_group_can_correct_itself_with_the_hosts_number():
-    t = FakeTable(5)
-    t.reply(lines.count_line(5), "there are six of us")
-    t.reply(lines.only_see(5), "five")
-    assert gather(t, "mafia", "", State(), Options()) == 5
 
 
 def test_too_few_players_says_so_and_starts_nothing():

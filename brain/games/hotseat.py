@@ -20,9 +20,9 @@ import re
 from typing import Any
 
 from brain import lines
-from brain.games.common import Options, State, finish, hear
+from brain.games.common import Options, State, decided, finish, hear
 from brain.games.hotseat_words import CATEGORIES, GIVE_UP, NOISE
-from brain.table import Table
+from brain.table import Card, Table
 
 START_SECONDS = 5
 FLOOR_SECONDS = 3
@@ -128,6 +128,12 @@ def _seconds(round_no: int) -> int:
     return max(FLOOR_SECONDS, START_SECONDS - (round_no - 1))
 
 
+def win_card(seat: int) -> Card:
+    """The winner on the host's screen. The screen holds five cards, so they are
+    prepared once five or fewer players are left, at the start of a round."""
+    return Card(f"PLAYER {seat}", "wins Hot Seat", "win")
+
+
 def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], options: Options, state: State) -> None:
     order = [str(c) for c in rig.get("categories") or []]
     unknown = [c for c in order if c not in CATEGORIES]
@@ -144,6 +150,16 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
     table.say(INTRO)
 
     seconds = START_SECONDS
+    staged = False  # the winner's cards are in the screen's set
+
+    def stage() -> None:
+        """A card for each player still in, once they fit the screen; it uploads while the game goes on."""
+        nonlocal staged
+        if not staged and len(state.living) <= 5:
+            table.prepare([win_card(s) for s in state.living])
+            staged = True
+
+    stage()
     while len(state.living) > 1:
         if state.round >= MAX_ROUNDS:
             table.look(None)
@@ -184,6 +200,7 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
                 line += " " + rng.choice(_SEND_OFF)
             state.eliminate(seat)
             state.report(table)
+            stage()
             table.say(line)
         if 1 < len(state.living) < before:
             left = len(state.living)
@@ -192,6 +209,7 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
 
     winner = state.living[0]
     table.look(winner)
-    table.say(f"{lines.player(winner)} wins Hot Seat!")
+    decided(table, state, str(winner))
+    table.reveal(win_card(winner), f"{lines.player(winner)} wins Hot Seat!")
     table.look(None)
     finish(table, state, str(winner), rng)

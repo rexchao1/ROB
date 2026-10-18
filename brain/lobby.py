@@ -1,8 +1,9 @@
 """The host between games, the same on the Mac (brain/host.py, Host.run) and on the
 QNX referee (brain/referee.py). At the start (when asked) and whenever someone says
 "reset", the welcome (brain/games/welcome.py) greets the table and talks with it until
-a game is picked (D38); started without it, the lobby listens for a game's name. After
-a game, or once the talk is over ("not now", or silence after the nudges), the host
+a game is picked (D38); started without it, the lobby listens for a game's name, as it
+does after a game someone stopped (until NAP_AFTER quiet seconds). After any other
+game, or once the talk is over ("not now", or silence after the nudges), the host
 naps: Table.sleep() keeps the microphone off until a tap on the head (or a line typed
 on the dashboard) wakes it, and it says it is up, counts and talks again. A game that
 fails says the recovery line.
@@ -27,14 +28,15 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from brain import ears, games, lines
+from brain import ears, facts, games, lines
 from brain.games.common import State
-from brain.games.welcome import RESTART, Choice, Welcome
+from brain.games.welcome import RESTART, Choice, Welcome, clear_memory
 from brain.table import Table
 
 PAUSE = 3.0  # seconds after a body error before listening again; the robot reconnects on its own
 QUIET = 30.0  # seconds with nothing heard before the lobby listens in longer windows
 QUIET_WINDOW = 10.0  # the longer window: the robot chimes each time its microphone opens
+NAP_AFTER = 120.0  # seconds with nothing heard after a stopped game before the host naps
 NAP_WINDOW = 10.0  # seconds per Table.sleep() call: a referee's call never holds the table for long
 
 
@@ -51,8 +53,10 @@ class Lobby:
         stopped: Callable[[], bool] = lambda: False,
         log: Callable[[str], None] = lambda msg: None,
         pause: float = PAUSE,
+        remembered: facts.Facts | None = None,
     ) -> None:
         self.table = table
+        self.facts = remembered if remembered is not None else facts.for_table(table)
         self.rng = rng
         self.options = options
         self.listen_window = listen_window
@@ -70,6 +74,12 @@ class Lobby:
         """The welcome first when `welcome`, a nap when `nap` (a referee picking up after
         the recovery line, which says to tap), else a listen for a game's name; then games
         and naps, until stopped(). "reset" brings the welcome again."""
+        try:
+            self._run(welcome, nap)
+        finally:
+            clear_memory(self.table)
+
+    def _run(self, welcome: bool, nap: bool) -> None:
         step = "welcome" if welcome else "sleep" if nap else "listen"
         self._played = False
         while not self.stopped():
@@ -86,6 +96,9 @@ class Lobby:
         if self._heard_at is None:
             self._heard_at = now
         quiet = now - self._heard_at >= QUIET
+        if self._played and now - self._heard_at >= NAP_AFTER:
+            self.table.say(lines.NAP)
+            return "sleep"
         heard = self.table.listen(max(self.listen_window, QUIET_WINDOW) if quiet else self.listen_window)
         self._answered()
         if heard.strip():
@@ -125,7 +138,7 @@ class Lobby:
         can. The next step: "welcome" when someone said "reset" (in it, or in
         the game), else a nap."""
         self._log("welcome" if woke is None and too_few is None else "awake")
-        w = Welcome(self.table, self.rng, self.options, self.listen_window)
+        w = Welcome(self.table, self.rng, self.options, self.listen_window, self.facts)
         if too_few is not None:
             w.instead_of(too_few, self.seats)
         elif woke is None:
@@ -150,10 +163,13 @@ class Lobby:
     def _after(self, outcome: str, game: str) -> str:
         """After a game: the welcome again on "reset"; the talk, offering a game this
         count can play, on "too few"; else a nap (the recovery line already says to tap
-        when the game failed)."""
+        when the game failed; "slept", told to go to sleep mid-game, naps too). A game someone stopped goes back to listening for a game's
+        name, awake, and naps only after NAP_AFTER quiet seconds."""
         self._played = True
         if outcome == "reset":
             return "welcome"
+        if outcome == "stopped":
+            return "listen"
         if outcome == "too few":
             return self._welcome(too_few=game)
         if outcome != "failed":
@@ -180,6 +196,14 @@ class Lobby:
                 self.table.say(self.recovery)
             except Exception:
                 pass
+        finally:
+            # A game boundary drops the preceding lobby's dialogue, even on reset/loss.
+            clear_memory(self.table)
+        if state.game == name and outcome in ("played", "stopped", "slept", "reset"):
+            try:
+                self.facts.played(name, state.winner if outcome == "played" else None)
+            except OSError:
+                self._log("could not save public game totals")
         self.seats = state.seats
         self.playing = None
         self._heard_at = None  # a game just ended: listen closely again

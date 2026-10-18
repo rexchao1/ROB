@@ -56,6 +56,11 @@ def test_state_reports_the_mode_the_referee_and_no_photo_yet(brain):
     assert state["photo"] is None and state["typed_pending"] == 0 and state["yaw"] == 0.0
 
 
+def test_state_reports_the_robot_on_the_gateway_and_no_pi_on_a_local_referee(brain):
+    assert _until(lambda: call(brain.url, "GET", "/dash/api/state")[1]["links"]["rob"] == "connected")
+    assert call(brain.url, "GET", "/dash/api/state")[1]["links"]["pi"] == "unused"
+
+
 def test_what_the_host_says_and_hears_comes_back_as_events_after_an_id(brain, fake):
     call(brain.url, "POST", "/test/hear", {"text": "Hello there"})
     call(brain.url, "POST", "/test/advance", {"seconds": 5})
@@ -183,3 +188,21 @@ def test_backdrops_come_from_the_art_folder_and_nowhere_else(brain, tmp_path, mo
     assert status == 200 and headers["Content-Type"] == "image/jpeg" and body.startswith(b"\xff\xd8")
     for name in ("missing.jpg", "..%2Findex.html", "CREDITS.md", "alt/mafia-night-2.jpg"):
         assert _raw(brain.url + "/dash/art/" + name)[0] == 404
+
+
+def test_unchanged_tuning_and_content_do_not_rewrite(brain, tmp_path, monkeypatch, restore):
+    from pathlib import Path
+
+    dash = brain.host.dash
+    dash.settings_path = tmp_path / "settings.json"
+    dash.apply({"listen_window": 8})
+    dash.set_content({"imposter_words": ["lighthouse", "zoo"]})
+    before = dash.settings_path.read_text()
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "write_text", lambda *a, **kw: pytest.fail("unchanged tuning wrote a file"))
+        dash.apply({"listen_window": 8})
+        dash.set_content({"imposter_words": ["lighthouse", "zoo"]})
+        dash.save()
+    assert dash.settings_path.read_text() == before
+    dash.apply({"listen_window": 9})
+    assert dash.settings_path.read_text() != before

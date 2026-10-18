@@ -8,7 +8,7 @@
 #   scripts/rob.sh restart [-y] [brain flags...] npm run restart
 #   scripts/rob.sh status                        npm run status
 #
-# -y answers yes to every question (stop another copy, join gamemaster). The games run on
+# -y answers yes to every question (stop another copy). The games run on
 # the Pi's referee when the Pi answers at PI_ADDR, else here on the Mac. Logs and the
 # process IDs go to .cache/game/. The Wi-Fi is left as it is by stop; scripts/wifi.sh back.
 set -eu
@@ -80,6 +80,8 @@ stop() {
     [ -n "$p" ] && [ "$(folder "$p")" = "$ROOT" ] && kill "$p" 2>/dev/null || true
   done
   rm -f "$PIDS"
+  # Logs can contain speech and private game details. Keep only by explicit opt-in.
+  if [ "${GM_KEEP_LOGS:-}" != 1 ]; then rm -f "$LOGS/"*.log; fi
   n=0
   while [ -n "$(running)" ] && [ "$n" -lt 10 ]; do n=$((n + 1)); sleep 0.5; done
   left=$(running)
@@ -146,12 +148,11 @@ pick_network() {
     say "the Pi answers: the games run on its referee, the Mac at $IP"
     return
   fi
-  if [ "$(wifi_addr)" != "$MAC_ADDR" ] && system_profiler SPAirPortDataType 2>/dev/null | grep -q "^ *$SSID:"; then
-    if ask "The Pi's $SSID network is in range. Join it? (asks for your Mac password)"; then
-      scripts/wifi.sh game
-      IP=$MAC_ADDR; REFEREE=remote
-      return
-    fi
+  # A Wi-Fi scan takes about 18 s, so it runs in the background and start() only
+  # mentions the Pi's network at the end if the scan found it by then.
+  rm -f "$LOGS/scan"
+  if [ "$(wifi_addr)" != "$MAC_ADDR" ]; then
+    (system_profiler SPAirPortDataType > "$LOGS/scan.part" 2>/dev/null && mv "$LOGS/scan.part" "$LOGS/scan") &
   fi
   IP=$(wifi_addr)
   [ -n "$IP" ] || { say "this Mac has no Wi-Fi address; join the network the robot uses and run this again" >&2; exit 1; }
@@ -163,10 +164,12 @@ start() {
   preflight
   if clear_ports; then
     say "this folder's ROB is already running (npm run restart starts it over)"
-    open "http://127.0.0.1:8080/dashboard"
+    open "http://127.0.0.1:8080/dash"
     return
   fi
   pick_network
+  # Starting a new run always discards the previous run, even in debug mode.
+  for log in "$LOGS/"*.log; do [ ! -f "$log" ] || : > "$log"; done
   : > "$PIDS"
 
   p=$(listening 8767)
@@ -180,10 +183,10 @@ start() {
   fi
   if [ -z "$p" ]; then
     # scripts/gateway.py: the same gateway, with each listen ending when the talker stops
-    VISION_HOST=$IP nohup "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http >> "$LOGS/gateway.log" 2>&1 &
+    VISION_HOST=$IP nohup "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http > "$LOGS/gateway.log" 2>&1 &
     echo $! >> "$PIDS"
   fi
-  [ -n "$(listening 8768)" ] || { nohup python3 scripts/ota-stub.py --port 8768 >> "$LOGS/ota-stub.log" 2>&1 & echo $! >> "$PIDS"; }
+  [ -n "$(listening 8768)" ] || { nohup python3 scripts/ota-stub.py --port 8768 > "$LOGS/ota-stub.log" 2>&1 & echo $! >> "$PIDS"; }
   n=0
   until [ -n "$(listening 8767)" ]; do
     n=$((n + 1)); [ "$n" -ge 30 ] && { say "the gateway did not start ($LOGS/gateway.log)" >&2; exit 1; }
@@ -203,30 +206,28 @@ start() {
     sleep 1
   done
 
-  say "waiting for the robot (turn it on if it is off)"
+  # A robot that is already on rejoins within a few seconds; one still booting shows up
+  # on the dashboard when it joins, so there is no point holding the terminal for it.
   n=0
-  until robot_joined; do
-    n=$((n + 1))
-    if [ "$n" -ge 60 ]; then
-      say "the robot has not joined after 60 s. Check that it is on, and on the same Wi-Fi as this Mac"
-      say "(to change its Wi-Fi, tap its screen 5 to 9 s after power-on for setup mode; README, Setting up the robot)."
-      say "ROB keeps waiting in the background; npm run status shows when it joins."
-      break
-    fi
-    sleep 1
-  done
-  robot_joined && say "the robot is connected"
+  until robot_joined || [ "$n" -ge 8 ]; do n=$((n + 1)); sleep 1; done
+  if robot_joined; then
+    say "the robot is connected"
+  else
+    say "the robot has not joined yet: turn it on, on the same Wi-Fi as this Mac; the dashboard shows when it joins"
+    say "(to change its Wi-Fi, tap its screen 5 to 9 s after power-on for setup mode; README, Setting up the robot)."
+  fi
+  if [ -s "$LOGS/scan" ] && grep -q "^ *$SSID:" "$LOGS/scan"; then
+    say "the Pi's $SSID network is in range: scripts/wifi.sh game, then npm run restart, runs the games on the Pi"
+  fi
 
   dash=$(sed -n 's/^gamemaster: dashboard at //p' "$LOGS/brain.log" | tail -1)
-  screen=$(sed -n 's/^gamemaster: game screen at //p' "$LOGS/brain.log" | tail -1)
   echo
   say "ROB is running. Say \"let's play Mafia\" (or any game's name)."
-  say "  dashboard:   ${dash:-http://127.0.0.1:8080/dashboard}"
-  say "  game screen: ${screen:-http://127.0.0.1:8080/dash}"
+  say "  dashboard:   ${dash:-http://127.0.0.1:8080/dash}"
   say "  games run:   $([ "$REFEREE" = remote ] && echo "on the Pi" || echo "on this Mac")"
   say "  logs:        $LOGS/"
   say "  stop:        npm run stop    restart: npm run restart"
-  open "http://127.0.0.1:8080/dashboard"
+  open "http://127.0.0.1:8080/dash"
 }
 
 cmd=${1:-start}

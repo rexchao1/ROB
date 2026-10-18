@@ -80,7 +80,7 @@ def test_the_mood_the_ring_and_the_face_style_are_mirrored(brain):
     state = call(brain.url, "GET", "/dash/api/state")[1]
     robot = state["robot"]
     assert robot["mood"] == "idle" and robot["face"] == "idle" and robot["led"] == [24, 20, 30]
-    assert set(state["face_style"]) == {"bg", "ink", "cheek", "mouth"}
+    assert set(state["face_style"]) == {"bg", "ink", "iris", "cheek", "mouth"}
     assert all(re.fullmatch(r"#[0-9a-f]{6}", v) for v in state["face_style"].values())
     brain.host.mood("night")
     robot = _robot(brain)

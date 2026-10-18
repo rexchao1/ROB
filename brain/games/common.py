@@ -21,11 +21,18 @@ from brain.table import Card, Table
 
 class GameStopped(Exception):
     """The group asked to stop or restart (D27); the game ends where it is. reset: they
-    said "reset", "start over" or "restart", and the welcome comes next (D38)."""
+    said "reset", "start over" or "restart", and the welcome comes next (D38). sleep:
+    they told the host to go to sleep, and it naps next."""
 
-    def __init__(self, reset: bool = False) -> None:
-        super().__init__("reset" if reset else "stop")
+    def __init__(self, reset: bool = False, sleep: bool = False) -> None:
+        super().__init__("reset" if reset else "sleep" if sleep else "stop")
         self.reset = reset
+        self.sleep = sleep and not reset
+
+    @classmethod
+    def heard(cls, text: str) -> "GameStopped":
+        """The stop that `text` asks for."""
+        return cls(reset=ears.wants_to_reset(text), sleep=ears.wants_sleep(text))
 
 
 @dataclass
@@ -48,8 +55,8 @@ class Options:
     answer_seconds: float = 20.0  # a short answer ("sure", "nah") counts this long after the host asks something
     nudge_seconds: float = 25.0  # this long with nothing said to the host gets a nudge
     nudges: int = 2  # nudges before the host waits quietly
-    reply_gap_seconds: float = 8.0  # at most one small-talk reply this often
-    max_chats: int = 6  # small-talk replies in one welcome
+    reply_gap_seconds: float = 1.0  # at most one small-talk reply this often
+    max_chats: int = 100  # small-talk replies in one welcome; the nap after two unanswered nudges ends idle talk
     count_fresh_seconds: float = 120.0  # a game named this soon after the welcome's count starts on it
 
 
@@ -98,7 +105,7 @@ def hear(table: Table, seconds: float) -> str:
     """table.listen, except that a request to stop ends the game (GameStopped)."""
     heard = table.listen(seconds)
     if ears.wants_to_stop(heard):
-        raise GameStopped(reset=ears.wants_to_reset(heard))
+        raise GameStopped.heard(heard)
     return heard
 
 
@@ -111,15 +118,30 @@ def abandon(table: Table, state: State) -> None:
     state.report(table)
 
 
-def finish(table: Table, state: State, winner: str | None, rng: random.Random) -> None:
-    """The game is over: report it, then a little ceremony."""
+OUTCOMES = {  # how a game came out, for the last quip: only what was just said out loud, never who
+    "mafia": "the Mafia won",
+    "village": "the village won",
+    "players": "the players won",
+    "imposter": "the Imposter got away",
+}
+
+
+def decided(table: Table, state: State, winner: str | None) -> None:
+    """The game is over, reported before the host reveals how (Table.reveal holds the
+    card a moment), so the state does not lag the line; finish() follows."""
     state.over = True
     state.winner = winner
     state.phase = "over"
     state.report(table)
+
+
+def finish(table: Table, state: State, winner: str | None, rng: random.Random) -> None:
+    """The game is over: report it, then a little ceremony."""
+    decided(table, state, winner)
     table.mood("win")
     table.say(lines.flavor("win", rng))
-    table.quip("win", game=state.game)
+    outcome = OUTCOMES.get(winner or "", "someone won" if winner else None)  # a seat (Hot Seat's winner) never goes to a quip
+    table.quip("win", game=state.game, **({"outcome": outcome} if outcome else {}))
     table.say(lines.GOOD_GAME)
 
 
@@ -144,16 +166,14 @@ def gather(
     """Agree on how many are playing (D5, D6) and start the game. A count said with the
     game's name ("imposter with six people") is taken at its word, with no sweep: the
     group knows who is there. With no number said, the host counts the table, says the
-    count and agrees on it with the group: a spoken count that disagrees stops the start,
-    the host says so, listens and counts again until the spoken number and its count
-    agree, a go-ahead ("okay") accepts the host's count, and after options.count_tries
-    disagreements it gives up. Returns the number of seats, with the game started in
+    count and listens once: a number said then wins over the sweep (the group knows who
+    is playing; the seats are spread evenly for it), silence or a go-ahead keeps the
+    host's count. Returns the number of seats, with the game started in
     `state`, or None when no game starts (why, in state.stalled).
 
     counted: the welcome already knows the count (D40), so there is no sweep and no count
     line. seen: that count came from a sweep, so a different number said with the game's
-    name still has to agree with it (D41); else the group's word, which a new number
-    replaces."""
+    name replaces it all the same; else the group's word, which a new number replaces."""
     state.game, state.phase, state.stalled = None, "count", None
     spoken = ears.count_said(heard)
     told = counted if not seen else None  # the group's word, from the welcome
@@ -180,28 +200,12 @@ def gather(
         state.report(table)
         if spoken is None:
             spoken = n
-    tries = 0
-    while True:
-        if spoken is None:
-            spoken = _spoken(hear(table, options.confirm_seconds))
-            if spoken is None:
-                break  # silence, or anything but a count: the host's count stands
-        if spoken == n:
-            break
-        tries += 1
-        if tries > options.count_tries:
-            table.say(lines.COUNT_GIVE_UP)
-            state.stalled = "no count"
-            return None
-        table.say(lines.only_see(n) if spoken > n else lines.see_more(n))
-        reply = hear(table, options.confirm_seconds)
-        said = _spoken(reply)
-        if said is not None:
-            spoken = said
-            continue
-        if ears.agrees(reply):
-            break
-        n = _count(table, state)  # somebody may have come out of hiding
+    if spoken is None:
+        spoken = _spoken(hear(table, options.confirm_seconds))  # silence, or anything but a count: the host's count stands
+    if spoken is not None and spoken != n:  # the group knows who is playing: their number wins over the sweep
+        table.seated(spoken)
+        n = state.seats = spoken
+        state.report(table)
     return _start(table, game, n, state)
 
 

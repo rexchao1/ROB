@@ -306,7 +306,7 @@ D41 2026-10-18 [V] amends D30
   touches: D30 D40
 
 D42 2026-10-18 [V] amends D14
-  resp: every host line carries flavor from a scripted set with variations, and a model may add a quip or a line of small talk; a model only writes words, and nothing the host says changes the rules, the count or the state of a game, which are fixed in code; the host sounds like a person running game night, not an assistant: one or two short spoken sentences, casual and playful, never revealing a secret role or word, never inventing a rule, always in character as the robot host [V]
+  resp: every host line carries flavor from a scripted set with variations, and a model may add a quip or a line of small talk; a model only writes words, and nothing the host says changes the rules, the count or the state of a game, which are fixed in code; the host sounds like a person running game night, not an assistant: one to three short spoken sentences, casual and playful, answering what was said before steering back to a game, never revealing a secret role or word, never inventing a rule, always in character as the robot host [V]
   -> structural
   serves: N1
   touches: D14 D40
@@ -410,7 +410,7 @@ D53 2026-10-18 [I]
 
 D54 2026-10-18 [I] !
   pre:   the welcome is listening [I]
-  trig:  the microphone hears room noise: fewer than three real words with no question pending, or one of the transcriber's phantoms such as `thank you` or `you` [I]
+  trig:  the microphone hears room noise: fewer than three real words with no question pending, unless it is a greeting, a short question to the host or its name (`hi`, `what's up`, `how are you`, `hey rob`); or one of the transcriber's phantoms such as `thank you` or `you`; or transcription junk, one short phrase over and over or a run-on past forty words [I]
   resp:  nothing of the reply kind: the host says nothing and keeps listening [I]
   serves: N1
   touches: D39
@@ -419,8 +419,8 @@ D54 2026-10-18 [I] !
 D55 2026-10-18 [I]
   pre:   the welcome is listening and no talk model answers [I>V]
   trig:  someone says something to the host that is neither a game, a count, a yes, a no nor a question about the games [I>V]
-  resp:  the host gives one short playful reply that steers back to picking a game, from the script when no model answers; at most one reply every eight seconds and six in one welcome [I>V]
-  why:   the gap and the cap are the build's numbers (brain/games/common.py Options), not Rex's [I]
+  resp:  the host answers what was said (a hello, a question, a joke asked for) and steers back to picking a game when it fits, from the script when no model answers; at most one reply a second, with no cap, since the nap after two unanswered nudges ends idle talk [I>V]
+  why:   the gap is the build's number (brain/games/common.py Options), not Rex's [I]
   sib:   D54
   serves: N1
   touches: D39 D40 D42
@@ -565,7 +565,7 @@ D71 2026-10-18 [I]
 D72 2026-10-18 [I>V]
   pre:   a game is in progress [I>V]
   trig:  someone says `pause` or `hold the game` at any listen [I>V]
-  resp:  the host holds the game: it says `Paused. Say resume or tap my head when you're ready.`, the ring dims, the game's clock stops so a day timer does not run out, and it listens in ten-second windows; `resume`, `we're back`, `keep going`, a tap on its head or the page's Resume carries on with `Okay, back to it.` and the listen that was interrupted runs again; `stop the game` or `reset` said while paused is heard by the game [I>V]
+  resp:  the host holds the game: it says `Paused. Say resume or put your hand on top of my head when you're ready.`, the ring dims, the game's clock stops so a day timer does not run out, and it listens in ten-second windows; `resume`, `we're back`, `keep going`, a tap on its head or the page's Resume carries on with `Okay, back to it.` and the listen that was interrupted runs again; `stop the game` or `reset` said while paused is heard by the game [I>V]
   sib:   none -- a stop or reset while paused is handled in resp
   serves: N1
   touches: D27 D57
@@ -930,3 +930,33 @@ D114 2026-10-18 [I>V]
   sib:   none -- a repeat has no failure case
   serves: N1
   touches: D112
+
+D115 2026-10-18 [I]
+  pre:   a game reaches one of its big moments: a death at night or nobody dying, a player voted out, the Imposter named, a Wavelength target or total, a Wordle ending, a winner [I]
+  trig:  the host says the line for it [I]
+  resp:  the host's screen shows a card for the moment while it says the line (Imposter: `PLAYER 3` over `was the Imposter` with `Player three was the Imposter.`, then `beach` over `was the word` with `The word was beach.`), keeps it up about two seconds, then shows the host's face again; a card the screen cannot show leaves the line said without it, and no reveal is ever shown while a private card is owed [I]
+  why:   the screen holds five cards and a new set takes seconds to upload, so the cards are uploaded while the host is still talking: with the deal's cards when the outcome is known in advance, otherwise as soon as it is [I]
+  sib:   none -- a card the screen cannot show is the rule's own fallback
+  serves: N1
+  touches: D7 D16 D17 D18 D19 D20 D21
+# Rex asked for reveal moments on ROB's screen (relayed, 2026-10-18). Proposed, unratified: the cards' words are the build's.
+
+D116 2026-10-18 [I] amends D6 D41 D59 D89 D90
+  pre:   the host has counted the table with its camera, in the welcome or at a game's start [I]
+  trig:  someone says a number of players that differs from the host's count, `there are six of us` or `we're four` [I]
+  resp:  the group's number wins: the host seats that many, spread evenly, and goes on (the game starts, or the welcome suggests a game for it) with no mismatch line and no second sweep [I]
+  sib:   none -- the group's word is final, so there is no disagreement left to fail
+  serves: N1
+  touches: D5 D6 D41 D59 D89 D90
+# Rex, 2026-10-18: "Head count can use camera sweep but also accepts a number given by somebody (that overrides stackchan's sweep)".
+
+
+D117 2026-10-18 [I] amends D21
+  pre:   Wavelength with five players; Player two is the guesser for this round; the secret number is `7` [I]
+  trig:  the round starts [I]
+  resp:  every player but Player two leans in alone and sees `7` over `out of ten`; then for each of them in turn the host says `Player two, give Player three a category.` and `Player three, name something that fits the number.` and listens to each; then the host asks `Player two, what's the number?` and scores ten minus the distance, as D21; the guesser rotates each round [I]
+  why:   Rex's version: everybody but one person knows the number; that person calls on each player with a category, and the player names something whose value is closest to the number [I]
+  sib:   none -- a player who never leans in is skipped (D8's deal miss); nobody leaning in ends the game on its own line
+  serves: N1
+  touches: D7 D8 D21 D95 D100 D103
+# Rex, 2026-10-18: "Everybody but one person knows the number. Then the person that doesn't know calls individually on each person with a category, and the person called on has to choose a word in that category that's meaning/value is closest (in the person that doesn't know the number opinion) to the number".
