@@ -879,3 +879,54 @@ D108 2026-10-18 [I] amends D44
   serves: N1
   touches: D14 D30 D44 D73
 # Rex asked for sound effects (relayed by Linus, 2026-10-18); docs/SOUND-CUES.md is the research. Proposed, unratified: Rex picks the cue list.
+
+# Rex's commit 3ae4edc (2026-10-18 ~05:30, "Voice control, the talk fixed, tabbed settings" in DASHBOARD-PLAN.md), pushed after this review began. Transcribed here the same way as D45 to D81: [I>V] where the plan records Rex's words, built as written.
+
+D109 2026-10-18 [I>V]
+  pre:   a game has started and the host has said `Player two, lean in.` [I>V]
+  trig:  nobody comes close for a few seconds and Player two says `I'm looking` or `show me`, or taps the host's head [I>V]
+  resp:  the card shows for about four seconds whether or not the camera sees a close face; `got it`, `next` or `done` moves the deal on; after ten seconds with nobody close the host says `Player two, lean in close, or say show me.`; `stop the game` or `reset` said during a deal ends the game, over the remote Table too [I>V]
+  why:   the four seconds and the ten are the build's numbers (brain/host.py TRUST, REPROMPT) [I]
+  sib:   none -- D8 stays the private screen's failure case; a spoken show is the player's own choice
+  serves: N1
+  touches: D7 D8 D72
+# Rex: "ROB waits for exactly one response (the lean-in above all)". A spoken show bypasses D7's one-face rule for four seconds; flagged for Rex in the review as a privacy trade-off he chose.
+
+D110 2026-10-18 [I>V] amends D72
+  pre:   a game is in progress, a lean-in included [I>V]
+  trig:  someone says `pause`, `shut up`, `be quiet`, `hush`, or a bare `stop` or `wait` with at most a word of filler (`okay stop`, `rob, wait`) [I>V]
+  resp:  the host holds the game as D72 says; `hold on` is not a pause but the welcome's `not now`; `stop the game` ends the game, never pauses it; the resume words stay those of D72, and D93's point that `let's go` is a yes, not a resume, stands [I>V]
+  sib:   none -- a stop or reset while paused is handled in D72
+  serves: N1
+  touches: D58 D72 D93
+# Rex, after a test game: "pause", "stop" and "shut up" went unheard while it waited for a lean-in. This replaces the phrase list the review proposed in D93.
+
+D111 2026-10-18 [I>V]
+  pre:   the host is running [I>V]
+  trig:  someone says `change your speaker to the Mac`, `speaker mac`, or `use your own speaker`, `speaker robot` [I>V]
+  resp:  the voice moves live to the Mac's audio output (`Okay, I'll talk through the Mac.`) or back to the robot's speaker (`Okay, back to my own speaker.`) while the robot keeps moving its mouth; the page has the same switch and the pick is kept with ROB's others; a sentence that merely mentions a speaker is not a command [I>V]
+  sib:   none -- the non-command sentence is the rule's own negative
+  serves: N1 N3
+  touches: D75 D77
+# Rex: "change your speaker to the Mac" and a speaker setting; the robot's one-watt speaker is quiet in a hall.
+
+D112 2026-10-18 [I>V] amends D83
+  resp: `say that again`, `can you repeat`, `what did you say` make the host say its last line again, at any listen, so this leaves the product-fixes deferral; `count again`, `more time` with a deadline the page can show, taking back a wrong heads-up warning and a `listening_for` field stay deferred [I>V]
+  -> fence-deferred product-fixes
+  serves: N3
+  touches: D79 D83
+
+D113 2026-10-18 [I>V]
+  resp: the talk reaches the model: the request is shaped per model (no temperature where Claude refuses it, an effort where the model takes one), the page has an AI tab with the provider, the model, the effort, the last call's result and a Test button, and ROB's own tab holds the personality, the voice and the speaker; a key not tied to a workspace needs its workspace id beside it [I>V]
+  -> structural
+  serves: N1 N3
+  touches: D40 D74 D75 D81
+# What the log showed Rex: every Anthropic call answered HTTP 400 (temperature), so every line had been scripted. Not yet tried against the real API ("stubbed HTTP only").
+
+D114 2026-10-18 [I>V]
+  pre:   the host has just said a line [I>V]
+  trig:  someone says `say that again` [I>V]
+  resp:  the host says its last line once more [I>V]
+  sib:   none -- a repeat has no failure case
+  serves: N1
+  touches: D112

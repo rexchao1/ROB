@@ -16,7 +16,7 @@ The fence for the game master, scoped 2026-10-18 in a deliberately short intervi
 
 - **Scripted lines per personality, the one callback to a moment from earlier in the game, switching the personality by voice.** Workstream X built the five personalities as a talk style, a ring colour and a voice; these three were left. Reopens when Rex picks one up. (D82, 2026-10-18)
 
-- **"Say that again", "count again", "more time" with a deadline the page can show, taking back a wrong heads-up warning, a `listening_for` field in the reported state.** The robot should do each by voice first; the page leaves them out until it can. Reopens one by one as the robot learns the phrase. (D83, 2026-10-18)
+- **"Count again", "more time" with a deadline the page can show, taking back a wrong heads-up warning, a `listening_for` field in the reported state.** The robot should do each by voice first; the page leaves them out until it can. "Say that again" left the list when Rex built it on 2026-10-18 ~05:30. Reopens one by one as the robot learns the phrase. (D83, amended by D112, 2026-10-18)
 
 - **The Wordle grid on the robot's own screen.** Rex asked for it in green, yellow and gray; the build reports the board to the dashboard only. Reopens when a `show_board` for the robot's screen is built. (D84, 2026-10-18)
 

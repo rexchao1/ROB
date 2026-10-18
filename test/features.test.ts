@@ -36,6 +36,10 @@ const WIP: WipEntry[] = [
     'A count below the host\'s gets a second sweep', 'Each game has a smallest table',
     'A vote that names two seats is asked for again', 'Me too is not a vote',
     'A top seat short of a majority eliminates nobody', 'Players sitting out do not count toward the majority',
+    // Rex's 3ae4edc, transcribed (D109 to D112): a lean-in by voice, the speaker by voice, say that again
+    'Show me puts the card up for a few seconds without a close face', 'Got it moves the deal on',
+    'A lean-in nobody answers is asked again with the way round the camera',
+    'The speaker moves to the Mac and back by voice', 'Say that again repeats the last line',
   ] },
   { feature: 'mafia', scenarios: [
     'A sentence that mentions starting over is talk, not a reset', 'Restart the round starts the night again',

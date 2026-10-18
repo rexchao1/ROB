@@ -140,3 +140,38 @@ Feature: Hosting the table
     And two players say "two" and two players say "four"
     Then the players hear the host say "Two for Player two, two for Player four. It's a tie. Nobody leaves."
     And every living player is still in
+
+  @D109 @D7
+  Scenario: Show me puts the card up for a few seconds without a close face
+    Given a game has started and Player two is owed a role
+    When the host turns to Player two and says "Player two, lean in."
+    And nobody comes close and Player two says "show me"
+    Then Player two sees their role on the host's screen for about four seconds
+    And the screen is blank again afterwards
+
+  @D109
+  Scenario: Got it moves the deal on
+    Given the host's screen is showing Player two their role
+    When Player two says "got it"
+    Then the players hear the host say "Player three, lean in."
+
+  @D109
+  Scenario: A lean-in nobody answers is asked again with the way round the camera
+    Given a game has started and Player two is owed a role
+    When the host turns to Player two and says "Player two, lean in."
+    And ten seconds pass with nobody close and nothing said
+    Then the players hear the host say "Player two, lean in close, or say show me."
+
+  @D111
+  Scenario: The speaker moves to the Mac and back by voice
+    Given the host is listening between games
+    When someone says "change your speaker to the Mac"
+    Then the players hear the host say "Okay, I'll talk through the Mac." from the Mac
+    When someone says "speaker robot"
+    Then the players hear the host say "Okay, back to my own speaker." from the robot
+
+  @D114
+  Scenario: Say that again repeats the last line
+    Given the host has just said "Everyone, heads down."
+    When someone says "say that again"
+    Then the players hear the host say "Everyone, heads down." once more
