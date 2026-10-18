@@ -356,13 +356,72 @@ def asks_pick(text: str) -> bool:
     return _has(text, _ASK_PICK)
 
 
-def meaningful(text: str, answering: bool = False) -> bool:
-    """Something said to the host, not room noise: three or more real words, or, right
-    after the host asked something, one. Whisper's phantoms for noise ("you", "thank
-    you", "oh") are never meaningful (D43)."""
+_HELLO = ("hi", "hello", "hey", "hiya", "howdy", "yo", "sup", "what's up", "whats up", "wassup", "what up",
+          "good evening", "good morning", "good afternoon", "greetings")
+_HOW = ("how are you", "how are ya", "how you doing", "how're you", "how's it going", "hows it going",
+        "how is it going", "how have you been", "how's your night", "hows your night", "you good", "you okay", "you ok")
+_WHO = ("who are you", "what are you", "what's your name", "whats your name", "what is your name", "who's this",
+        "whos this", "who is this", "introduce yourself")
+_JOKE = ("joke", "jokes", "something funny", "make me laugh", "make us laugh")
+_NAME = {"rob", "robb", "robbie", "robot"}
+_TO_YOU = re.compile(r"^(?:what|who|how|where|why|when|are|can|could|do|did|will|would|have|is)\b.*\b(?:you|your|ya|yourself)\b")
+_RUN_ON = 40  # words: past this, an utterance is the transcriber running on, not something said to the host
+
+
+def small_talk(text: str) -> str | None:
+    """What kind of small talk an utterance is, for the scripted answer to it: "joke"
+    ("tell us a joke"), "who" ("who are you?"), "how" ("how are you?"), "hello" (a
+    short "hi", "hey rob", "what's up"), else None."""
+    if _has(text, _JOKE):
+        return "joke"
+    if _has(text, _WHO):
+        return "who"
+    if _has(text, _HOW):
+        return "how"
+    if _has(text, _HELLO) and len(_tokens(text)) <= 4:
+        return "hello"
+    return None
+
+
+def addressed(text: str) -> bool:
+    """Said to the host, however short: a greeting, "how are you", "who are you", a joke
+    asked for, a question with "you" in it, or its name ("rob", "robot")."""
     tokens = _tokens(text)
-    if not tokens or " ".join(tokens) in _PHANTOMS:
+    return (
+        small_talk(text) is not None
+        or _has(text, _HELLO)
+        or bool(_NAME & set(tokens))
+        or bool(_TO_YOU.search(" ".join(tokens)))
+    )
+
+
+def junk(text: str) -> bool:
+    """What the transcriber writes when it loses the thread, not speech: a run-on past
+    _RUN_ON words, or one short phrase over and over ("the name. the name. the name.";
+    a single word four times)."""
+    tokens = _tokens(text)
+    if len(tokens) > _RUN_ON:
+        return True
+    for n in range(1, 5):
+        times = 4 if n == 1 else 3
+        for i in range(len(tokens) - n * times + 1):
+            phrase = tokens[i : i + n]
+            if all(tokens[i + k * n : i + (k + 1) * n] == phrase for k in range(1, times)):
+                return True
+    return False
+
+
+def meaningful(text: str, answering: bool = False) -> bool:
+    """Something said to the host, not room noise: three or more real words; or one,
+    right after the host asked something; or, asked or not, a greeting, a short question
+    to it ("what's up", "how are you", "who are you") or anything with its name in it.
+    Whisper's phantoms for noise ("you", "thank you", "oh") never are (D43), and neither
+    is transcription junk (junk())."""
+    tokens = _tokens(text)
+    if not tokens or " ".join(tokens) in _PHANTOMS or junk(text):
         return False
+    if addressed(text):
+        return True
     words = [t for t in tokens if t not in _FILLER]
     return len(words) >= (1 if answering else 3)
 

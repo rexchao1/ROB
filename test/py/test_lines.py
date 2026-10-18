@@ -89,3 +89,19 @@ def test_fixed_lines_cover_the_per_seat_lines_once_each():
     assert lines.tally([(4, 3), (1, 2)]) not in fixed  # composed at play time
     assert lines.lean_in(11) not in fixed
     assert lines.lean_in(11) in lines.fixed_lines(12)
+
+
+def test_the_welcome_greets_as_rob_and_every_game_says_what_it_is():
+    assert all("ROB" in line and "?" in line for line in lines.GREETINGS)
+    assert all(game in lines.RULES for game in lines.MINIMUM)
+    assert "Easier to show you" not in lines.games_about() and "Want to play it?" not in lines.games_about()
+
+
+def test_a_scripted_reply_answers_the_small_talk_and_skips_lines_just_said():
+    rng = random.Random(1)
+    assert lines.chat_fallback("mafia", rng, "who").startswith(("I'm ROB", "Name's ROB"))
+    assert lines.chat_fallback(None, rng, "joke").endswith("What are we playing?")
+    said = list(lines._chat_fallbacks("mafia")[:-1])  # noqa: SLF001
+    assert lines.chat_fallback("mafia", rng, None, said) == lines._chat_fallbacks("mafia")[-1]  # noqa: SLF001
+    assert "Noted. Now, which game?" not in lines.fixed_lines()
+    assert lines.chat_fallback("mafia", rng, "hello") in lines.fixed_lines()
