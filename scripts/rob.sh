@@ -67,7 +67,32 @@ status() {
     if robot_joined; then say "the robot is connected"; else say "the robot is not connected"; fi
   fi
   [ -s "$LOGS/brain.log" ] && { say "the brain's last lines:"; tail -5 "$LOGS/brain.log" | sed 's/^/  /'; }
+  next_step
   return 0
+}
+
+# One "rob: next:" line: what a person has to do now, so whoever started ROB (or an
+# agent) can pass it on as is. The robot keeps its own Wi-Fi and the Mac's address from
+# its setup page; once the game network exists it is set for gamemaster, which only
+# the Pi hosts, so a Mac on any other Wi-Fi never sees it (a no-cloud symbol on its face).
+next_step() {
+  g=$(listening 8767)
+  vh=""
+  [ -n "$g" ] && vh=$(ps -E -p "$g" -o command= | tr ' ' '\n' | sed -n 's/^VISION_HOST=//p' | head -1)
+  if [ -z "$(listening 8080)" ]; then
+    say "next: ROB is not running; npm start"
+  elif [ -n "$vh" ] && [ -n "$(wifi_addr)" ] && [ "$vh" != "$(wifi_addr)" ]; then
+    say "next: the Mac's Wi-Fi changed since ROB started (it was $vh, now $(wifi_addr)), so the robot's photos and face go nowhere; npm run restart"
+  elif robot_joined; then
+    say "next: ready. Say \"let's play Mafia\" (or any game's name); the dashboard is http://127.0.0.1:8080/dash"
+  elif [ "$(wifi_addr)" != "$MAC_ADDR" ] && grep -q '^GM_WIFI_PASSWORD=.' .env.local 2>/dev/null; then
+    net=""
+    [ "$(route -n get default 2>/dev/null | awk '/interface:/ { print $2 }')" = "$DEV" ] &&
+      net=" First plug the iPhone in by USB with Personal Hotspot on: $SSID has no internet, and the Mac's internet goes over Wi-Fi now."
+    say "next: the robot is set up for the Pi's $SSID Wi-Fi and this Mac is not on it. With the Pi powered (a minute after its green light), run scripts/wifi.sh game in Terminal (it asks for the Mac's password), then npm run restart.$net"
+  else
+    say "next: turn the robot on; it joins within 20 s when it is on the same Wi-Fi as this Mac ($(wifi_addr)). A no-cloud symbol on its face means it cannot reach the Mac: README, Setting up the robot"
+  fi
 }
 
 stop() {
@@ -148,12 +173,6 @@ pick_network() {
     say "the Pi answers: the games run on its referee, the Mac at $IP"
     return
   fi
-  # A Wi-Fi scan takes about 18 s, so it runs in the background and start() only
-  # mentions the Pi's network at the end if the scan found it by then.
-  rm -f "$LOGS/scan"
-  if [ "$(wifi_addr)" != "$MAC_ADDR" ]; then
-    (system_profiler SPAirPortDataType > "$LOGS/scan.part" 2>/dev/null && mv "$LOGS/scan.part" "$LOGS/scan") &
-  fi
   IP=$(wifi_addr)
   [ -n "$IP" ] || { say "this Mac has no Wi-Fi address; join the network the robot uses and run this again" >&2; exit 1; }
   REFEREE=local
@@ -210,15 +229,7 @@ start() {
   # on the dashboard when it joins, so there is no point holding the terminal for it.
   n=0
   until robot_joined || [ "$n" -ge 8 ]; do n=$((n + 1)); sleep 1; done
-  if robot_joined; then
-    say "the robot is connected"
-  else
-    say "the robot has not joined yet: turn it on, on the same Wi-Fi as this Mac; the dashboard shows when it joins"
-    say "(to change its Wi-Fi, tap its screen 5 to 9 s after power-on for setup mode; README, Setting up the robot)."
-  fi
-  if [ -s "$LOGS/scan" ] && grep -q "^ *$SSID:" "$LOGS/scan"; then
-    say "the Pi's $SSID network is in range: scripts/wifi.sh game, then npm run restart, runs the games on the Pi"
-  fi
+  robot_joined && say "the robot is connected"
 
   dash=$(sed -n 's/^gamemaster: dashboard at //p' "$LOGS/brain.log" | tail -1)
   echo
@@ -227,6 +238,7 @@ start() {
   say "  games run:   $([ "$REFEREE" = remote ] && echo "on the Pi" || echo "on this Mac")"
   say "  logs:        $LOGS/"
   say "  stop:        npm run stop    restart: npm run restart"
+  next_step
   open "http://127.0.0.1:8080/dash"
 }
 
