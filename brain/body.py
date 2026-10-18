@@ -279,13 +279,16 @@ class Body:
         return image
 
     def listen(self, seconds: float) -> str:
-        """Transcribe the next `seconds` of the microphone (faster-whisper on the gateway)."""
+        """Transcribe the next `seconds` of the microphone (faster-whisper on the gateway).
+        With the mic setting on "mac" the gateway records this Mac's microphone instead
+        of the robot's (scripts/gateway.py; a plain gateway ignores the ask)."""
+        from brain import settings
+
         ms = int(min(30_000, max(100, round(seconds * 1000))))
-        answer = self.gateway.call(
-            "listen",
-            {"duration_ms": ms, "engine": "faster-whisper", "language": "en", "motion": "none"},
-            timeout=ms / 1000 + 60,
-        )
+        args: dict[str, Any] = {"duration_ms": ms, "engine": "faster-whisper", "language": "en", "motion": "none"}
+        if settings.current.mic == "mac":
+            args["source"] = "mac"
+        answer = self.gateway.call("listen", args, timeout=ms / 1000 + 60)
         text = answer.data.get("text", "") if isinstance(answer.data, dict) else ""
         return text if isinstance(text, str) else ""
 

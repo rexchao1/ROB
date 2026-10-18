@@ -306,6 +306,8 @@ details.fold2 > summary::before {
 details[open].fold2 > summary::before { transform: rotate(45deg); }
 details.fold2 > summary:hover { color: var(--text); }
 details.fold2 { margin-top: 8px; }
+details.fold2.quiet { margin-top: 40px; opacity: .35; }
+details.fold2.quiet[open] { opacity: 1; }
 
 /* choice cards: personality, ElevenLabs voices, models */
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
@@ -658,6 +660,14 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
         </div>
         <div class="note">The robot's own speaker, set live. On this Mac, ROB plays at the Mac's volume.</div>
       </section>
+      <details class="fold2 quiet" id="moreDet">
+        <summary>More</summary>
+        <section class="sec">
+          <h2>Microphone</h2>
+          <div class="seg fill" id="hMic" role="group" aria-label="Microphone"></div>
+          <div class="note">Which microphone ROB listens with. The first time on this Mac, macOS asks to allow it.</div>
+        </section>
+      </details>
     </div>
 
     <!-- AI: the talk behind ROB's lines -->
@@ -1271,6 +1281,7 @@ function renderHost(d) {
   $("hVoiceNote").textContent = voices.length && !elevenOn ? "These voices play once ElevenLabs is on and its key is in Keys." : "";
   $("bSpeaker").hidden = !isList(d.speakers);
   setHTML($("hSpeaker"), (d.speakers || []).map((x) => chip("speaker", x.key, x.label || cap(x.key), (cur.speaker || "robot") === x.key)).join(""));
+  setHTML($("hMic"), [["robot", "Robot"], ["mac", "This Mac"]].map(([k, l]) => chip("mic", k, l, (cur.mic || "mac") === k)).join(""));
 
   // AI: provider, model, effort, status
   const talks = d.talks || [], off = cur.talk === "off";
@@ -1323,11 +1334,12 @@ async function pickHost(e) {
   try {
     await postHost(body);
     if (f === "speaker") toast(k === "mac" ? "ROB plays on this Mac now" : "ROB plays on the robot now");
+    if (f === "mic") toast(k === "mac" ? "ROB listens with this Mac's microphone now" : "ROB listens with the robot's microphone now");
   } catch (err) { toast("Didn't change: " + err.message, true); }
   b.classList.remove("busy"); hostBusy = false;
   loadHost();
 }
-for (const id of ["hPersona", "hEngine", "hEleven", "hSpeaker", "hTalk", "hModels", "hEffort"]) $(id).addEventListener("click", pickHost);
+for (const id of ["hPersona", "hEngine", "hEleven", "hSpeaker", "hMic", "hTalk", "hModels", "hEffort"]) $(id).addEventListener("click", pickHost);
 $("modelForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const inp = $("modelCustom"), v = inp.value.trim(), t = $("modelTick");

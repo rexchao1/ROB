@@ -56,13 +56,24 @@ def test_photo_with_nothing_on_the_camera_raises(body):
         body.photo()
 
 
-def test_listen_asks_for_english_from_faster_whisper_and_returns_the_text(fake, body):
+def test_listen_asks_for_english_from_faster_whisper_and_returns_the_text(fake, body, monkeypatch):
+    from brain import settings
+
+    monkeypatch.setattr(settings.current, "mic", "robot")
     fake.device.heard.append("let's play mafia")
     assert body.listen(4) == "let's play mafia"
     assert _calls(fake, "listen")[0]["args"] == {"duration_ms": 4000, "engine": "faster-whisper", "language": "en", "motion": "none"}
     assert body.listen(0.01) == ""
     assert body.listen(99) == ""
     assert [c["args"]["duration_ms"] for c in _calls(fake, "listen")] == [4000, 100, 30000]
+
+
+def test_mic_mac_asks_the_gateway_for_the_macs_microphone(fake, body, monkeypatch):
+    from brain import settings
+
+    monkeypatch.setattr(settings.current, "mic", "mac")
+    body.listen(2)
+    assert _calls(fake, "listen")[0]["args"]["source"] == "mac"
 
 
 def test_play_posts_16k_mono_pcm_and_the_fake_hears_the_line(fake, body):

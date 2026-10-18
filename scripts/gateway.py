@@ -33,6 +33,12 @@ Whisper's answer is then checked the way Whisper checks itself (a loop, or token
 was unsure of), loops of the same phrase are cut to one, and the prompt read back is
 dropped. Every window logs one "heard" line saying what was heard or why nothing was.
 GM_VAD=0 turns the voice detector off and goes by loudness alone, as before.
+
+A listen with "source": "mac" (the dashboard's hidden Microphone setting) records this
+Mac's microphone with ffmpeg instead of the robot's, ends on the same end-of-speech
+rule and goes through the same Whisper. GM_MAC_MIC picks the avfoundation input
+(default ":default", the Mac's current input; `ffmpeg -f avfoundation -list_devices
+true -i ""` lists them). The first time, macOS asks to let the terminal use the mic.
 """
 
 from __future__ import annotations
@@ -41,6 +47,7 @@ import asyncio
 import logging
 import os
 import re
+import subprocess
 import sys
 import time
 from collections import deque
@@ -57,7 +64,10 @@ USE_VAD = os.environ.get("GM_VAD", "1") != "0"
 VOICE_ON = 0.5  # Silero's chance that 32 ms is a voice, above which it is (speech 0.95, beats under 0.5)
 VOICE_OFF = 0.35  # once talking, it stays a voice until the chance falls below this
 
+MAC_MIC = os.environ.get("GM_MAC_MIC", ":default")
+
 log = logging.getLogger("gamemaster.endpoint")
+ears = SimpleNamespace(hear=None, vad=None)  # install_stt's hear(audio) and the voice detector, for the Mac's mic
 
 
 class Endpointer:
@@ -403,8 +413,74 @@ def install_stt() -> None:
         return {"text": text, "language": "en", "language_probability": 1.0}
 
     engine_module.FasterWhisperEngine.transcribe = transcribe
+    ears.hear, ears.vad = hear, vad
     if mlx_whisper is not None:  # load the model now, not on the first thing someone says
         run(np.zeros(16000, dtype=np.float32))
+
+
+def record_mac(duration_ms: int) -> bytes:
+    """Up to duration_ms of this Mac's microphone as 16 kHz 16-bit mono, ended early once
+    someone has spoken and gone quiet, as on the robot (no chime to skip here)."""
+    frame = 16000 * 2 * FRAME_MS // 1000
+    cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "avfoundation", "-i", MAC_MIC,
+           "-ac", "1", "-ar", "16000", "-f", "s16le", "-"]
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError as exc:
+        raise RuntimeError(f"the Mac's microphone: ffmpeg did not start ({exc})") from None
+    ends = Endpointer()
+    ends.skip = 0
+    voice = VoiceDetector(ears.vad) if ears.vad is not None else None
+    chunks: list[bytes] = []
+    try:
+        for _ in range(max(1, duration_ms // FRAME_MS)):
+            pcm = proc.stdout.read(frame)
+            if len(pcm) < frame:
+                break
+            chunks.append(pcm)
+            if ends.feed(frame_rms(pcm), voice.feed(pcm) if voice is not None else None):
+                log.info("listen (Mac mic): speech ended %.1f s in (%s)", len(chunks) * FRAME_MS / 1000, ends.summary())
+                break
+        else:
+            log.info("listen (Mac mic): the whole window ran (%s)", ends.summary())
+    finally:
+        proc.terminate()
+        try:
+            _, err = proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _, err = proc.communicate()
+    if not chunks:
+        raise RuntimeError(f"the Mac's microphone gave no sound: {err.decode('utf-8', 'replace').strip()[:200] or 'no reason given'}")
+    pcm = b"".join(chunks)
+    if not pcm.strip(b"\x00"):
+        log.warning("the Mac's microphone gave pure silence: allow the terminal running ROB in System Settings, Privacy & Security, Microphone")
+    return pcm
+
+
+def install_mac_mic() -> None:
+    """Let listen take "source": "mac" and hear through this Mac's microphone."""
+    import numpy as np
+    from stackchan_mcp import stdio_server
+
+    real_listen = stdio_server.listen_and_transcribe
+
+    async def listen_and_transcribe(arguments, **kwargs):
+        if arguments.get("source") != "mac" or ears.hear is None:
+            return await real_listen({k: v for k, v in arguments.items() if k != "source"}, **kwargs)
+        duration_ms = arguments.get("duration_ms", 5000)
+        if isinstance(duration_ms, bool) or not isinstance(duration_ms, int) or not 100 <= duration_ms <= 30_000:
+            raise ValueError(f"'duration_ms' must be an integer from 100 to 30000; got {duration_ms!r}")
+        pcm = await asyncio.to_thread(record_mac, duration_ms)
+        audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+        started = time.monotonic()
+        text, note, voiced = await asyncio.to_thread(ears.hear, audio)
+        took = f"{voiced:.1f} s of voice in {audio.size / 16000:.1f} s of Mac mic, {time.monotonic() - started:.2f} s"
+        log.info("heard %r (%s)", text, f"{note}; {took}" if note else took)
+        return {"engine": "faster-whisper", "text": text, "language": "en",
+                "duration_ms": len(pcm) * 1000 // 32000, "frame_count": len(pcm) // (32 * FRAME_MS)}
+
+    stdio_server.listen_and_transcribe = listen_and_transcribe
 
 
 def find_opus() -> None:
@@ -422,6 +498,7 @@ def main() -> int:
 
     install()
     install_stt()
+    install_mac_mic()
     logging.getLogger("gamemaster.endpoint").setLevel(logging.INFO)
     sys.argv[0] = "stackchan-mcp"
     return gateway_main()
