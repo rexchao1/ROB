@@ -15,6 +15,22 @@ import { join, resolve } from 'node:path'
 export const ROOT = resolve(import.meta.dirname, '..', '..')
 const TABLE = join(ROOT, 'test', 'fixtures', 'table.py')
 
+/**
+ * The dashboard's key in test mode, fixed (brain/__main__.py TEST_DASH_KEY; the real
+ * brain mints a new one at every start and prints it with the page's address). Every
+ * write under /dash/api and /dashboard, and GET /dash/api/photo, /seat/<n>.jpg and
+ * /events, carry it as the X-Dash-Key header (or ?key=); without it the brain answers 403.
+ */
+export const TEST_DASH_KEY = 'gm-test-dash-key'
+
+/** The Table's token in test mode, fixed (brain/__main__.py TEST_TABLE_TOKEN): a referee sends it as "Authorization: Bearer <token>". */
+export const TEST_TABLE_TOKEN = 'gm-test-table-token'
+
+/** The key a step binding sends with a /dash/api or /dashboard write to the test brain (as the X-Dash-Key header, or ?key=). */
+export function dashKey(): string {
+  return TEST_DASH_KEY
+}
+
 /** GM_PYTHON, else .venv/bin/python, else python3 (scripts/py.mjs resolves the same way). */
 export function python(): string {
   if (process.env.GM_PYTHON) return process.env.GM_PYTHON

@@ -1,14 +1,18 @@
-// hosting.feature: counting the table (D5, D6), the private screen (D7, D8), heads
-// down (D9 to D11) and votes by voice (D12, D13). The Background names no game, so
-// these bindings host Mafia (the first game built), rigged so the roles are known.
+// hosting.feature: counting the table (D5, D6, D89, D90, D96, D98), the private screen
+// (D7, D8), heads down (D9 to D11) and votes by voice (D12, D13, D91, D97). The
+// Background names no game, so these bindings host Mafia (the first game built), rigged
+// so the roles are known.
 import { expect } from 'vitest'
 import type { Definer } from 'gherkin-node-test/vitest'
 import {
-  AFTER_SWEEP, COUNT, DISCUSSION, DOCTOR_WHISPER, EARLY_VOTE, HEADS_DOWN, LEAN_IN, MAFIA_WHISPER, MORNING,
-  brain, cap, day, deal, defineHear, defineLeanIn, defineSomeoneSays, expectAskedInTurn, heard, headsDown, headsUp, named, next,
-  night, numberFrom, photosBetween, player, screenFor, seat, scatter, seatsFrom, show, start, state, text, until, vote, when,
-  word, type World,
+  AFTER_SWEEP, COUNT, DISCUSSION, DOCTOR_WHISPER, EARLY_VOTE, GAME_NAMES, HEADS_DOWN, LEAN_IN, MAFIA_WHISPER, MORNING, WHO,
+  brain, cap, day, deal, defineHear, defineLeanIn, defineSomeoneSays, expectAskedInTurn, expectFacing, expectSweep, headAt, heard,
+  headsDown, headsUp, named, next, night, numberFrom, photosBetween, player, says, screenFor, seat, scatter, seatsFrom, show, start,
+  state, text, until, vote, when, word, type World,
 } from './common.ts'
+
+/** The host's answer to a spoken count that disagrees with its own (D6, D90). */
+const MISMATCH = /^I (?:only )?see /
 
 const RIG = { mafia: [1], doctor: 5 }
 
@@ -46,11 +50,50 @@ export const hosting: Definer<World> = (reg) => {
   defineHear(reg)
   defineLeanIn(reg)
 
-  // --- D5, D6: the count ---------------------------------------------------------------
+  // --- D5, D6, D89, D90, D96, D98: the count ------------------------------------------------
 
-  // D96 (review R, proposed): "the players see the host turn a full circle" became "sweep the whole
-  // table, far left to far right"; its definition is removed here because the runner refuses a
-  // definition with no consumer, and abdd/3-src binds the new sentence.
+  reg.define(/^the players see the host sweep the whole table, far left to far right$/, async (w) => {
+    // The photos the fake recorded between the words and the count line (D96: the head's
+    // range is -90..90, so the whole table is one sweep of it).
+    const said = await brain(w).said()
+    const from = w.since ?? 0
+    const count = said.findIndex((line, j) => j >= from && COUNT.test(line))
+    expect(count, 'the count line').toBeGreaterThanOrEqual(0)
+    expectSweep(await photosBetween(w, from - 1, count), 'the counting sweep')
+  })
+
+  reg.define(/^someone says "(.+)" and then "(.+)"$/, async (w, first, second) => {
+    when(w)
+    await says(w, text(first))
+    await says(w, text(second))
+  })
+
+  reg.define(/^someone says "(.+)" three times over$/, async (w, words) => {
+    when(w)
+    for (let i = 0; i < 3; i++) await says(w, text(words))
+  })
+
+  reg.define(/^the players see the host sweep the whole table again$/, async (w) => {
+    // After its answer to the spoken count, the host's next line comes after a second whole
+    // sweep: the photos between the two.
+    const said = await brain(w).said()
+    const mismatch = said.findIndex((line, j) => j >= (w.since ?? 0) && MISMATCH.test(line))
+    expect(mismatch, "the host's answer to the spoken count").toBeGreaterThanOrEqual(0)
+    w.cursor = mismatch + 1
+    const after = await next(w, /./, 30)
+    expectSweep(await photosBetween(w, mismatch, after), 'the second sweep')
+  })
+
+  reg.define(/^the players hear the host say "(.+)" and offer another game$/, async (w, line) => {
+    // The too-few line, then the host's next line names a game that is not the one refused.
+    const i = await next(w, text(line), 30)
+    expect(i, `"${text(line)}"`).toBeGreaterThanOrEqual(w.since ?? 0)
+    const offer = (await brain(w).said())[await next(w, /./, 10)]!
+    const refused = GAME_NAMES.find((g) => text(line).startsWith(`${g} needs`))
+    const offered = GAME_NAMES.filter((g) => offer.includes(g))
+    expect(offered, `the games "${offer}" names`).not.toEqual([])
+    expect(offered, `the games "${offer}" names`).not.toContain(refused)
+  })
 
   reg.define(/^the host has counted (\w+) faces$/, async (w, faces) => {
     const n = numberFrom(faces)
@@ -133,6 +176,7 @@ export const hosting: Definer<World> = (reg) => {
     const down = (w.cursor ?? 1) - 1
     const after = await next(w, AFTER_SWEEP)
     expect((await photosBetween(w, down, after)).length, 'photos of the table after heads down').toBeGreaterThan(0)
+    w.window = { from: down, to: after } // what the players hear in it, they hear once
   })
 
   reg.define(/^Player (\w+) has one warning this night$/, async (w, who) => {
@@ -199,16 +243,16 @@ export const hosting: Definer<World> = (reg) => {
     expectAskedInTurn(w, again, [1, 2, 3, 5])
   })
 
-  // --- D12, D13: votes -------------------------------------------------------------------------
+  // --- D12, D13, D91, D97: votes ---------------------------------------------------------------
 
   reg.define(/^a day phase vote has begun with (\w+) living players$/, async (w, living) => {
     const n = numberFrom(living)
     await start(w)
     await deal(w)
     // A night that ends with five still in (the Doctor saves the Mafia's target), or with
-    // Player three killed for four.
+    // Player five killed for four, so that Players one to four vote (D97).
     if (n === 5) await night(w, { mafia: 'Player two', doctor: 'Player two' })
-    else if (n === 4) await night(w, { mafia: 'Player three', doctor: 'Player one' })
+    else if (n === 4) await night(w, { mafia: 'Player five', doctor: 'Player one' })
     else throw new Error(`a vote with ${n} living players is not bound`)
     await next(w, DISCUSSION)
     await brain(w).hear("let's vote")
@@ -216,9 +260,45 @@ export const hosting: Definer<World> = (reg) => {
     expect((await state(w)).living).toHaveLength(n)
   })
 
-  reg.define(/^the host turns to each living player in turn and asks "who\?"$/, async (w) => {
+  reg.define(/^a day phase vote has begun with (\w+) living players and Players (\w+) and (\w+) sitting out$/, async (w, living, a, b) => {
+    // The two peek twice in the night, as D11 has it: warned at the first sweep, sat out at
+    // the second. Nobody whispers, so nobody dies and all five are living by day.
+    const n = numberFrom(living)
+    const out = [numberFrom(a), numberFrom(b)]
+    await start(w)
+    await deal(w)
+    const down = await next(w, HEADS_DOWN)
+    await headsDown(w, out)
+    await next(w, MAFIA_WHISPER)
+    const whisper = await next(w, DOCTOR_WHISPER)
+    const said = (await brain(w).said()).slice(down, whisper)
+    for (const s of out) {
+      expect(said, `${player(s)} warned`).toContain(`${player(s)}, heads down means heads DOWN.`)
+      expect(said, `${player(s)} sat out`).toContain(`${player(s)}, you're sitting this round out.`)
+    }
+    await headsDown(w)
+    const morning = await next(w, MORNING)
+    expect((await brain(w).said())[morning + 1], 'the morning').toBe('Nobody died last night.')
+    await headsUp(w)
+    await day(w)
+    expect(await state(w)).toMatchObject({ living: Array.from({ length: n }, (_, i) => i + 1), sitting_out: out })
+    w.voters = (w.bearings ?? []).map((_, i) => i + 1).filter((s) => !out.includes(s))
+  })
+
+  reg.define(/^the host turns to each (?:living player|player who may vote) in turn and asks "who\?"$/, async (w) => {
     when(w)
     w.voting = true
+  })
+
+  reg.define(/^the host asks "(.+)" and Player (\w+) says "(.+)"$/, async (w, ask, who, words) => {
+    // The seats before this one say nothing (the host asks each once more, then moves on).
+    when(w)
+    const s = numberFrom(who)
+    expect(text(ask)).toBe(`${player(s)}, who?`)
+    const i = await next(w, text(ask), 120)
+    expect(WHO.test(text(ask)), 'a vote asked for').toBe(true)
+    expectFacing(w, await headAt(w, i), s, `asking ${player(s)} "who?"`)
+    await says(w, text(words)) // the host's answer: the re-ask, or the next seat's turn
   })
 
   reg.define(/^Players ([\w, ]+?) say "(\w+)" and Players ([\w, ]+?) say "(\w+)"$/, async (w, first, a, second, b) => {
@@ -228,29 +308,53 @@ export const hosting: Definer<World> = (reg) => {
     await answer(w, (voter) => answers.get(voter))
   })
 
+  reg.define(/^Players ([\w, ]+?) say "(\w+)" and Player (\w+) says "(\w+)"$/, async (w, first, a, one, b) => {
+    const answers = new Map<number, string>()
+    for (const s of seatsFrom(first)) answers.set(s, text(a))
+    answers.set(numberFrom(one), text(b))
+    await answer(w, (voter) => answers.get(voter))
+  })
+
+  reg.define(/^Players ([\w, ]+?) say "(\w+)", Player (\w+) says "(\w+)" and Player (\w+) says "(\w+)"$/, async (w, first, a, one, b, two, c) => {
+    const answers = new Map<number, string>()
+    for (const s of seatsFrom(first)) answers.set(s, text(a))
+    answers.set(numberFrom(one), text(b))
+    answers.set(numberFrom(two), text(c))
+    await answer(w, (voter) => answers.get(voter))
+  })
+
   reg.define(/^(\w+) players say "(\w+)" and (\w+) players say "(\w+)"$/, async (w, n, a, m, b) => {
-    // In turn, nobody naming themself: the first n voters who are not seat a name it,
-    // then the next m who are not seat b.
+    // In turn, nobody naming themself: n voters who are not seat a name it (seat b first,
+    // who cannot name b), then m of the rest who are not seat b.
     const voters = (await state(w)).living
     const answers = new Map<number, string>()
-    for (const [count, said] of [[numberFrom(n), text(a)], [numberFrom(m), text(b)]] as const) {
-      const pick = voters.filter((v) => !answers.has(v) && v !== numberFrom(said)).slice(0, count)
-      if (pick.length < count) throw new Error(`not ${count} voters left to say "${said}"`)
-      for (const v of pick) answers.set(v, said)
+    const groups = [[numberFrom(n), numberFrom(a), numberFrom(b)], [numberFrom(m), numberFrom(b), numberFrom(a)]] as const
+    for (const [count, said, other] of groups) {
+      const pick = voters.filter((v) => !answers.has(v) && v !== said).sort((x, y) => Number(y === other) - Number(x === other)).slice(0, count)
+      if (pick.length < count) throw new Error(`not ${count} voters left to say "${word(said)}"`)
+      for (const v of pick) answers.set(v, word(said))
     }
     await answer(w, (voter) => answers.get(voter))
   })
 
   reg.define(/^every living player is still in$/, async (w) => {
-    expect((await state(w)).living).toEqual(w.livingAtVote)
+    const living = w.livingAtVote
+    if (!living) throw new Error('no vote has begun')
+    expect((await state(w)).living).toEqual(living)
     expect((await heard(w)).filter((line) => line.endsWith("you're out.")), 'anyone voted out').toEqual([])
+    // The far side: through a quiet night, the next day's vote asks every one of them.
+    await night(w)
+    await day(w)
+    w.livingAtVote = undefined
+    const asks = await vote(w, scatter(living))
+    expect(asks.map((a) => a.seat), 'the players asked in the next vote').toEqual(living)
   })
 }
 
-/** The vote the When began: each voter answers as given, and was asked in turn. */
+/** The vote the When began: each voter answers as given, and was asked in turn (the seats the scenario names, else every living player not sitting out). */
 async function answer(w: World, answers: (voter: number) => string | undefined): Promise<void> {
   if (!w.voting) throw new Error('no vote has begun')
   const { living, sitting_out } = await state(w)
   const asks = await vote(w, answers)
-  expectAskedInTurn(w, asks, living.filter((s) => !sitting_out.includes(s)))
+  expectAskedInTurn(w, asks, w.voters ?? living.filter((s) => !sitting_out.includes(s)))
 }

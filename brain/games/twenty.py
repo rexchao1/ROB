@@ -16,6 +16,10 @@ The model (Table.chat, on the Mac) only words a question or picks an answer from
 fixed set; code counts, keeps the secret, checks every model line and decides who
 won. With no model it plays from brain/games/twenty_things.py, and where that table
 has the trait a question asks about, its answer wins, so the secret never drifts.
+A guess is decided by code alone (D104, D105): it wins only when it names the secret
+or one of its aliases; "is it X" with X unknown to the table is a trait question if
+one matches, else the model may advise a yes or a no, which is only ever "Nope, not
+X." and a question used, and offline it is "can't answer that one", not counted.
 
 A rig fixes the random choices: {"mode": "player_guesses", "secret": "toaster"}.
 """
@@ -256,24 +260,28 @@ class Twenty:
                 self._say_counted(_hint(secret, hinted, self.rng))
                 continue
             guess = _thing_in(heard, guess_only=True)
-            if guess is not None or (tail := _guess_tail(heard)) is not None:
-                if guess is secret or (guess is None and self._model_says_yes(heard, secret)):
-                    self.used += 1
+            if guess is not None:  # a thing the table knows: code decides (D104)
+                self.used += 1
+                if guess is secret:
                     self._end("player", self.rng.choice((
                         f"Yes! It was {secret.name}. Got it in {lines.number_word(self.used)}.",
                         f"Yes! {_cap(secret.name)}. Nice.",
                     )))
                     return
-                self.used += 1
-                if guess is not None:
-                    close = _overlap(guess, secret)
-                    if wild is None and close < 0.15:
-                        wild = guess
-                    line = "Ooh, close. Not it though." if close >= 0.7 else self.rng.choice(
-                        (f"Nope, not {guess.name}.", "Nope.", f"No. Not {guess.name}."))
-                else:
-                    line = self.rng.choice(("Nope.", "Nope, not that.", "No."))
-                self._say_counted(line)
+                close = _overlap(guess, secret)
+                if wild is None and close < 0.15:
+                    wild = guess
+                self._say_counted("Ooh, close. Not it though." if close >= 0.7 else self.rng.choice(
+                    (f"Nope, not {guess.name}.", "Nope.", f"No. Not {guess.name}.")))
+                continue
+            tail = _guess_tail(heard)
+            if tail is not None and _trait_of(heard) is None:  # "is it a kazoo?": nothing the table knows
+                theirs = self._ask_model(heard, secret) if self.online else None
+                if theirs not in ("yes", "no", "sort of"):
+                    self.table.say("Can't answer that one. Try another way.")
+                    continue
+                self.used += 1  # D105: the model's yes or no decides nothing; the guess is wrong
+                self._say_counted(f"Nope, not {tail}.")
                 continue
             if not _asks(heard):
                 continue  # talking among themselves
@@ -328,9 +336,6 @@ class Twenty:
         else:
             self.misses = 0
         return answer
-
-    def _model_says_yes(self, heard: str, secret: Thing) -> bool:
-        return self._ask_model(heard, secret) == "yes"
 
 
 # --- reading what was said ------------------------------------------------------------------
@@ -463,24 +468,27 @@ def _trait_of(text: str) -> tuple[Trait, bool] | None:
 
 _GUESS = re.compile(
     r"(?:^| )(?:is it|is that|it's|its|it is|is this|my guess is|i guess|i think it's|i think its|i think it is|"
-    r"guess|was it|could it be|would it be|how about|what about)(?: an?| the| some)? (.+)$"
+    r"guess|was it|could it be|would it be|how about|what about) (?:(an?|the|some) )?(.+)$"
 )
 _TAIL_FILLER = ("right", "then", "maybe", "or not", "or something", "perhaps", "please", "now", "huh")
 
 
-def _guess_text(text: str) -> str | None:
+def _guess_text(text: str, article: bool = False) -> str | None:
+    """What follows a guess frame ("is it a kazoo?" -> "kazoo"; with article, "a kazoo")."""
     said = " ".join(_tokens(text))
     m = _GUESS.search(said)
     if m is None:
         return None
-    tail = m.group(1).strip()
+    tail = m.group(2).strip()
     changed = True
     while changed:
         changed = False
         for f in _TAIL_FILLER:
             if tail.endswith(" " + f):
                 tail, changed = tail[: -len(f) - 1].strip(), True
-    return tail or None
+    if not tail:
+        return None
+    return f"{m.group(1)} {tail}" if article and m.group(1) else tail
 
 
 def _thing_in(text: str, guess_only: bool = False) -> Thing | None:
@@ -501,10 +509,10 @@ def _thing_in(text: str, guess_only: bool = False) -> Thing | None:
 
 
 def _guess_tail(text: str) -> str | None:
-    """A guess at something not in the table ("is it a kazoo?"): a short name after "is
-    it", that no trait question matches."""
-    tail = _guess_text(text)
-    if tail is None or len(tail.split()) > 3 or _trait_of(text) is not None:
+    """A guess at something not in the table ("is it a kazoo?" -> "a kazoo"): a short
+    name after "is it", that no trait question matches."""
+    tail = _guess_text(text, article=True)
+    if tail is None or len(tail.split()) > 4 or _trait_of(text) is not None:
         return None
     return tail
 

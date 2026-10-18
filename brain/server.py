@@ -32,14 +32,26 @@ In both modes, when a Dash is attached to the host (brain/dash.py), the operator
 dashboard: GET /dash, the page (brain/dash/index.html), and its JSON under /dash/api/*
 (docs/DASHBOARD-PLAN.md has the table), its backdrops, GET /dash/art/<name>.jpg, and
 its bundled scripts, GET /dash/vendor/<name>.js (the avatars' DiceBear, built by
-`npm run build:avatars`). /dash/api answers any origin.
+`npm run build:avatars`).
+
+The dashboard's key (D86): every write under /dash/api/* and /dashboard/* (POST), and
+the GETs that carry the camera or the players' faces (/dash/api/photo, /seat/<n>.jpg,
+/events), need the key minted at this start, sent as X-Dash-Key or ?key=; without it,
+or with another, the answer is 403 whatever the request's origin. The page gets the key
+from its own address (the brain prints it) and keeps it for the tab. /dash/api answers
+a browser's cross-origin request only from the page's own origin (Origin's host is
+this Host); otherwise no Access-Control-Allow-Origin at all. /dash/api/rig exists in
+test mode only. A body over MAX_BODY bytes is 413, a Content-Length that is not a
+number 400.
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 import math
 import re
+import secrets
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -50,13 +62,15 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from brain import dashboard
 from brain.clock import ClockStuck, VirtualClock
-from brain.dash import FACE_STYLE, DashError
+from brain.dash import FACE_STYLE, DashBusy, DashError
 from brain.keys import KeysError
 from brain.host import Host
 
 PAGE = Path(__file__).resolve().parent / "dash" / "index.html"
 ART = PAGE.parent / "art"  # the page's backdrops, GET /dash/art/<name>.jpg
 VENDOR = PAGE.parent / "vendor"  # the page's bundled scripts, GET /dash/vendor/<name>.js
+MAX_BODY = 1 << 20  # bytes a request body may have; more is 413
+KEYED_GETS = ("/photo", "/events")  # /dash/api GETs that need the key too (the camera; the log); /seat/<n>.jpg as well
 
 
 class FakeControl:
@@ -93,8 +107,15 @@ class _Forbidden(Exception):
     pass
 
 
-def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None] | None) -> type[BaseHTTPRequestHandler]:
+class _TooLarge(Exception):
+    pass
+
+
+def make_handler(
+    host: Host, fake: FakeControl | None, reset: Callable[..., None] | None, dash_key: str | None = None
+) -> type[BaseHTTPRequestHandler]:
     test_mode = fake is not None and reset is not None
+    dash_key = dash_key or secrets.token_urlsafe(16)  # unknown to anyone: a server built without one takes no write
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "gamemaster"
@@ -115,17 +136,19 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
             self.send_response(204)
             self._cors()
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Dash-Key")
             self.send_header("Content-Length", "0")
             self.end_headers()
 
         def _dispatch(self, method: str) -> None:
             url = urlsplit(self.path)
-            body = self._body() if method == "POST" else b""
             try:
+                body = self._body() if method == "POST" else b""
                 if (method, url.path) == ("GET", "/state"):
                     status, payload = 200, _state(host)
                 elif url.path == "/dashboard" or url.path.startswith("/dashboard/"):
+                    if method != "GET" and not self._keyed(parse_qs(url.query)):
+                        raise _Forbidden
                     status, payload = dashboard.handle(host, method, url.path, body)
                 elif url.path == "/dash" and method == "GET" and host.dash is not None:
                     if not PAGE.is_file():
@@ -157,8 +180,13 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
                     raise _NotFound
             except _NotFound:
                 status, payload = 404, {"error": f"no {method} {url.path}"}
-            except _Forbidden:
-                status, payload = 403, {"error": "keys are set from the dashboard's own page"}
+            except _Forbidden as e:
+                status, payload = 403, {"error": str(e) or "this needs the dashboard's key: open the page from the address the brain printed"}
+            except _TooLarge:
+                self.close_connection = True  # the body was not read
+                status, payload = 413, {"error": f"the body is over {MAX_BODY} bytes"}
+            except DashBusy as e:
+                status, payload = 409, {"error": str(e)}
             except (_BadRequest, DashError, KeysError) as e:
                 status, payload = 400, {"error": str(e)}
             except ClockStuck as e:
@@ -202,6 +230,10 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
         def _dash(self, method: str, path: str, query: dict[str, list[str]], body: bytes) -> tuple[int, Any]:
             dash = host.dash
             route = (method, path.removeprefix("/dash/api"))
+            if route[1] == "/rig" and not test_mode:
+                raise _NotFound  # rigging a game is for tests (D86)
+            if (method != "GET" or route[1] in KEYED_GETS or route[1].startswith("/seat/")) and not self._keyed(query):
+                raise _Forbidden
             if route == ("GET", "/state"):
                 return 200, dash.state()
             if route == ("GET", "/events"):
@@ -249,7 +281,7 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
                 return 200, dash.keys.status()
             if route == ("POST", "/keys"):
                 if not self._same_origin():
-                    raise _Forbidden
+                    raise _Forbidden("keys are set from the dashboard's own page")
                 return 200, dash.keys.set(_json(body))
             if route == ("GET", "/rig"):
                 return 200, dash.rigs()
@@ -263,9 +295,19 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
             origin = self.headers.get("Origin")
             return origin is None or urlsplit(origin).netloc == (self.headers.get("Host") or "")
 
+        def _keyed(self, query: dict[str, list[str]]) -> bool:
+            """The request carries the dashboard's key: the page's header, or ?key= for an
+            <img> (compared on bytes, so any text is a plain mismatch)."""
+            sent = self.headers.get("X-Dash-Key") or (query.get("key") or [""])[0]
+            return hmac.compare_digest(sent.encode("latin-1", "replace"), dash_key.encode())
+
         def _cors(self) -> None:
-            if urlsplit(self.path).path.startswith("/dash/api/"):
-                self.send_header("Access-Control-Allow-Origin", "*")
+            """A cross-origin answer only to the page's own origin: a browser page from
+            another site, or another device, gets no Access-Control-Allow-Origin."""
+            origin = self.headers.get("Origin")
+            if origin and urlsplit(self.path).path.startswith("/dash/api/") and urlsplit(origin).netloc == (self.headers.get("Host") or ""):
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
 
         def _send_raw(self, status: int, data: bytes, content_type: str) -> None:
             self.send_response(status)
@@ -277,7 +319,13 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
             self.wfile.write(data)
 
         def _body(self) -> bytes:
-            length = int(self.headers.get("Content-Length") or 0)
+            """The body, at most MAX_BODY bytes; a length that is not a number is a 400."""
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                raise _BadRequest("Content-Length is not a number") from None
+            if length > MAX_BODY:
+                raise _TooLarge()
             return self.rfile.read(length) if length > 0 else b""
 
         def _send(self, status: int, payload: Any) -> None:
@@ -315,9 +363,12 @@ def _json(body: bytes) -> dict[str, Any]:
     return value
 
 
-def serve(host: Host, address: str, port: int, fake: FakeControl | None = None, reset: Callable[..., None] | None = None) -> ThreadingHTTPServer:
+def serve(
+    host: Host, address: str, port: int, fake: FakeControl | None = None, reset: Callable[..., None] | None = None, dash_key: str | None = None
+) -> ThreadingHTTPServer:
     """Bind the server (port 0 picks a free one); the caller runs serve_forever(). With a
-    FakeControl and a reset callable, the /test/* endpoints are open."""
-    server = ThreadingHTTPServer((address, port), make_handler(host, fake, reset))
+    FakeControl and a reset callable, the /test/* endpoints are open. `dash_key` is what
+    a write must carry (D86); without one, a key nobody knows."""
+    server = ThreadingHTTPServer((address, port), make_handler(host, fake, reset, dash_key))
     server.daemon_threads = True
     return server

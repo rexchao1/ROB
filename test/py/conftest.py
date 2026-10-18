@@ -56,7 +56,7 @@ def body(fake):
     """The brain's Body against the fake gateway."""
     from brain.body import Body, Gateway
 
-    return Body(Gateway(fake.mcp_url), fake.pcm_url)
+    return Body(Gateway(fake.mcp_url), fake.pcm_url, captures=fake.device.captures)
 
 
 @pytest.fixture
@@ -72,3 +72,22 @@ def brain(fake, tmp_path):
     tb.host.stop()
     tb.server.shutdown()
     tb.server.server_close()
+
+
+def dash(base, method, path, body=None, content_type="application/json", key=None):
+    """calls.call with the dashboard's key (X-Dash-Key), as the page sends it on every
+    request; the test brain's fixed key unless `key` is given."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    from brain.__main__ import TEST_DASH_KEY
+
+    data = json.dumps(body).encode() if isinstance(body, (dict, list)) else body
+    headers = {"Content-Type": content_type, "X-Dash-Key": TEST_DASH_KEY if key is None else key}
+    req = urllib.request.Request(base + path, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as res:
+            return res.status, json.loads(res.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())

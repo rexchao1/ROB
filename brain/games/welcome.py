@@ -10,7 +10,9 @@ What the group says is read in this order (brain/ears.py):
   reset                         the welcome again
   a question about a game       its rules, from the script, and "Want to play it?"
   a game's name                 that game, on this count (a count said with it still
-                                has to agree: "imposter with six people", D39)
+                                has to agree: "imposter with six people", D39); the
+                                name inside other talk ("that was a hot seat") gets
+                                "Hot Seat? Say yes to play it." and a yes starts it (D94)
   "not now", "stop"             a line, then the host waits quietly
   a headcount                   "I only see five. Who's hiding?", a pause, a second look
   "what games?", "you pick"     the games, or the suggestion again
@@ -131,6 +133,11 @@ class Welcome:
         if game is not None:
             fresh = self.seats > 0 and now - self.counted_at <= self.options.count_fresh_seconds
             return Choice(game, heard, self.seats if fresh else None)
+        mentioned = ears.game_mentioned(heard)
+        if mentioned is not None:  # D94: a doubtful hearing is confirmed, never started
+            self.suggestion = mentioned
+            self._ask(lines.confirm_game(mentioned))
+            return None
         if ears.wants_later(heard) or ears.wants_to_stop(heard):
             self._say(lines.later(self.rng))
             return ""
@@ -193,11 +200,12 @@ class Welcome:
         self.replied_at = self.table.now()
 
     def too_few(self, game: str) -> None:
-        """After "Mafia needs at least four players.": the game this count can play."""
+        """After "Mafia needs at least four players." and gather()'s "Want to try X
+        instead?" (D98): a yes now starts X; when nothing else fits, suggest again."""
         pick = lines.suggested(self.seats)
         if pick is not None and pick != game:
             self.suggestion = pick
-            self._ask(lines.instead(pick))
+            self.asked_at = self.table.now()
         else:
             self._ask(lines.suggestion(self.seats, self.rng))
 

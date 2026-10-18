@@ -13,6 +13,9 @@ starting over or going away (brain/remote.py).
 The robot chimes each time its microphone opens, so after QUIET seconds with nothing
 heard the lobby listens in QUIET_WINDOW windows instead, until it hears something.
 
+The options and the listening window may be callables: the host's, read at each game
+and each idle listen, so a setting changed on the dashboard reaches the next one (D1).
+
 Standard library only: the referee imports it.
 """
 
@@ -39,8 +42,8 @@ class Lobby:
         table: Table,
         rng: random.Random,
         *,
-        options: games.Options,
-        listen_window: float,
+        options: games.Options | Callable[[], games.Options],
+        listen_window: float | Callable[[], float],
         recovery: str,
         rigs: Callable[[str], dict[str, Any] | None] = lambda game: None,
         stopped: Callable[[], bool] = lambda: False,
@@ -49,8 +52,8 @@ class Lobby:
     ) -> None:
         self.table = table
         self.rng = rng
-        self.options = options
-        self.listen_window = listen_window
+        self._options = options
+        self._listen_window = listen_window
         self.recovery = recovery
         self.rigs = rigs
         self.stopped = stopped
@@ -59,6 +62,16 @@ class Lobby:
         self._log = log
         self._failing = False
         self._heard_at: float | None = None  # the last time the lobby heard anything
+
+    @property
+    def options(self) -> games.Options:
+        """The games' options as they are now."""
+        return self._options() if callable(self._options) else self._options
+
+    @property
+    def listen_window(self) -> float:
+        """The idle listen's window as it is now."""
+        return float(self._listen_window() if callable(self._listen_window) else self._listen_window)
 
     def run(self, welcome: bool = False) -> None:
         """Listen for a game's name and play it, until stopped(); the welcome first when

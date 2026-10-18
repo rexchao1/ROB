@@ -6,7 +6,9 @@ it is), but anyone may say the guess. A guess is a word said aloud ("crane", "is
 crane?") or spelled ("c r a n e", "see are ay en ee", "c as in cat"). A word the host
 does not know, or that is not five letters, uses no guess. The host starts its answer
 with the word it heard, so a mishearing can be undone at once ("no", "wrong, I said
-stare") for free; the last guess is confirmed before it is scored.
+stare") for free; the last guess is confirmed before it is scored: silence or an
+unclear reply to "final answer?" is asked once more, and still nothing keeps the guess
+unscored until the group says yes or another word (C9).
 
 The feedback is spoken short ("Crane. A is spot on, R is in there somewhere."), and
 the board (each row a list of [letter, "g" | "y" | "x"]) is reported for the
@@ -288,11 +290,13 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
     nudged = False
     not_caught = 0
     undo_ok = False
+    pending: str | None = None  # the last guess, said but not yet confirmed (C9)
 
     while True:
         heard = hear(table, LISTEN_SECONDS)
         tokens = _words(heard)
-        if not ears.meaningful(heard, answering=True):
+        confirmed = pending is not None and ears.says_yes(heard)  # the yes to a pending last guess
+        if not confirmed and not ears.meaningful(heard, answering=True):
             silent += 1
             if silent == 1 and not nudged:
                 table.say(rng.choice(_NUDGE))
@@ -305,28 +309,32 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
             continue
         silent = 0
 
-        if _has(tokens, _GIVE_UP):
-            table.say(f"Fine. The word was {answer}.")
-            abandon(table, state)
-            table.say(lines.GOOD_GAME)
-            return
-        if ears.wants_later(heard):
-            table.say(rng.choice(_HOLD))
-            nudged = True
-            continue
-        if _has(tokens, _RECAP):
-            table.say(recap(board))
-            continue
-
-        word, unknown = read_guess(heard)
-        if undo_ok and _correction(tokens):
-            undo_ok = False
-            board.pop()
-            tried.pop()
-            report()
-            if word is None:
-                table.say(rng.choice(("My bad. What was it?", "Oops. Say it again?")))
+        if confirmed:
+            word, unknown, pending = pending, None, None
+        else:
+            pending = None
+            if _has(tokens, _GIVE_UP):
+                table.say(f"Fine. The word was {answer}.")
+                abandon(table, state)
+                table.say(lines.GOOD_GAME)
+                return
+            if ears.wants_later(heard):
+                table.say(rng.choice(_HOLD))
+                nudged = True
                 continue
+            if _has(tokens, _RECAP):
+                table.say(recap(board))
+                continue
+
+            word, unknown = read_guess(heard)
+            if undo_ok and _correction(tokens):
+                undo_ok = False
+                board.pop()
+                tried.pop()
+                report()
+                if word is None:
+                    table.say(rng.choice(("My bad. What was it?", "Oops. Say it again?")))
+                    continue
         undo_ok = False
 
         if word is None:
@@ -342,14 +350,23 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
             table.say(f"Already tried {word}.")
             continue
 
-        if len(tried) == GUESSES - 1:  # the last guess: make sure before it counts
-            table.say(f"{word.capitalize()}, final answer?")
-            reply = hear(table, CONFIRM_SECONDS)
-            other, _ = read_guess(reply)
-            if other is not None and other != word and other not in tried:
-                word = other
-            elif ears.says_no(reply) or _correction(_words(reply)):
-                table.say("Okay, say it again.")
+        if len(tried) == GUESSES - 1 and not confirmed:  # the last guess: make sure before it counts
+            for prompt in (f"{word.capitalize()}, final answer?", "Final answer? Yes or no."):
+                table.say(prompt)
+                reply = hear(table, CONFIRM_SECONDS)
+                other, _ = read_guess(reply)
+                if other is not None and other != word and other not in tried:
+                    word, confirmed = other, True
+                    break
+                if ears.says_no(reply) or _correction(_words(reply)):
+                    table.say("Okay, say it again.")
+                    break
+                if ears.says_yes(reply) or other == word:
+                    confirmed = True
+                    break
+            else:
+                pending = word  # still nothing: kept unscored until a yes or another word (C9)
+            if not confirmed:
                 continue
 
         marks = score(word, answer)

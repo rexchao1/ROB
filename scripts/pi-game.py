@@ -10,7 +10,8 @@ import json, os, re, subprocess, sys, time, urllib.request
 from pathlib import Path
 ROOT = str(Path(__file__).resolve().parents[1])
 sys.path.insert(0, ROOT)
-from brain import lines
+from brain import keys, lines
+from brain.__main__ import TEST_TABLE_TOKEN
 
 PY = ROOT + "/.venv/bin/python"
 FIVE = [{"bearing": b} for b in (-60, -30, 0, 30, 60)]
@@ -102,15 +103,20 @@ def main():
         else:
             host = "0.0.0.0" if mode == "remote" else "127.0.0.1"
             port = "8090" if mode == "remote" else "0"
-            brain_p, (table, url) = spawn(args + ["--referee", "remote", "--table-host", host, "--table-port", port],
+            # The Table's token (D85): over the network, the one qnx/deploy.sh carried to the Pi (~/.gm-table-token), so
+            # the brain is told to use it too; on loopback, the test brain's fixed one.
+            token = keys.read_env().get("GM_TABLE_TOKEN") if mode == "remote" else TEST_TABLE_TOKEN
+            if not token:
+                sys.exit("pi-game.py: no GM_TABLE_TOKEN in .env.local: start the real brain once with --referee remote, then qnx/deploy.sh")
+            brain_p, (table, url) = spawn(args + ["--referee", "remote", "--table-host", host, "--table-port", port, "--table-token", token],
                                           [r"table for the referee at (http://\S+)", r"listening on (http://\S+)"], "brain")
             procs.append(brain_p)
             if mode == "remote":
                 table = f"http://{mac}:{port}"
-                ssh = ["ssh", "-tt", *os.environ.get("GM_SSH_OPTS", "").split(), pi, f"cd gm && exec python3 -m brain.referee --table {table}"]
+                ssh = ["ssh", "-tt", *os.environ.get("GM_SSH_OPTS", "").split(), pi, f'cd gm && exec python3 -m brain.referee --table {table} --token-file "$HOME/.gm-table-token"']
                 ref_p, _ = spawn(ssh, [r"(attached) to the table"], "referee on the Pi", timeout=60)
             else:
-                ref_p, _ = spawn([PY, "-S", "-m", "brain.referee", "--table", table], [r"(attached) to the table"], "referee")
+                ref_p, _ = spawn([PY, "-S", "-m", "brain.referee", "--table", table, "--token", token], [r"(attached) to the table"], "referee")
             procs.append(ref_p)
             print(f"referee attached ({mode}) to {table}", flush=True)
         result = play(url, fake)

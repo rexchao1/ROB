@@ -14,7 +14,9 @@ each a night and a day:
 
 After every elimination the win check (D19): no Mafia left, the village wins; the Mafia
 as many as everyone else, the Mafia win. A new round clears the night's warnings and
-lets the players who sat out back in (D11).
+lets the players who sat out back in (D11). "Restart the round" (D88) starts the
+current round's night again with the same roles and nothing undone: whoever is out
+stays out; the round's warnings and sit-outs are cleared.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ import random
 from typing import Any
 
 from brain import ears, lines
-from brain.games.common import Options, State, abandon, deal, finish, hear, heads_down_check, vote, whisper
+from brain.games.common import GameStopped, Options, State, abandon, deal, finish, hear, heads_down_check, vote, whisper
 from brain.table import Card, Table
 
 MAFIA, DOCTOR, VILLAGER = lines.MAFIA, lines.DOCTOR, lines.VILLAGER
@@ -70,12 +72,23 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
             finish(table, state, None, rng)
             return
         state.round += 1
+        if _round(table, rng, roles, state, options):
+            return
+
+
+def _round(table: Table, rng: random.Random, roles: dict[int, str], state: State, options: Options) -> bool:
+    """One round, a night and a day; True when the game ended. "Restart the round"
+    (D88) starts its night again: "Okay, this round again.", same roles, nothing undone."""
+    while True:
         state.warnings.clear()
         state.sitting_out.clear()
-        if _night(table, rng, roles, state, options):
-            return
-        if _day(table, rng, roles, state, options):
-            return
+        try:
+            return _night(table, rng, roles, state, options) or _day(table, rng, roles, state, options)
+        except GameStopped as stop:
+            if not stop.round:
+                raise
+            table.look(None)
+            table.say(lines.ROUND_AGAIN)
 
 
 def _awake(roles: dict[int, str], role: str, state: State) -> bool:

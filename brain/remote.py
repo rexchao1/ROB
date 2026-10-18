@@ -22,8 +22,11 @@ Table whose every method is one of those calls.
 A Card travels as {"text", "sub"}. A GameStopped the host raises (a stop said during
 the deal) reaches the referee as GameStopped, so its game ends as at any listen. A call is named by (session, id): RemoteTable sends
 the same call again after a dropped connection or a "pending" answer, and the server
-runs it once and answers the repeat from it. With a token, every request carries
-"Authorization: Bearer <token>".
+runs it once and answers the repeat from it. The token is required (D85): every request
+carries "Authorization: Bearer <token>", and one without it, or with another, is
+answered 401 before its body is read. A wait or a listen longer than MAX_LISTEN, the
+gateway's longest listen, is refused with an error answer, never clamped: a call
+cannot park the one worker thread.
 
 The clock. One worker thread runs every call. On a VirtualClock (test mode) it is
 registered while a referee is attached, so advance() waits for it: asleep on the clock
@@ -49,6 +52,7 @@ from __future__ import annotations
 import hmac
 import http.client
 import json
+import math
 import secrets
 import sys
 import threading
@@ -69,6 +73,8 @@ PORT = 8090
 LEASE = 5.0  # real seconds without a request before the referee counts as gone
 HOLD = 15.0  # real seconds a /table/call waits for its answer before answering "pending"
 PATIENCE = 60.0  # real seconds RemoteTable keeps retrying an unreachable server
+MAX_LISTEN = 30.0  # the gateway's longest listen (brain/host.py chunks by it): the longest a wait or a listen over the Table may be
+MAX_BODY = 1 << 20  # bytes a request body may have; more is 413
 METHODS = ("now", "wait", "say", "look", "count", "prepare", "show_private", "listen", "faces_up", "mood", "report", "quip", "chat")
 
 
@@ -127,7 +133,8 @@ class _Job:
 
 
 class TableServer:
-    """Serve `table` to a referee on (host, port); port 0 picks a free one.
+    """Serve `table` to a referee on (host, port); port 0 picks a free one. `token` is
+    required: the referee sends it with every request.
 
     setup: run on the worker at start() and after every reset(), before any call (the
     Host's own setup: the screen on, the idle look). rigs: game -> the next rig of that
@@ -149,6 +156,8 @@ class TableServer:
         hold: float = HOLD,
         log: Callable[[str], None] | None = None,
     ) -> None:
+        if not token:
+            raise ValueError("the Table needs a token (D85): --table-token, or GM_TABLE_TOKEN in .env.local")
         self.table = table
         self.clock = clock
         self.token = token
@@ -288,6 +297,8 @@ class TableServer:
     # --- the worker ---------------------------------------------------------------
 
     def _dispatch(self, method: str, args: list[Any], kwargs: dict[str, Any]) -> Any:
+        if method in ("wait", "listen"):
+            _check_seconds(args[0] if args else kwargs.get("seconds"), method)
         if method == "prepare" and args and isinstance(args[0], list):
             args = [[_card(c) for c in args[0]], *args[1:]]
         elif method == "show_private" and len(args) == 2:
@@ -338,7 +349,18 @@ class TableServer:
             return {"ok": False, "kind": "error", "type": type(e).__name__, "message": str(e)}
 
 
+def _check_seconds(seconds: Any, method: str) -> None:
+    """A wait or a listen holds the worker for its whole length: a finite number of
+    seconds, at most MAX_LISTEN, or a ValueError the referee gets as the call's answer."""
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not 0 <= seconds <= MAX_LISTEN:
+        raise ValueError(f"{method}: seconds must be a number from 0 to {MAX_LISTEN:g}, not {seconds!r}")
+
+
 class _BadRequest(Exception):
+    pass
+
+
+class _TooLarge(Exception):
     pass
 
 
@@ -359,14 +381,12 @@ def _handler(server: TableServer) -> type[BaseHTTPRequestHandler]:
 
         def _route(self, method: str) -> None:
             path = urlsplit(self.path).path
-            length = int(self.headers.get("Content-Length") or 0)
-            body = self.rfile.read(length) if length > 0 else b""
-            if server.token is not None and not hmac.compare_digest(
-                self.headers.get("Authorization") or "", f"Bearer {server.token}"
-            ):
+            if not self._has_token():
+                self.close_connection = True  # the body was not read: nothing else can follow on this connection
                 self._send(401, {"error": "a referee needs the table's token"})
                 return
             try:
+                body = self._body()
                 if (method, path) == ("POST", "/table/call"):
                     status, payload = 200, server.call(_json(body))
                 elif (method, path) == ("POST", "/table/hello"):
@@ -383,6 +403,9 @@ def _handler(server: TableServer) -> type[BaseHTTPRequestHandler]:
                     status, payload = 200, {"attached": server.attached(), "epoch": server.epoch}
                 else:
                     status, payload = 404, {"error": f"no {method} {path}"}
+            except _TooLarge:
+                self.close_connection = True
+                status, payload = 413, {"error": f"the body is over {MAX_BODY} bytes"}
             except (_BadRequest, ValueError) as e:
                 status, payload = 400, {"error": str(e)}
             except Exception as e:  # every request gets an answer, never a dropped socket
@@ -391,6 +414,21 @@ def _handler(server: TableServer) -> type[BaseHTTPRequestHandler]:
                 self._send(status, payload)
             except TypeError as e:  # a result that does not travel
                 self._send(500, {"error": f"TypeError: {e}"})
+
+        def _has_token(self) -> bool:
+            """The bearer, compared on bytes: a header of any text cannot raise."""
+            sent = (self.headers.get("Authorization") or "").encode("latin-1", "replace")
+            return hmac.compare_digest(sent, f"Bearer {server.token}".encode())
+
+        def _body(self) -> bytes:
+            """The body, at most MAX_BODY bytes; a length that is not a number is a 400."""
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                raise _BadRequest("Content-Length is not a number") from None
+            if length > MAX_BODY:
+                raise _TooLarge()
+            return self.rfile.read(length) if length > 0 else b""
 
         def _send(self, status: int, payload: Any) -> None:
             data = _dumps(payload)

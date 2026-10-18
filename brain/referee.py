@@ -1,7 +1,7 @@
 """`python3 -m brain.referee --table http://MAC:8090`: the game master's rules on the
 QNX Pi, playing through the Table the brain on the Mac serves (brain/remote.py).
 
-  python3 -m brain.referee --table URL [--token T] [--seed N]
+  python3 -m brain.referee --table URL (--token T | --token-file PATH) [--seed N]
 
 The same loop as the Host's own (brain/lobby.py, shared with brain/host.py): listen
 for a game's name, play it (brain/games/), go back to idle; a game that fails says the
@@ -28,6 +28,7 @@ import random
 import sys
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from brain import games
@@ -128,11 +129,22 @@ class Referee:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python3 -m brain.referee")
     p.add_argument("--table", required=True, help="the brain's Table for the referee, http://HOST:PORT (its port 8090 by default)")
-    p.add_argument("--token", default=os.environ.get("GM_TABLE_TOKEN") or None, help="the table's token (default $GM_TABLE_TOKEN)")
+    p.add_argument("--token", default=os.environ.get("GM_TABLE_TOKEN") or None, help="the table's token (default $GM_TABLE_TOKEN); the brain requires one (D85)")
+    p.add_argument("--token-file", default=None, metavar="PATH", help="a file holding the table's token (one line), so it is on no command line: qnx/deploy.sh puts it in ~/.gm-table-token on the Pi")
     p.add_argument("--seed", type=int, default=None, help="the rng's seed (default: the brain's, else random)")
     args = p.parse_args(argv)
+    token = args.token
+    if args.token_file:
+        try:
+            token = Path(args.token_file).read_text().strip()
+        except OSError as e:
+            print(f"python3 -m brain.referee: cannot read the token file: {e}", file=sys.stderr)
+            return 2
+    if not token:
+        print("python3 -m brain.referee: the table needs its token: --token, --token-file or GM_TABLE_TOKEN", file=sys.stderr)
+        return 2
     try:
-        table = RemoteTable(args.table, token=args.token)
+        table = RemoteTable(args.table, token=token)
     except ValueError as e:
         print(f"python3 -m brain.referee: {e}", file=sys.stderr)
         return 2

@@ -6,9 +6,11 @@ out: 5 s in the first round, a second less each round, never under 3 s. Silence,
 pass, a repeat or a wrong answer is out. The last player in wins. A new category comes
 each round.
 
-Judging is code: an answer on the category's list counts; anything else goes to the
-talk model ("yes" or "no", Table.chat "hotseat.judge"), and with no model it counts
-unless it is plainly from another category's list. Standard library only.
+Judging is code (D104): an answer on the category's list counts; anything else counts
+unless it is plainly from another category's list, and a talk model (Table.chat
+"hotseat.judge", "yes" or "no") may only advise: its "no" makes the host ask the table
+"Rambutan? Does that count?" and take the group's yes or no (D106). Standard library
+only.
 
 A rig fixes the categories for a demo: {"categories": ["fruits", "colors"]}.
 """
@@ -19,7 +21,7 @@ import random
 import re
 from typing import Any
 
-from brain import lines
+from brain import ears, lines
 from brain.games.common import Options, State, finish, hear
 from brain.games.hotseat_words import CATEGORIES, GIVE_UP, NOISE
 from brain.table import Table
@@ -101,7 +103,8 @@ def _judge(table: Table, label: str, heard: str, answer: str) -> bool | None:
 
 
 def judge(table: Table, category: str, heard: str, used: set[str]) -> tuple[str, str | None]:
-    """("ok", answer key) or (why out, None): "time", "pass", "repeat" or "wrong"."""
+    """("ok", answer key), ("ask", answer key) when a model's "no" sends the answer to
+    the table (D106), or (why out, None): "time", "pass", "repeat" or "wrong"."""
     label = CATEGORIES[category][0]
     tokens = _tokens(heard)
     key = _find(tokens, _KEYS[category])
@@ -117,8 +120,10 @@ def judge(table: Table, category: str, heard: str, used: set[str]) -> tuple[str,
             return "repeat", None
         elsewhere = any(_find(tokens, keys) for k, keys in _KEYS.items() if k != category)
         ruling = _judge(table, label, heard, key)
-        if ruling is False or (ruling is None and elsewhere):
+        if elsewhere and ruling is not True:
             return "wrong", None
+        if ruling is False:
+            return "ask", key
     if key in used:
         return "repeat", None
     return "ok", key
@@ -174,6 +179,9 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
             table.say(f"{lines.player(seat)}, go!")
             heard = hear(table, seconds)
             verdict, key = judge(table, category, heard, used)
+            if verdict == "ask" and key is not None:  # D106: the table decides, not the model
+                table.say(f"{key.capitalize()}? Does that count?")
+                verdict = "ok" if ears.says_yes(hear(table, options.vote_seconds)) else "wrong"
             if verdict == "ok" and key is not None:
                 used.add(key)
                 if rng.random() < 0.5:

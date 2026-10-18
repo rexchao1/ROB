@@ -108,11 +108,52 @@ def test_a_full_pool_offers_the_lease_that_ran_out(tmp_path):
     assert ack.type == dhcpd.ACK and leases.holder("10.77.0.100") == PHONE
 
 
-def test_a_declined_address_is_skipped(tmp_path):
+def test_a_declined_address_is_skipped_only_when_this_server_offered_it_to_that_client(tmp_path):
+    """A5: a DECLINE names an address the client found in use; one it was never offered
+    or leased, or from outside the pool, is ignored, so a stranger cannot empty the pool."""
     srv = server(tmp_path)
-    answer(srv, request(dhcpd.DECLINE, options=[ip_opt(50, "10.77.0.100")]))
+    answer(srv, request(dhcpd.DECLINE, options=[ip_opt(50, "10.77.0.100")]))  # never offered to this client
+    answer(srv, request(dhcpd.DECLINE, mac=PHONE, options=[ip_opt(50, "10.77.0.2")]))  # the Mac's, outside the pool
+    assert srv.leases.declined == {}
+    offer, _ = answer(srv, request(dhcpd.DISCOVER))
+    assert offer.yiaddr == "10.77.0.100"
+    answer(srv, request(dhcpd.DECLINE, mac=PHONE, options=[ip_opt(50, "10.77.0.100")]))  # someone else declines our offer
+    assert srv.leases.declined == {}
+    answer(srv, request(dhcpd.DECLINE, options=[ip_opt(50, "10.77.0.100")]))  # the client it was offered to
+    assert list(srv.leases.declined) == ["10.77.0.100"]
     offer, _ = answer(srv, request(dhcpd.DISCOVER))
     assert offer.yiaddr == "10.77.0.101"
+    answer(srv, request(dhcpd.REQUEST, mac=PHONE, options=[ip_opt(54, "10.77.0.1"), ip_opt(50, "10.77.0.102")]))
+    answer(srv, request(dhcpd.DECLINE, mac=PHONE, options=[ip_opt(50, "10.77.0.102")]))  # a leased address, declined by its holder
+    assert sorted(srv.leases.declined) == ["10.77.0.100", "10.77.0.102"] and srv.leases.holder("10.77.0.102") is None
+
+
+def test_declines_are_capped_and_age_out(tmp_path):
+    now = [1000.0]
+    leases = dhcpd.Leases(dhcpd.pool_range("10.77.0.100-10.77.0.199"), None, 3600, clock=lambda: now[0])
+    srv = dhcpd.Server("10.77.0.1", "255.255.255.0", leases, log=lambda m: None)
+    for i in range(100):
+        mac = f"3c:22:fb:00:01:{i:02x}"
+        offer, _ = answer(srv, request(dhcpd.DISCOVER, mac=mac))
+        answer(srv, request(dhcpd.DECLINE, mac=mac, options=[ip_opt(50, offer.yiaddr)]))
+    assert len(leases.declined) == dhcpd.MAX_DECLINED == 64
+    offer, _ = answer(srv, request(dhcpd.DISCOVER))  # the pool is not empty: the oldest declines were let go
+    assert offer is not None and offer.yiaddr in leases.pool
+    now[0] += dhcpd.DECLINED_FOR + 1
+    answer(srv, request(dhcpd.DISCOVER, mac=PHONE))  # any packet prunes the old entries
+    assert leases.declined == {}
+
+
+def test_a_hostname_reaches_the_log_and_the_lease_file_as_printable_ascii_only(tmp_path):
+    logged = []
+    leases = dhcpd.Leases(dhcpd.pool_range("10.77.0.100-10.77.0.102"), str(tmp_path / "leases.json"), 3600)
+    srv = dhcpd.Server("10.77.0.1", "255.255.255.0", leases, log=logged.append)
+    name = "rob\x1b[2Jot\n\u00e9" + "x" * 100
+    answer(srv, request(dhcpd.REQUEST, options=[ip_opt(54, "10.77.0.1"), ip_opt(50, "10.77.0.100"), (12, name.encode("utf-8"))]))
+    text = "\n".join(logged) + (tmp_path / "leases.json").read_text()
+    assert "\x1b" not in text and "\u00e9" not in text and "rob?" in text
+    assert all(32 <= ord(c) < 127 or c == "\n" for c in text)
+    assert len(leases.by_mac[ROBOT]["hostname"]) <= 64
 
 
 def test_the_pool_must_sit_inside_the_network(capsys):

@@ -6,7 +6,9 @@ The rules and the game state run on the Pi (QNX 8.0, Python 3.14, standard libra
     npm run brain -- --referee remote --pitch 25    # on the Mac: the Table on :8090, no loop of its own
     qnx/referee.sh http://172.20.10.13:8090         # the referee on the Pi, in the foreground (Ctrl-C stops it)
 
-Both scripts take the Pi as `user@host` (default `$GM_PI`, else `qnxuser@10.77.0.1` when the Mac is on the Pi's own network, else `qnxuser@172.20.10.14` on the phone hotspot) and extra ssh options in `$GM_SSH_OPTS`. With `--table-token T` on the brain, set `GM_TABLE_TOKEN=T` before `qnx/referee.sh`.
+Both scripts take the Pi as `user@host` (default `$GM_PI`, else `qnxuser@10.77.0.1` when the Mac is on the Pi's own network, else `qnxuser@172.20.10.14` on the phone hotspot) and extra ssh options in `$GM_SSH_OPTS`.
+
+The Table takes calls only with its token (D85): the token is required, not optional. The brain generates one at its first `--referee remote` start when neither `--table-token` nor `GM_TABLE_TOKEN` is set, writes it to `.env.local` as `GM_TABLE_TOKEN` (owner-only) and says so; `qnx/deploy.sh` reads it from there and writes it to `~/.gm-table-token` on the Pi (mode 600) over ssh's stdin, so it is on no command line and in no process list on either machine. `qnx/referee.sh` and the boot referee (`gm-net.sh`) start the referee with `--token-file` on that file. A referee without the token, or with another, is answered 401 and stops with exit code 3; the one attached plays on. Start the brain once, deploy once more, and the token is in place. A wait or a listen longer than the gateway's longest listen (30 s) is refused over the Table.
 
 The referee can start before or after the brain and survives either restarting: it keeps trying to reach the Table, attaches again after a restart, and a game cut off that way ends with the recovery line. One referee at a time: a new one takes the table and the old one stops.
 

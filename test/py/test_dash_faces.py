@@ -11,8 +11,10 @@ import urllib.request
 import cv2
 import numpy as np
 from calls import call
+from conftest import dash
 
 from brain import portraits, vision
+from brain.__main__ import TEST_DASH_KEY
 
 FIVE = [{"bearing": b} for b in (-60, -30, 0, 30, 60)]
 HEX = re.compile(r"[0-9a-f]{6}")
@@ -54,7 +56,7 @@ def _blocking_play(monkeypatch, brain):
 def test_the_robot_is_speaking_only_while_a_dashboard_line_plays(brain, monkeypatch):
     release, started = _blocking_play(monkeypatch, brain)
     assert _robot(brain)["speaking"] is False
-    assert call(brain.url, "POST", "/dash/api/say", {"text": "Hold that thought."}) == (200, {"ok": True})
+    assert dash(brain.url, "POST", "/dash/api/say", {"text": "Hold that thought."}) == (200, {"ok": True})
     assert started.wait(5)
     robot = _robot(brain)
     assert robot["speaking"] is True and robot["line"] == "Hold that thought." and robot["speaking_since"] > 0
@@ -91,20 +93,20 @@ def test_the_mood_the_ring_and_the_face_style_are_mirrored(brain):
 
 def test_volume_is_read_from_the_robot_and_set_live(brain, fake):
     assert _until(lambda: _robot(brain)["volume"] == 70)  # the fake's get_device_info
-    assert call(brain.url, "POST", "/dash/api/volume", {"volume": 35}) == (200, {"volume": 35})
+    assert dash(brain.url, "POST", "/dash/api/volume", {"volume": 35}) == (200, {"volume": 35})
     sets = [c for c in fake.device.calls if c["tool"] == "set_volume" and c["error"] is None]
     assert [c["args"] for c in sets] == [{"volume": 35}]
     assert _robot(brain)["volume"] == 35
     for bad in ({"volume": 101}, {"volume": -1}, {"volume": "50"}, {"volume": True}, {"volume": 50.5}, {}):
-        assert call(brain.url, "POST", "/dash/api/volume", bad)[0] == 400
+        assert dash(brain.url, "POST", "/dash/api/volume", bad)[0] == 400
     assert len([c for c in fake.device.calls if c["tool"] == "set_volume"]) == 1
 
 
 def test_after_a_count_each_seat_gets_a_face_and_an_avatar_off_the_hosts_thread(brain):
     assert call(brain.url, "GET", "/dash/api/state")[1]["seats_info"] == []
-    assert _raw(brain.url + "/dash/api/seat/1.jpg")[0] == 404
+    assert _raw(brain.url + "/dash/api/seat/1.jpg?key=" + TEST_DASH_KEY)[0] == 404
     call(brain.url, "POST", "/test/table", {"faces": FIVE})
-    call(brain.url, "POST", "/dash/api/game", {"name": "imposter"})
+    dash(brain.url, "POST", "/dash/api/game", {"name": "imposter"})
     call(brain.url, "POST", "/test/advance", {"seconds": 20})
     assert len(call(brain.url, "GET", "/dash/api/state")[1]["seats"]) == 5
 
@@ -128,16 +130,17 @@ def test_after_a_count_each_seat_gets_a_face_and_an_avatar_off_the_hosts_thread(
     again = call(brain.url, "GET", "/dash/api/state")[1]["seats_info"]
     assert [s["avatar"]["seed"] for s in again] == [s["avatar"]["seed"] for s in info]  # stable between polls
 
-    status, headers, data = _raw(brain.url + "/dash/api/seat/3.jpg")
+    status, headers, data = _raw(brain.url + "/dash/api/seat/3.jpg?key=" + TEST_DASH_KEY)
     assert status == 200 and headers["Content-Type"] == "image/jpeg"
+    assert _raw(brain.url + "/dash/api/seat/3.jpg")[0] == 403  # a player's face leaves the machine for the page only (D86)
     image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     assert image.shape == (portraits.SIZE, portraits.SIZE, 3)
     for missing in ("6.jpg", "0.jpg", "x.jpg", "1.png"):
-        assert _raw(brain.url + "/dash/api/seat/" + missing)[0] == 404
+        assert _raw(brain.url + "/dash/api/seat/" + missing + "?key=" + TEST_DASH_KEY)[0] == 404
 
     call(brain.url, "POST", "/test/reset")
     assert call(brain.url, "GET", "/dash/api/state")[1]["seats_info"] == []
-    assert _raw(brain.url + "/dash/api/seat/1.jpg")[0] == 404
+    assert _raw(brain.url + "/dash/api/seat/1.jpg?key=" + TEST_DASH_KEY)[0] == 404
 
 
 def test_the_avatar_script_is_served_from_the_vendor_folder_only(brain):

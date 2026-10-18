@@ -79,7 +79,7 @@ referee_loop() {  # the referee as qnxuser against the Mac's Table, until anothe
   table="http://$MAC_ADDR:$TABLE_PORT"
   while [ ! -e "$RUN/referee-off" ]; do
     if [ -d /data/home/qnxuser/gm/brain ]; then
-      on -u qnxuser sh -c 'cd /data/home/qnxuser/gm && exec python3 -m brain.referee --table "$0"' "$table" >> "$LOG/referee.log" 2>&1
+      on -u qnxuser sh -c 'cd /data/home/qnxuser/gm && exec python3 -m brain.referee --table "$0" --token-file /data/home/qnxuser/.gm-table-token' "$table" >> "$LOG/referee.log" 2>&1  # the token qnx/deploy.sh put there (D85)
       rc=$?
       if [ "$rc" = 3 ]; then
         say "referee: another referee took the table; this one stays off (gm-net.sh referee-restart)"

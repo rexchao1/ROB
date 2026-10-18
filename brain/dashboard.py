@@ -18,6 +18,10 @@ Mac or a phone on the same network (open the server to it with --host 0.0.0.0).
                               {"action": "reset" | "stop"}: heard at the host's next
                               listen, as if someone said it
 
+Both POSTs need the dashboard's key (D86), which the server checks before handle() is
+called: the page reads it from its own address (?key=, as the brain prints it) and
+sends it as X-Dash-Key.
+
 It never shows or takes an API key: the keys stay in .env.local, and talk_model takes a
 model name only.
 """
@@ -45,7 +49,8 @@ LABELS = {
 SPOKEN = {"twenty": "twenty questions", "hotseat": "hot seat"}  # what "let's play ..." says
 ACTIONS = {"reset": "reset", "stop": "stop the game"}
 _MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}")
-_KEYLIKE = ("sk-", "aiza", "xi-")  # an API key pasted into the model box is refused
+_KEYLIKE = ("sk-", "sk_", "aiza", "xi-")  # an API key pasted into the model box is refused
+_HEXRUN = re.compile(r"[0-9a-fA-F]{32}")  # so is anything with a key's worth of hex in it
 _NO_TALK = {"ok": False, "provider": None, "model": None, "line": None, "error": "the talk is not set up", "ms": 0}
 
 
@@ -97,6 +102,8 @@ def change(host: Any, body: dict[str, Any]) -> dict[str, Any]:
     changes: dict[str, Any] = {}
     speaker = None
     for name, value in body.items():
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{name} is a name, not {type(value).__name__}")  # a list or an object would be a 500 further down
         if name == "persona":
             if value not in personas.PERSONAS:
                 raise ValueError(f"no personality {value!r}")
@@ -114,7 +121,7 @@ def change(host: Any, body: dict[str, Any]) -> dict[str, Any]:
         elif name == "talk_model":
             if value in (None, ""):
                 value = None
-            elif not isinstance(value, str) or not _MODEL.fullmatch(value) or value.lower().startswith(_KEYLIKE):
+            elif not _MODEL.fullmatch(value) or value.lower().startswith(_KEYLIKE) or _HEXRUN.search(value):
                 raise ValueError("talk_model is a model name, like claude-haiku-5-5")
         elif name == "effort":
             if value not in talk.EFFORTS:
@@ -285,7 +292,13 @@ PAGE = """<!doctype html>
 <script>
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-const json = (path, body) => fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}).then(r => r.json());
+// The dashboard's key (D86): from the page's own address (?key=, as the brain prints it), kept for the tab.
+const DASH_KEY = (() => {
+  const fromUrl = new URLSearchParams(location.search).get("key");
+  try { if (fromUrl) sessionStorage.setItem("gm-key", fromUrl); return fromUrl || sessionStorage.getItem("gm-key") || ""; }
+  catch (e) { return fromUrl || ""; }
+})();
+const json = (path, body) => fetch(path, {method:"POST", headers:{"Content-Type":"application/json", "X-Dash-Key":DASH_KEY}, body:JSON.stringify(body)}).then(r => r.json());
 const post = (path, body) => json(path, body).then(j => { if (j.error) alert(j.error); poll(); });
 const PROVIDERS = {anthropic:["Claude", "Anthropic"], gemini:["Gemini", "Google"], ollama:["Ollama", "On this Mac"], off:["Scripted", "No AI, ROB's own lines"]};
 const ENGINES = {piper:["Built-in", "On this Mac, no key"], eleven:["ElevenLabs", "Live, needs a key"]};

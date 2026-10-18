@@ -76,6 +76,26 @@ def test_flavor_never_names_a_player_or_a_seat():
     assert lines.flavor("night", rng) in lines.FLAVOR["night"]
 
 
+def test_too_few_reads_right_for_one_player():
+    assert lines.too_few("wordle", 1) == "Wordle needs at least one player."
+    assert lines.too_few("mafia", 4) == "Mafia needs at least four players."
+
+
+def test_every_game_has_a_rules_line_of_its_own():
+    for game in lines.MINIMUM:
+        assert game in lines.RULES, game
+        assert lines.rules(game).endswith("Want to play it?")
+
+
+def test_d94_the_confirm_line_names_the_game():
+    assert lines.confirm_game("hotseat") == "Hot Seat? Say yes to play it."
+    assert lines.confirm_game("mafia") == "Mafia? Say yes to play it."
+
+
+def test_d88_the_round_again_line_is_exact():
+    assert lines.ROUND_AGAIN == "Okay, this round again."
+
+
 def test_fixed_lines_cover_the_per_seat_lines_once_each():
     fixed = lines.fixed_lines()
     assert len(fixed) == len(set(fixed))
@@ -83,7 +103,8 @@ def test_fixed_lines_cover_the_per_seat_lines_once_each():
         lines.count_line(5), lines.only_see(5), lines.lean_in(10), lines.warn(3), lines.sit_out(3),
         lines.who(7), lines.killed(4), lines.was(4, lines.VILLAGER), lines.village_wins(1), lines.MAFIA_WIN,
         lines.points(9), lines.total(23), lines.ONE_AT_A_TIME, lines.time_left(60), lines.TIME_VOTE,
-        lines.imposter_survives(3), lines.clue(5), lines.psychic_clue(2),
+        lines.imposter_survives(3), lines.clue(5), lines.psychic_clue(2), lines.ROUND_AGAIN,
+        *[lines.confirm_game(g) for g in lines.MINIMUM], lines.too_few("wordle", 1),
     ]:
         assert line in fixed, line
     assert lines.tally([(4, 3), (1, 2)]) not in fixed  # composed at play time

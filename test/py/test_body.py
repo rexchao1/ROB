@@ -2,15 +2,18 @@
 gateway as the right tool with the right arguments (read back from the fake's record,
 the far side), and every kind of refusal raises BodyError."""
 
+import json
 import os
 import socket
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import numpy as np
 import pytest
 
 import table
 from brain import cards
-from brain.body import Body, BodyError, Gateway
+from brain.body import Body, BodyError, Gateway, _QueueFull
 from brain.table import Card
 from brain.voice import encode_test_pcm
 
@@ -48,6 +51,17 @@ def test_photo_is_the_cameras_frame_as_bgr_and_its_capture_file_is_deleted(fake,
     call = _calls(fake, "take_photo")[0]
     assert call["args"] == {"question": ""}
     assert not os.path.exists(call["answer"]["image_path"])
+
+
+def test_photo_deletes_a_capture_only_under_the_gateways_own_folder(fake, tmp_path):
+    """A gateway answer naming any path must not have the brain delete that file."""
+    fake.device.push_frame(table.png(0, [table.Face(0)]), None)
+    body = Body(Gateway(fake.mcp_url), fake.pcm_url, captures=tmp_path / "elsewhere")
+    assert body.photo().shape == (240, 320, 3)
+    path = _calls(fake, "take_photo")[0]["answer"]["image_path"]
+    assert os.path.exists(path)  # kept: not the folder this body was told the gateway writes to
+    os.remove(path)
+    assert str(Body(Gateway(fake.mcp_url), fake.pcm_url).captures).endswith(os.path.join(".stackchan", "captures"))
 
 
 def test_photo_with_nothing_on_the_camera_raises(body):
@@ -133,6 +147,59 @@ def test_no_gateway_raises():
     s.close()
     with pytest.raises(BodyError, match="no gateway"):
         Gateway(f"http://127.0.0.1:{port}/mcp", timeout=2).call("get_status")
+
+
+def _stub(answer):
+    """A loopback HTTP server that answers every POST with `answer` (JSON) and a session id."""
+    data = json.dumps(answer).encode()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Mcp-Session-Id", "s1")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *a):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
+    return server
+
+
+@pytest.mark.parametrize("answer", [42, "ok", [], {"result": "ok"}, {"result": 7}, {"jsonrpc": "2.0", "id": 1}, {"result": {"content": "nope"}},
+                                    {"result": {"content": [1, 2]}}, {"error": "boom"}])
+def test_a_malformed_json_rpc_answer_is_a_body_error_not_a_crash(answer):
+    """D4: a gateway answer without the JSON-RPC shape is BodyError, so the photo retry
+    and the pause loop's error handling see it."""
+    server = _stub(answer)
+    try:
+        with pytest.raises(BodyError):
+            Gateway(f"http://127.0.0.1:{server.server_address[1]}/mcp", timeout=2).call("get_status")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a_well_shaped_empty_result_is_taken(fake):
+    server = _stub({"jsonrpc": "2.0", "id": 1, "result": {}})
+    try:
+        gw = Gateway(f"http://127.0.0.1:{server.server_address[1]}/mcp", timeout=2)
+        assert gw.call("get_status").data is None
+        assert gw.tools() == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_the_gateways_retry_after_is_capped_at_five_seconds():
+    assert _QueueFull(60.0).retry_after == 5.0
+    assert _QueueFull(0.0).retry_after == 0.05
+    assert _QueueFull(0.3).retry_after == 0.3
 
 
 def _tone(seconds: float, amplitude: int) -> bytes:

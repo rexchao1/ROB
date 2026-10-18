@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { Brain, renderTable } from '../harness/brain.ts'
+import { Brain, dashKey, renderTable } from '../harness/brain.ts'
 
 // The harness smoke test: the brain spawns in test mode against the fake gateway;
 // /test/* reports what the brain holds, nothing pre-seeded; what a test sets on
@@ -71,6 +71,20 @@ describe('the brain in test mode against the fake gateway', () => {
     await brain.reset()
     await brain.rig('imposter', { word: 'beach', imposter: 3 })
     expect((await brain.request('POST', '/test/rig', { imposter: 3 })).status).toBe(400)
+  })
+
+  test('a dashboard write carries the test key (dashKey()), and is 403 without it', async () => {
+    await brain.reset()
+    expect((await brain.request('POST', '/dash/api/hear', { text: 'hello' })).status).toBe(403)
+    const res = await fetch(brain.url + '/dash/api/hear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dash-Key': dashKey() },
+      body: JSON.stringify({ text: 'hello' }),
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, pending: 1 })
+    expect((await brain.request('GET', '/dash/api/events')).status).toBe(403)
+    expect((await brain.request('GET', `/dash/api/events?key=${dashKey()}`)).status).toBe(200)
   })
 
   test('serves nothing it has not built', async () => {

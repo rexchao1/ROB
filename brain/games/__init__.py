@@ -4,7 +4,9 @@ and the host goes back to listening for the next one.
 play() gathers the table first (count, the count line, agreement on the count; D5,
 D6), then runs the game. The group can stop at any listen by saying so ("stop the
 game"; D27), or start over ("reset", "start over", "restart"), which ends the game
-and sends the host back to the welcome (D38). It returns how the game went:
+and sends the host back to the welcome (D38); each is a short plain command, not a
+sentence that contains the word (D87). "Restart the round" (D88) starts Mafia's
+current round again and stops any other game. It returns how the game went:
 
   "played"    the game ran to its end (a deal that could not finish included)
   "stopped"   the group stopped it

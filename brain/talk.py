@@ -53,7 +53,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env.local"
 
 TIMEOUT = 4.0  # seconds: the least any call waits; past its own wait the game says a scripted line
-MAX_WORDS = 20
+MAX_WORDS = 16
 MAX_SENTENCES = 2
 
 EFFORTS = settings.CHOICES["effort"]  # low, medium, high, max: how hard the model thinks
@@ -115,7 +115,14 @@ STRUCTURED = {
 }
 
 _NUMBER_WORDS = "one two three four five six seven eight nine ten eleven twelve".split()
-_SEAT_NAMED = re.compile(r"\b(?:player|seat)s?\s+(?:\d+|" + "|".join(_NUMBER_WORDS) + r")\b", re.IGNORECASE)
+_ORDINALS = "first second third fourth fifth sixth seventh eighth ninth tenth".split()
+_SEAT_NUMBER = r"(?:\d+|" + "|".join(_NUMBER_WORDS + _ORDINALS) + r")"
+# "player three", "player number three", "seat 4", "number three", "the third player"
+_SEAT_NAMED = re.compile(
+    r"\b(?:(?:player|seat)s?\s+(?:number\s+)?" + _SEAT_NUMBER + r"|number\s+" + _SEAT_NUMBER
+    + r"|the\s+(?:" + "|".join(_ORDINALS) + r")\s+(?:player|seat))\b",
+    re.IGNORECASE,
+)
 _EMOJI = re.compile("[\U0001f000-\U0001faff☀-➿️‍]")
 _STAGE = re.compile(r"\*[^*]*\*|\([^)]*\)|\[[^\]]*\]")
 _SENTENCE = re.compile(r"[^.!?]+[.!?]*")
@@ -171,8 +178,8 @@ def key_for(provider: str) -> str | None:
 def fit(line: Any, facts: dict[str, Any] | None = None) -> str | None:
     """A model line fit to say out loud, or None: the first line only, stage directions,
     quotes and emoji stripped, dashes turned into commas; at most two sentences and
-    about twenty words; no assistant phrases; no "player three" unless the facts allow
-    seats (allow_seats=True)."""
+    about fifteen words; no assistant phrases; no "player three", "the third player"
+    or "number three" unless the facts allow seats (allow_seats=True)."""
     if not isinstance(line, str):
         return None
     facts = facts or {}

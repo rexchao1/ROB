@@ -75,7 +75,7 @@ def only_see(n: int) -> str:
 
 
 def see_more(n: int) -> str:
-    """A spoken count below the host's (not ruled; the mirror of D6)."""
+    """D90, a spoken count below the host's: "I see five. Is someone just watching?\""""
     return f"I see {number_word(n)}. Is someone just watching?"
 
 
@@ -84,8 +84,8 @@ COUNT_AGREED = "Great."
 
 
 def too_few(game: str, minimum: int) -> str:
-    """"Mafia needs at least four players.\""""
-    return f"{game_name(game)} needs at least {number_word(minimum)} players."
+    """"Mafia needs at least four players." / "Wordle needs at least one player.\""""
+    return f"{game_name(game)} needs at least {number_word(minimum)} player" + ("." if minimum == 1 else "s.")
 
 
 GAME_NAMES = {
@@ -122,6 +122,7 @@ def come_back(seat: int) -> str:
 CANT_DEAL = "I can't deal without everyone. Let's start over."
 STOPPING = "Okay, stopping the game."
 RESTARTING = "Okay, starting over."  # "reset" mid-game: the welcome comes next (D38)
+ROUND_AGAIN = "Okay, this round again."  # "restart the round" in Mafia: the night again (D88)
 DRAW = "That's enough rounds for one night. Let's call it a draw."
 GOOD_GAME = "Good game, everyone."
 
@@ -502,6 +503,11 @@ def instead(game: str) -> str:
     return f"Want to try {game_name(game)} instead?"
 
 
+def confirm_game(game: str) -> str:
+    """D94, a game's name heard inside other talk: "Hot Seat? Say yes to play it.\""""
+    return f"{game_name(game)}? Say yes to play it."
+
+
 LATER = (
     "No rush. Say a game's name whenever you're ready.",
     "Cool, I'll be here. Just say a game when you want one.",
@@ -578,6 +584,14 @@ RULES["wordle"] = (
     "In Wordle, I pick a secret five-letter word and you get six guesses. "
     "After each one I tell you which letters are spot on and which are in there somewhere. Want to play it?"
 )
+RULES["twenty"] = (
+    "In Twenty Questions, one of us thinks of something and the other asks yes or no questions to guess it, "
+    "twenty at most. Want to play it?"
+)
+RULES["hotseat"] = (
+    "In Hot Seat, I call a category and you each name one thing in it before the clock runs out. "
+    "Freeze, repeat or miss and you're out; last one in wins. Want to play it?"
+)
 
 
 def fixed_lines(max_seats: int = 10) -> list[str]:
@@ -590,7 +604,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
     a halfway call or discussion start for another day length."""
     out: list[str] = []
     out += [
-        NOBODY_HERE, only_see(0), COUNT_GIVE_UP, COUNT_AGREED, ONE_AT_A_TIME, CANT_DEAL, STOPPING, DRAW, GOOD_GAME,
+        NOBODY_HERE, only_see(0), COUNT_GIVE_UP, COUNT_AGREED, ONE_AT_A_TIME, CANT_DEAL, STOPPING, ROUND_AGAIN, DRAW, GOOD_GAME,
         PICK_LIVING, NO_VOTES, DEAL_ROLES, HEADS_DOWN, MAFIA_WHISPER, MAFIA_AGAIN, MAFIA_DOWN,
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
@@ -612,7 +626,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
     out += [word_was(w) for w in IMPOSTER_WORDS]
     out += [RESTARTING, NOBODY_YET, *GREETINGS, *RULES.values(), *LATER, *_nudges(None), *_chat_fallbacks(None)]
     for game in {**GAME_NAMES, **MINIMUM}:
-        out += [rules(game), instead(game), *_nudges(game), *_chat_fallbacks(game)]
+        out += [rules(game), instead(game), confirm_game(game), *_nudges(game), *_chat_fallbacks(game)]
     for n in range(0, max_seats + 1):
         out += [*_suggestions(n), games_list(n)]
         out += [line for g in (suggested(n), None) for line in _declines(n, g)]

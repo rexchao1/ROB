@@ -2,16 +2,19 @@
 test pushes reaches the brain only the way the robot's would, through the fake
 gateway's camera and microphone. Read back on the fake's side."""
 
+import http.client
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
 import table
 from calls import call
-from conftest import _start
+from conftest import _start, dash
 
-from brain.__main__ import main, make_test_brain
-from brain.server import serve
+from brain import keys
+from brain.__main__ import TEST_DASH_KEY, TEST_TABLE_TOKEN, _table_token, main, make_test_brain
+from brain.server import MAX_BODY, serve
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -85,17 +88,83 @@ def test_nothing_else_is_served(brain):
         assert call(brain.url, method, path)[0] == 404
 
 
-def test_the_test_endpoints_do_not_exist_outside_test_mode(brain):
-    server = serve(brain.host, "127.0.0.1", 0)
+def test_the_test_endpoints_and_the_rig_do_not_exist_outside_test_mode(brain):
+    server = serve(brain.host, "127.0.0.1", 0)  # no fake, no reset: a real-mode server, with a key nobody was told
     url = _start(server)
     try:
         assert call(url, "GET", "/state") == (200, {"game": None})
         for path in ("/test/reset", "/test/advance", "/test/hear", "/test/rig", "/test/frame"):
             assert call(url, "POST", path, {})[0] == 404
         assert call(url, "GET", "/test/state")[0] == 404
+        assert dash(url, "GET", "/dash/api/rig")[0] == 404 and dash(url, "POST", "/dash/api/rig", {"mafia": {}})[0] == 404  # D86: rigging is for tests
+        assert dash(url, "GET", "/dash/api/state")[0] == 200
+        assert dash(url, "POST", "/dash/api/hear", {"text": "x"})[0] == 403  # the test key is not this server's
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_every_write_and_the_camera_need_the_dashboards_key(brain):
+    """D86: a write without the key, or with another, is 403 whatever its origin; a read
+    is open except the camera, the faces and the log."""
+    for path, body in (("/dash/api/hear", {"text": "x"}), ("/dash/api/say", {"text": "x"}), ("/dash/api/game", {"name": "stop"}),
+                       ("/dash/api/head", {"yaw": 0}), ("/dash/api/settings", {"pitch": 30}), ("/dash/api/content", {"spectra": ["a - b"]}),
+                       ("/dash/api/keys", {"STACKCHAN_TOKEN": "x"}), ("/dash/api/rig", {"mafia": {}}), ("/dash/api/volume", {"volume": 50}),
+                       ("/dashboard/settings", {"persona": "host"}), ("/dashboard/command", {"say": "hi"})):
+        assert call(brain.url, "POST", path, body)[0] == 403, path
+        assert dash(brain.url, "POST", path, body, key="wrong")[0] == 403, path
+        assert dash(brain.url, "POST", path, body, key="")[0] == 403, path
+    assert brain.host.rigs == {} and call(brain.url, "GET", "/dash/api/state")[1]["typed_pending"] == 0
+    assert call(brain.url, "POST", "/dash/api/hear?key=" + TEST_DASH_KEY, {"text": "x"}) == (200, {"ok": True, "pending": 1})  # an <img> cannot send a header
+    assert dash(brain.url, "POST", "/dashboard/command", {"say": "hello"})[0] == 200
+    for path in ("/dash/api/state", "/dash/api/settings", "/dash/api/content", "/dash/api/keys", "/dash/api/robot", "/dashboard/state"):
+        assert call(brain.url, "GET", path)[0] == 200, path
+    for path in ("/dash/api/events", "/dash/api/photo", "/dash/api/seat/1.jpg"):
+        assert call(brain.url, "GET", path)[0] == 403, path
+    assert dash(brain.url, "GET", "/dash/api/events")[0] == 200
+    assert brain.dash_key == TEST_DASH_KEY
+
+
+def _raw_request(url, method, path, headers, body=b""):
+    """One hand-built request; (status, body) without the client fixing the headers."""
+    host, port = url.removeprefix("http://").split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=5)
+    try:
+        conn.putrequest(method, path, skip_accept_encoding=True)
+        for name, value in headers.items():
+            conn.putheader(name, value)
+        conn.endheaders()
+        conn.send(body)
+        res = conn.getresponse()
+        return res.status, res.read()
+    finally:
+        conn.close()
+
+
+def test_a_content_length_that_is_not_a_number_and_a_body_too_long_are_answered(brain):
+    """A4: the length is parsed inside the try (400), and a body over MAX_BODY is 413, unread."""
+    status, body = _raw_request(brain.url, "POST", "/test/hear", {"Content-Type": "application/json", "Content-Length": "abc"})
+    assert status == 400 and b"Content-Length" in body
+    status, body = _raw_request(brain.url, "POST", "/test/hear", {"Content-Type": "application/json", "Content-Length": str(MAX_BODY + 1)}, b'{"text": "x"}')
+    assert status == 413
+    status, body = _raw_request(brain.url, "POST", "/test/hear", {"Content-Type": "application/json", "Content-Length": "13"}, b'{"text": "x"}')
+    assert status == 200
+    assert call(brain.url, "GET", "/dash/api/state")[1]["typed_pending"] == 0  # the test's hear goes to the fake, not the queue
+
+
+def test_the_table_token_is_generated_once_and_kept_in_env_local(tmp_path, capsys, monkeypatch):
+    """D85: no --table-token and no GM_TABLE_TOKEN: one is made, written owner-only beside
+    the other keys, said on stdout, and used at the next start."""
+    monkeypatch.delenv("GM_TABLE_TOKEN", raising=False)
+    env = tmp_path / ".env.local"
+    env.write_text("OTHER=1\n")
+    token = _table_token(None, env)
+    assert len(token) >= 32 and keys.read_env(env) == {"OTHER": "1", "GM_TABLE_TOKEN": token}
+    assert stat.S_IMODE(env.stat().st_mode) == 0o600
+    out = capsys.readouterr().out
+    assert "generated" in out and str(env) in out and token not in out
+    assert _table_token("given", env) == "given" and keys.read_env(env)["GM_TABLE_TOKEN"] == token  # a token given is used as is
+    assert TEST_TABLE_TOKEN  # the fixed one of --test, as the harness sends it
 
 
 def test_reset_fails_loudly_when_the_fake_gateway_is_gone(tmp_path):
@@ -127,6 +196,7 @@ def test_python_m_brain_test_runs_against_the_fake_gateways_cli():
         line = brain.stdout.readline()
         assert "(test mode" in line
         url = line.split("listening on ")[1].split()[0]
+        assert brain.stdout.readline().strip() == f"gamemaster: game screen at {url}/dash?key={TEST_DASH_KEY}"  # the fixed key the harness sends
         assert call(url, "POST", "/test/reset") == (200, {"ok": True, "now": 0.0})
         assert call(url, "POST", "/test/advance", {"seconds": 5}) == (200, {"now": 5.0})
         status, calls = call(fake_url, "GET", "/mock/calls")

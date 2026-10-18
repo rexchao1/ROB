@@ -1,10 +1,10 @@
-// imposter.feature (D20): the word dealt through the private screen, one clue each in
-// seat order, a vote, the reveal.
+// imposter.feature (D20, D101): the word dealt through the private screen, one clue
+// each in seat order, a vote (won, or tied), the reveal.
 import { expect } from 'vitest'
 import type { Definer } from 'gherkin-node-test/vitest'
 import {
-  CLUE, CLUES, IMPOSTER_VOTE, brain, deal, dealtTo, defineHear, definePlaying, expectDealtAlone, expectFacing, headAt,
-  heard, named, next, numberFrom, player, seatsFrom, start, text, voteOut, when, type World,
+  CLUE, CLUES, IMPOSTER_VOTE, brain, deal, dealtTo, defineHear, definePlaying, expectAskedInTurn, expectDealtAlone, expectFacing,
+  headAt, heard, named, next, numberFrom, player, seatsFrom, start, state, text, vote, voteOut, when, word, type World,
 } from './common.ts'
 
 const CLUE_WORDS = ['sand', 'waves', 'summer', 'towel', 'shells', 'sun', 'surf', 'tide', 'boardwalk']
@@ -82,5 +82,18 @@ export const imposter: Definer<World> = (reg) => {
   reg.define(/^a vote eliminates Player (\w+)$/, async (w, who) => {
     when(w)
     await voteOut(w, numberFrom(who))
+  })
+
+  reg.define(/^a vote ties between Players (\w+) and (\w+)$/, async (w, a, b) => {
+    // In turn, the first four voters name the two seats alternately; the rest say nothing.
+    when(w)
+    const named = [numberFrom(a), numberFrom(b)]
+    const { living } = await state(w)
+    const asks = await vote(w, (voter) => {
+      const i = living.indexOf(voter)
+      return i < 4 ? word(named[i % 2]!) : undefined
+    })
+    expectAskedInTurn(w, asks, living)
+    expect((await brain(w).said())[w.cursor ?? 0], 'the vote').toMatch(/It's a tie\. Nobody leaves\.$/)
   })
 }

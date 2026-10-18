@@ -28,13 +28,54 @@ def test_d5_the_host_counts_the_table_and_numbers_the_seats():
 
 def test_d6_a_spoken_count_that_disagrees_stops_the_start():
     t = FakeTable(5)
-    t.reply(lines.count_line(5), "there are six of us", "", "")
+    t.reply(lines.count_line(5), "there are six of us")
     state = State()
     n = gather(t, "mafia", "", state, Options())
     assert n is None
-    assert "I only see five. Who's hiding?" in t.said
+    assert t.said[:2] == [lines.count_line(5), "I only see five. Who's hiding?"]
+    assert [e[2] for e in t.log if e[1] == "count"][:2] == [5, 5]  # the mismatch line, then a second sweep
     assert all(r["game"] is None for r in t.reports)  # no game has started, ever
-    assert t.said[-1] == lines.COUNT_GIVE_UP
+    assert not any(line.startswith("Let's play") for line in t.said)
+
+
+def test_d89_a_disagreement_without_a_number_gets_a_second_sweep_not_a_start():
+    t = FakeTable(5)
+    t.reply(lines.count_line(5), "there are six of us")
+    t.reply(lines.only_see(5), "no, that's not right")
+    state = State()
+    assert gather(t, "mafia", "", state, Options()) is None
+    counts = [e[2] for e in t.log if e[1] == "count"]
+    assert len(counts) >= 2 and t.said.count(lines.only_see(5)) >= 2
+    assert all(r["game"] is None for r in t.reports)
+
+
+def test_d89_silence_after_the_mismatch_line_is_not_agreement():
+    t = FakeTable(5)
+    t.reply(lines.count_line(5), "there are six of us")
+    t.reply(lines.only_see(5), "")
+    state = State()
+    assert gather(t, "mafia", "", state, Options()) is None
+    assert len([e for e in t.log if e[1] == "count"]) >= 2
+    assert t.said[-1] == lines.COUNT_GIVE_UP and state.stalled == "no count"
+
+
+def test_d89_after_three_disagreements_the_host_gives_up():
+    t = FakeTable(5)
+    t.reply(lines.count_line(5), "there are six of us")
+    t.reply(lines.only_see(5), "there are six of us", "there are six of us", "there are six of us")
+    state = State()
+    assert gather(t, "mafia", "", state, Options()) is None
+    assert t.said.count(lines.only_see(5)) == 2  # D89: the third disagreement is the give-up
+    assert t.said[-1] == "Let's try again when everyone's ready."
+    assert all(r["game"] is None for r in t.reports)
+
+
+def test_d90_a_count_below_the_hosts_gets_the_watching_line_and_a_second_sweep():
+    t = FakeTable(counts=[5, 4])
+    t.reply(lines.count_line(5), "we're four")
+    n = gather(t, "mafia", "", State(), Options())
+    assert t.said[:3] == [lines.count_line(5), "I see five. Is someone just watching?", lines.count_line(4)]
+    assert n == 4
 
 
 def test_d6_said_with_the_request_and_resolved_by_a_recount():
@@ -62,14 +103,14 @@ def test_d6_the_group_can_correct_itself_with_the_hosts_number():
 def test_too_few_players_says_so_and_starts_nothing():
     t = FakeTable(3)
     assert gather(t, "mafia", "", State(), Options()) is None
-    assert t.said[-1] == "Mafia needs at least four players."
+    assert t.said[-2:] == ["Mafia needs at least four players.", "Want to try Imposter instead?"]  # D98
     assert t.state["game"] is None
 
 
 def test_play_with_too_few_returns_to_idle():
     t = FakeTable(1)
     games.play("wavelength", t, random.Random(0))
-    assert t.said[-1] == "Wavelength needs at least two players."
+    assert t.said[-2:] == ["Wavelength needs at least two players.", "Want to try Twenty Questions instead?"]  # D98
     assert t.log[-1][1:] == ("mood", "idle")
 
 
@@ -164,6 +205,33 @@ def test_a_top_seat_short_of_a_majority_eliminates_nobody():
     assert lines.no_majority([(2, 2), (3, 1), (4, 1), (5, 1)]) in t.said
 
 
+def test_d97_exactly_half_is_no_majority():
+    t = FakeTable(4)
+    voters(t, {1: "four", 2: "four", 3: "one", 4: "two"})
+    state = started(4)
+    assert vote(t, state, Options(), random.Random(0)) is None
+    assert "Two for Player four, one for Player one, one for Player two. Nobody has a majority. Nobody leaves." in t.said
+    assert state.living == [1, 2, 3, 4]
+
+
+def test_d97_a_plurality_of_four_eliminates_nobody():
+    t = FakeTable(4)
+    voters(t, {1: "four", 2: "four", 3: "one", 4: "two"})
+    assert vote(t, started(4), Options(), random.Random(0)) is None
+    assert not any(line.endswith("you're out.") for line in t.said)
+
+
+def test_d97_players_sitting_out_do_not_count_toward_the_majority():
+    t = FakeTable(5)
+    voters(t, {1: "three", 2: "three", 3: "one"})
+    state = started(5)
+    state.sitting_out = {4, 5}
+    assert vote(t, state, Options(), random.Random(0)) == 3
+    assert lines.who(4) not in t.said and lines.who(5) not in t.said
+    i = t.said.index("Two for Player three, one for Player one.")
+    assert t.said[i + 1] == "Player three, you're out."
+
+
 def test_an_unheard_vote_is_asked_for_again_once():
     t = FakeTable(5)
     voters(t, {1: "", 2: "four", 3: "four", 4: "one", 5: "four"})
@@ -200,6 +268,13 @@ def test_players_sitting_out_do_not_vote():
     state.sitting_out = {3}
     assert vote(t, state, Options(), random.Random(0)) == 4
     assert lines.who(3) not in t.said
+
+
+def test_d88_a_round_restart_in_another_game_is_a_plain_stop():
+    t = FakeTable(5)
+    t.reply(lines.count_line(5), "restart the round")
+    assert games.play("imposter", t, random.Random(0)) == "stopped"
+    assert t.said[-1] == lines.STOPPING
 
 
 def test_a_stop_heard_during_a_vote_ends_the_game():

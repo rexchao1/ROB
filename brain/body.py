@@ -16,7 +16,8 @@ Two channels, as the gateway has them (docs/BUILD-PLAN.md, Build run 2):
   speaker connected to it) and the robot only moves its mouth (set_mouth_sequence).
 
 Body wraps the tools the host uses. A gateway answer of {"error": ...} or {"ok": false}
-raises BodyError, as does a schema refusal (isError).
+raises BodyError, as does a schema refusal (isError) and an answer without the
+JSON-RPC shape (D4), so every failure the host sees from here is a BodyError.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ import urllib.error
 import urllib.request
 import wave
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -41,6 +43,8 @@ PROTOCOL_VERSION = "2025-06-18"  # a handshake revision both mcp 1.x (the gatewa
 FACES = ("idle", "happy", "thinking", "sad", "surprised", "embarrassed", "off")
 SAMPLE_RATE = 16_000
 QUEUE_FULL = -32000
+CAPTURES = Path.home() / ".stackchan" / "captures"  # where the real gateway writes take_photo's files
+MAX_RETRY_AFTER = 5.0  # seconds: the gateway's retry_after_ms is a hint, not an order
 
 
 class BodyError(Exception):
@@ -72,8 +76,14 @@ class Gateway:
     def call(self, name: str, args: dict[str, Any] | None = None, timeout: float | None = None) -> ToolResult:
         """Call one tool and return its answer; raise BodyError on any refusal."""
         result = self._request("tools/call", {"name": name, "arguments": args or {}}, timeout)
-        text = "\n".join(item.get("text", "") for item in result.get("content", []) if item.get("type") == "text")
-        images = [base64.b64decode(item["data"]) for item in result.get("content", []) if item.get("type") == "image"]
+        content = result.get("content", [])
+        if not isinstance(content, list) or not all(isinstance(item, dict) for item in content):
+            raise BodyError(f"{name}: the gateway's answer has no content list: {str(result)[:200]}")
+        text = "\n".join(str(item.get("text", "")) for item in content if item.get("type") == "text")
+        try:
+            images = [base64.b64decode(item["data"]) for item in content if item.get("type") == "image"]
+        except (KeyError, TypeError, ValueError) as e:
+            raise BodyError(f"{name}: the gateway's image does not decode: {e}") from None
         try:
             data = json.loads(text) if text else None
         except json.JSONDecodeError:
@@ -138,10 +148,11 @@ class Gateway:
         answer, _ = self._post({"jsonrpc": "2.0", "id": rid, "method": method, "params": params}, timeout, with_session=True)
         if "error" in answer:
             err = answer["error"]
-            if err.get("code") == QUEUE_FULL and isinstance(err.get("data"), dict) and "retry_after_ms" in err["data"]:
-                raise _QueueFull(err["data"]["retry_after_ms"] / 1000)
+            retry = err.get("data", {}).get("retry_after_ms") if isinstance(err.get("data"), dict) else None
+            if err.get("code") == QUEUE_FULL and isinstance(retry, (int, float)) and not isinstance(retry, bool):
+                raise _QueueFull(retry / 1000)
             raise BodyError(f"{method}: {err.get('message', err)}")
-        return answer.get("result", {})
+        return answer["result"]
 
     def _id(self) -> int:
         self._next_id += 1
@@ -179,11 +190,12 @@ class _SessionLost(Exception):
 class _QueueFull(Exception):
     def __init__(self, retry_after: float) -> None:
         super().__init__(retry_after)
-        self.retry_after = max(0.05, retry_after)
+        self.retry_after = min(MAX_RETRY_AFTER, max(0.05, retry_after))
 
 
 def _parse(raw: bytes, content_type: str, rid: int) -> dict[str, Any]:
-    """The JSON-RPC answer with this id, from a JSON body or an SSE stream."""
+    """The JSON-RPC answer with this id, from a JSON body or an SSE stream; checked for
+    its shape (an object with a "result" object or an "error" object), else BodyError."""
     if "text/event-stream" in content_type:
         for line in raw.decode("utf-8", "replace").splitlines():
             if line.startswith("data:"):
@@ -192,7 +204,7 @@ def _parse(raw: bytes, content_type: str, rid: int) -> dict[str, Any]:
                 except json.JSONDecodeError:
                     continue
                 if isinstance(msg, dict) and msg.get("id") == rid:
-                    return msg
+                    return _shaped(msg)
         raise BodyError(f"no answer to request #{rid} in the gateway's event stream")
     try:
         msg = json.loads(raw)
@@ -200,7 +212,14 @@ def _parse(raw: bytes, content_type: str, rid: int) -> dict[str, Any]:
         raise BodyError(f"the gateway's answer is not JSON: {raw[:200]!r}") from e
     if isinstance(msg, list):  # a batch: pick ours
         msg = next((m for m in msg if isinstance(m, dict) and m.get("id") == rid), {})
-    return msg
+    return _shaped(msg)
+
+
+def _shaped(msg: Any) -> dict[str, Any]:
+    """`msg` as a JSON-RPC answer: an object with a "result" object or an "error" object."""
+    if isinstance(msg, dict) and (isinstance(msg.get("result"), dict) or isinstance(msg.get("error"), dict)):
+        return msg
+    raise BodyError(f"the gateway's answer is not a JSON-RPC result: {str(msg)[:200]}")
 
 
 class Body:
@@ -217,6 +236,7 @@ class Body:
         pitch: int = 25,
         speed: str | int = "high",
         speaker: str = "robot",
+        captures: Path | None = None,
     ) -> None:
         if speaker not in ("robot", "mac"):
             raise ValueError("speaker must be robot or mac")
@@ -227,6 +247,7 @@ class Body:
         self.pitch = int(min(85, max(5, pitch)))
         self.speed = speed
         self.speaker = speaker
+        self.captures = Path(captures) if captures is not None else CAPTURES  # the only folder photo() deletes from
 
     def setup(self) -> None:
         """Keep the screen on for the whole game and start blinking."""
@@ -244,9 +265,12 @@ class Body:
             raise BodyError(f"move_head: the servos failed: {answer.data}")
 
     def photo(self) -> np.ndarray:
-        """One camera frame, BGR. The capture file is deleted when it is on this machine."""
+        """One camera frame, BGR. The capture file is deleted when it is on this machine,
+        in the gateway's own captures folder (never a path elsewhere that the answer names)."""
         answer = self.gateway.call("take_photo", {"question": ""}, timeout=20)
         path = answer.data.get("image_path") if isinstance(answer.data, dict) else None
+        if not isinstance(path, str) or not self._capture(path):
+            path = None
         jpeg = answer.images[0] if answer.images else None
         if jpeg is None and path and os.path.exists(path):
             with open(path, "rb") as f:
@@ -262,6 +286,13 @@ class Body:
         if image is None:
             raise BodyError("take_photo: the image is not a JPEG")
         return image
+
+    def _capture(self, path: str) -> bool:
+        """`path` is a file directly in the gateway's captures folder."""
+        try:
+            return Path(path).resolve().parent == self.captures.resolve()
+        except OSError:
+            return False
 
     def listen(self, seconds: float) -> str:
         """Transcribe the next `seconds` of the microphone (faster-whisper on the gateway)."""

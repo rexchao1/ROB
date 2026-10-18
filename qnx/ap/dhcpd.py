@@ -38,6 +38,8 @@ SUBNET_MASK, HOSTNAME, BROADCAST, REQUESTED_IP, LEASE_TIME, MSG_TYPE, SERVER_ID,
 IP_RECVIF = getattr(socket, "IP_RECVIF", 20)  # BSD: the receiving interface as ancillary data
 HEADER = struct.Struct("!BBBBIHH4s4s4s4s16s64s128s")  # 236 bytes, then the magic cookie
 DECLINED_FOR = 600.0  # seconds an address a client found in use is not handed out
+MAX_DECLINED = 64  # declined addresses remembered at once: a flood of declines cannot empty the pool
+HOSTNAME_MAX = 64  # characters of a client's hostname kept (the log and the lease file see printable ASCII only)
 
 
 @dataclasses.dataclass
@@ -68,7 +70,10 @@ class Packet:
 
     @property
     def hostname(self) -> str:
-        return self.options.get(HOSTNAME, b"").decode("utf-8", "replace")
+        """The client's hostname as printable ASCII, anything else a "?": it goes to the
+        log and the lease file, never a terminal escape or a line break."""
+        raw = self.options.get(HOSTNAME, b"")[:HOSTNAME_MAX]
+        return "".join(chr(b) if 32 <= b < 127 else "?" for b in raw)
 
 
 def parse(data: bytes) -> Packet | None:
@@ -114,7 +119,8 @@ class Leases:
         self.lease_seconds = lease_seconds
         self.clock = clock
         self.by_mac: dict[str, dict[str, Any]] = {}  # mac -> {"ip", "expires", "hostname"}
-        self.declined: dict[str, float] = {}  # ip -> until
+        self.declined: dict[str, float] = {}  # ip -> until; at most MAX_DECLINED, the oldest let go first
+        self.offered: dict[str, str] = {}  # mac -> the address last offered to it, the only one it may decline
         if path and os.path.exists(path):
             try:
                 with open(path) as f:
@@ -138,6 +144,14 @@ class Leases:
     def offer(self, mac: str, requested: str | None = None) -> str | None:
         """The address to offer `mac`: its own, else the one it asks for if free, else
         the first never used, else the one whose lease ran out longest ago."""
+        ip = self._pick(mac, requested)
+        if ip is not None:
+            self.offered[mac] = ip
+            if len(self.offered) > MAX_DECLINED:
+                del self.offered[next(iter(self.offered))]
+        return ip
+
+    def _pick(self, mac: str, requested: str | None) -> str | None:
         mine = self.by_mac.get(mac)
         if mine and self._usable(mine["ip"], mac):
             return mine["ip"]
@@ -171,11 +185,23 @@ class Leases:
             self.save()
 
     def decline(self, mac: str, ip: str | None) -> None:
-        if ip:
-            self.declined[ip] = self.clock() + DECLINED_FOR
-            if self.by_mac.get(mac, {}).get("ip") == ip:
-                del self.by_mac[mac]
-                self.save()
+        """`mac` found `ip` in use: set it aside for DECLINED_FOR, if it is in the pool and
+        was offered or leased to that client by this server (anything else is noise)."""
+        if not ip or ip not in self.pool or (self.offered.get(mac) != ip and self.by_mac.get(mac, {}).get("ip") != ip):
+            return
+        self.declined[ip] = self.clock() + DECLINED_FOR
+        self.offered.pop(mac, None)
+        while len(self.declined) > MAX_DECLINED:
+            del self.declined[next(iter(self.declined))]  # the oldest: dicts keep insertion order
+        if self.by_mac.get(mac, {}).get("ip") == ip:
+            del self.by_mac[mac]
+            self.save()
+
+    def prune(self) -> None:
+        """Forget declines whose time is up (on every packet, so the set never only grows)."""
+        now = self.clock()
+        for ip in [ip for ip, until in self.declined.items() if until <= now]:
+            del self.declined[ip]
 
     def save(self) -> None:
         if not self.path:
@@ -230,6 +256,7 @@ class Server:
             return None
         if request.mac in self.ignore or request.giaddr != "0.0.0.0":
             return None  # this machine's own interface, or a relay (there are none here)
+        self.leases.prune()
         kind = request.type
         if kind == DISCOVER:
             ip = self.leases.offer(request.mac, request.ip_option(REQUESTED_IP))

@@ -53,6 +53,7 @@ import argparse
 import base64
 import hashlib
 import json
+import shutil
 import socket
 import sys
 import tempfile
@@ -507,6 +508,7 @@ class FakeGateway:
         self.server.should_exit = True
         if self._thread:
             self._thread.join(5)
+        shutil.rmtree(self.device.captures, ignore_errors=True)  # a brain deletes only its own gateway's captures (brain/body.py)
 
 
 def main(argv: list[str] | None = None) -> int:

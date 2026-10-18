@@ -5,10 +5,14 @@ is attached and not for one that is gone; a call is run once however often it is
 sent; a reset, another referee and a wrong token are each told apart; and the referee
 needs nothing but the standard library."""
 
+import http.client
+import json
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -17,16 +21,31 @@ from conftest import _start
 from fake_table import FakeTable
 
 from brain import games, lines
-from brain.__main__ import make_test_brain
+from brain.__main__ import TEST_TABLE_TOKEN, make_test_brain
 from brain.clock import RealClock, VirtualClock
 from brain.lobby import PAUSE
 from brain.referee import Referee
-from brain.remote import RemoteError, RemoteTable, TableRefused, TableReset, TableServer, TableUnreachable
+from brain.remote import MAX_BODY, MAX_LISTEN, RemoteError, RemoteTable, TableRefused, TableReset, TableServer, TableUnreachable
 from brain.table import Card
 
 ROOT = Path(__file__).resolve().parents[2]
 SETUP = ["set_off_timeout", "set_blink", "set_avatar", "set_all_leds", "move_head"]
 FIVE = [{"bearing": b} for b in (-60, -30, 0, 30, 60)]
+TOKEN = "s3cret"
+
+
+def _tcall(base, method, path, body=None, token=TOKEN):
+    """calls.call with the table's token, as a referee sends it."""
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Content-Type": "application/json"}
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(base + path, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as res:
+            return res.status, json.loads(res.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
 
 
 def _tools(fake):
@@ -56,7 +75,7 @@ class _Remote:
         self.tb = make_test_brain(fake.mcp_url, sets_dir=sets_dir, referee="remote")
         self.url = _start(self.tb.server)
         self.tb.clock.settle()
-        self.remote = RemoteTable(self.tb.table.url, patience=2.0)
+        self.remote = RemoteTable(self.tb.table.url, token=TEST_TABLE_TOKEN, patience=2.0)
         self.referee = Referee(self.remote, log=lambda msg: None, retry=0.05)
         self.thread = threading.Thread(target=self.referee.run, name="referee", daemon=True)
         self.thread.start()
@@ -157,7 +176,7 @@ def test_without_a_referee_the_clock_moves_freely_and_the_robot_is_still_set_up(
         assert call(url, "POST", "/test/advance", {"seconds": 600}) == (200, {"now": 600.0})
         assert time.monotonic() - started < 2
         assert _tools(fake) == SETUP
-        assert call(tb.table.url, "GET", "/table/attached")[1]["attached"] is False
+        assert _tcall(tb.table.url, "GET", "/table/attached", token=TEST_TABLE_TOKEN)[1]["attached"] is False
     finally:
         tb.table.stop()
         tb.server.shutdown()
@@ -223,10 +242,10 @@ class _Recorder:
 def served():
     servers = []
 
-    def serve(table=None, clock=None, **kwargs):
+    def serve(table=None, clock=None, token=TOKEN, **kwargs):
         clock = clock or RealClock()
         table = table or _Recorder(clock)
-        server = TableServer(table, clock, "127.0.0.1", 0, **kwargs).start()
+        server = TableServer(table, clock, "127.0.0.1", 0, token, **kwargs).start()
         servers.append(server)
         return server, table
 
@@ -235,8 +254,8 @@ def served():
         server.stop()
 
 
-def _attached(server, **kwargs):
-    remote = RemoteTable(server.url, patience=1.0, log=lambda msg: None, **kwargs)
+def _attached(server, token=TOKEN, **kwargs):
+    remote = RemoteTable(server.url, token=token, patience=1.0, log=lambda msg: None, **kwargs)
     remote.hello()
     return remote
 
@@ -278,12 +297,12 @@ def test_what_the_host_raises_comes_back_as_a_remote_error_and_the_table_carries
 
 def test_a_call_sent_twice_runs_once(served):
     server, table = served()
-    hello = call(server.url, "POST", "/table/hello", {"session": "s"})[1]
+    hello = _tcall(server.url, "POST", "/table/hello", {"session": "s"})[1]
     request = {"session": "s", "id": 1, "epoch": hello["epoch"], "method": "say", "args": ["Hi."], "kwargs": {}}
-    first = call(server.url, "POST", "/table/call", request)
-    assert first == call(server.url, "POST", "/table/call", request) == (200, {"ok": True, "result": None})
+    first = _tcall(server.url, "POST", "/table/call", request)
+    assert first == _tcall(server.url, "POST", "/table/call", request) == (200, {"ok": True, "result": None})
     assert table.log == [("say", "Hi.")]
-    assert call(server.url, "POST", "/table/call", {**request, "id": 2}) == first
+    assert _tcall(server.url, "POST", "/table/call", {**request, "id": 2}) == first
     assert table.log == [("say", "Hi."), ("say", "Hi.")]
 
 
@@ -298,27 +317,27 @@ def test_a_malformed_call_is_refused(served):
     server, _ = served()
     for bad in ({}, {"session": "s", "id": 1, "method": "fly"}, {"session": "s", "id": "1", "method": "say"},
                 {"session": "s", "id": 1, "method": "say", "args": "Hi."}):
-        assert call(server.url, "POST", "/table/call", bad)[0] == 400
-    assert call(server.url, "GET", "/table/nothing")[0] == 404
+        assert _tcall(server.url, "POST", "/table/call", bad)[0] == 400
+    assert _tcall(server.url, "GET", "/table/nothing")[0] == 404
 
 
 def test_a_dropped_table_is_waited_for_and_given_up_on(served):
-    probe = TableServer(_Recorder(), RealClock(), "127.0.0.1", 0)
+    probe = TableServer(_Recorder(), RealClock(), "127.0.0.1", 0, TOKEN)
     port = probe.address[1]
     probe.stop()  # never served: the port is free and refuses
     late = []
     threading.Timer(0.4, lambda: late.append(served_on(port))).start()
 
     def served_on(p):
-        return TableServer(_Recorder(), RealClock(), "127.0.0.1", p).start()
+        return TableServer(_Recorder(), RealClock(), "127.0.0.1", p, TOKEN).start()
 
-    remote = RemoteTable(f"http://127.0.0.1:{port}", patience=5.0, log=lambda msg: None)
+    remote = RemoteTable(f"http://127.0.0.1:{port}", token=TOKEN, patience=5.0, log=lambda msg: None)
     try:
         assert remote.hello()["epoch"]  # refused at first, answered once the server is up
     finally:
         _until(lambda: late)
         late[0].stop()
-    gone = RemoteTable(f"http://127.0.0.1:{port}", patience=0.5, log=lambda msg: None)
+    gone = RemoteTable(f"http://127.0.0.1:{port}", token=TOKEN, patience=0.5, log=lambda msg: None)
     started = time.monotonic()
     with pytest.raises(TableUnreachable):
         gone.hello()
@@ -347,12 +366,72 @@ def test_a_new_referee_takes_the_table_and_the_old_one_is_refused(served):
     assert table.log == [("say", "me.")]
 
 
-def test_with_a_token_a_referee_without_it_is_refused(served):
-    server, table = served(token="s3cret")
-    with pytest.raises(TableRefused, match="token"):
-        _attached(server)
-    _attached(server, token="s3cret").say("in")
+def test_the_token_is_required_and_a_referee_without_it_or_with_another_is_refused(served):
+    """D85: the Table takes calls only from a referee that holds the shared token."""
+    with pytest.raises(ValueError, match="token"):
+        TableServer(_Recorder(), RealClock(), "127.0.0.1", 0, None)
+    with pytest.raises(ValueError, match="token"):
+        TableServer(_Recorder(), RealClock(), "127.0.0.1", 0, "")
+    server, table = served()
+    for wrong in (None, "", "s3cre", "s3cret2"):
+        with pytest.raises(TableRefused, match="token"):
+            _attached(server, token=wrong)
+        assert _tcall(server.url, "GET", "/table/attached", token=wrong)[0] == 401
+    hello = _tcall(server.url, "POST", "/table/hello", {"session": "s"})[1]
+    request = {"session": "s", "id": 1, "epoch": hello["epoch"], "method": "say", "args": ["Hi."], "kwargs": {}}
+    assert _tcall(server.url, "POST", "/table/call", request, token="s3cre")[0] == 401
+    assert table.log == []
+    _attached(server).say("in")
     assert table.log == [("say", "in")]
+
+
+def test_a_wait_or_listen_longer_than_the_gateways_longest_listen_is_refused_not_clamped(served):
+    """D85: a call that could hold the Table for long is capped at the longest listen."""
+    server, table = served()
+    remote = _attached(server)
+    assert MAX_LISTEN == 30.0
+    remote.wait(0)
+    remote.listen(MAX_LISTEN)  # the longest allowed, as the host's own listen chunks it
+    for bad in (MAX_LISTEN + 0.5, 1e12, float("inf"), float("nan"), -1, "30", None, True):
+        with pytest.raises(RemoteError, match="ValueError") as raised:
+            remote.wait(bad)
+        assert raised.value.type_name == "ValueError"
+        with pytest.raises(RemoteError, match="ValueError"):
+            remote.listen(bad)
+    assert table.log == [("wait", 0), ("listen", MAX_LISTEN)]
+
+
+def _raw_request(server, headers, body=b""):
+    """One hand-built request to the table; (status, body) without the client fixing the headers."""
+    conn = http.client.HTTPConnection(*server.address, timeout=5)
+    try:
+        conn.putrequest("POST", "/table/hello", skip_accept_encoding=True)
+        for name, value in headers.items():
+            conn.putheader(name, value)
+        conn.endheaders()
+        conn.send(body)
+        res = conn.getresponse()
+        return res.status, res.read()
+    finally:
+        conn.close()
+
+
+def test_a_bad_length_a_huge_body_and_a_strange_header_are_answered_not_crashed(served):
+    """A4: the length is parsed inside the try, a body over MAX_BODY is 413, the token is
+    compared on bytes (a non-ASCII header cannot raise), and the body is read only once
+    the token is right."""
+    server, table = served()
+    auth = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+    assert MAX_BODY == 1 << 20
+    status, body = _raw_request(server, {**auth, "Content-Length": "abc"})
+    assert status == 400 and b"Content-Length" in body
+    status, body = _raw_request(server, {**auth, "Content-Length": str(MAX_BODY + 1)}, b'{"session": "s"}')
+    assert status == 413
+    status, body = _raw_request(server, {"Authorization": "Bearer caf\u00e9", "Content-Length": "16"}, b'{"session": "s"}')
+    assert status == 401
+    status, body = _raw_request(server, {**auth, "Content-Length": "16"}, b'{"session": "s"}')
+    assert status == 200 and b"epoch" in body
+    assert table.log == []
 
 
 def test_on_the_virtual_clock_the_worker_counts_while_attached_and_is_let_go_after_its_lease(served):
@@ -499,5 +578,26 @@ def test_the_referee_needs_nothing_but_the_standard_library():
     assert done.returncode == 0, done.stderr
     done = subprocess.run([sys.executable, "-S", "-m", "brain.referee", "--help"], cwd=ROOT, capture_output=True, text=True, timeout=30)
     assert done.returncode == 0 and "--table" in done.stdout, done.stderr
-    done = subprocess.run([sys.executable, "-S", "-m", "brain.referee", "--table", "ftp://x"], cwd=ROOT, capture_output=True, text=True, timeout=30)
+    done = subprocess.run([sys.executable, "-S", "-m", "brain.referee", "--table", "ftp://x", "--token", "t"], cwd=ROOT, capture_output=True, text=True, timeout=30)
     assert done.returncode == 2 and "http://HOST:PORT" in done.stderr
+
+
+def test_the_referee_takes_its_token_from_a_file_and_refuses_to_start_without_one(tmp_path):
+    """D85: the token rides in a file on the Pi (qnx/deploy.sh), on no command line."""
+    env = {k: v for k, v in __import__("os").environ.items() if k != "GM_TABLE_TOKEN"}
+    run = lambda *args: subprocess.run([sys.executable, "-S", "-m", "brain.referee", "--table", "http://127.0.0.1:9", *args], cwd=ROOT, capture_output=True, text=True, timeout=30, env=env)  # noqa: E731
+    done = run()
+    assert done.returncode == 2 and "token" in done.stderr
+    done = run("--token-file", str(tmp_path / "missing"))
+    assert done.returncode == 2 and "token file" in done.stderr
+    (tmp_path / "token").write_text("from-the-file\n")
+    server = TableServer(_Recorder(), RealClock(), "127.0.0.1", 0, "from-the-file").start()
+    referee = subprocess.Popen([sys.executable, "-S", "-m", "brain.referee", "--table", server.url, "--token-file", str(tmp_path / "token")],
+                               cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=env)
+    try:
+        assert "attached to the table" in referee.stderr.readline()  # the token from the file was the right one
+        _until(server.attached)
+    finally:
+        referee.kill()
+        referee.wait(5)
+        server.stop()

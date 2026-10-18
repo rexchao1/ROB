@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from brain import personas
+
 
 @dataclass
 class Settings:

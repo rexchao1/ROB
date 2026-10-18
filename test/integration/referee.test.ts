@@ -1,12 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { Brain, FakeGateway, python, ROOT, type Call } from '../harness/brain.ts'
+import { Brain, FakeGateway, python, ROOT, TEST_TABLE_TOKEN, type Call } from '../harness/brain.ts'
 
 // The referee as its own process, as it runs on the QNX Pi: the brain in test mode
 // with --referee remote serves its Table on loopback, `python -S -m brain.referee`
 // (no site-packages: the standard library only) plays through it, and the robot is
 // told exactly what the brain playing alone tells it, call for call, on the same
-// virtual clock.
+// virtual clock. The Table takes the referee's calls only with its token (D85): the test
+// brain's is fixed (TEST_TABLE_TOKEN), and a referee without it is refused and stops.
 
 const SETUP = ['set_off_timeout', 'set_blink', 'set_avatar', 'set_all_leds', 'move_head']
 const FIVE = [-60, -30, 0, 30, 60].map((bearing) => ({ bearing }))
@@ -39,10 +40,32 @@ async function post(url: string, path: string, body?: unknown): Promise<unknown>
   return res.json()
 }
 
-async function get(url: string, path: string): Promise<unknown> {
-  const res = await fetch(url + path)
+async function get(url: string, path: string, headers: Record<string, string> = {}): Promise<unknown> {
+  const res = await fetch(url + path, { headers })
   if (!res.ok) throw new Error(`GET ${path} answered ${res.status}: ${await res.text()}`)
   return res.json()
+}
+
+const BEARER = { Authorization: `Bearer ${TEST_TABLE_TOKEN}` }
+
+/** Spawn and resolve with the exit code, or fail after timeoutMs. */
+function exitCode(child: ChildProcess, timeoutMs = 15_000): Promise<{ code: number | null; output: string }> {
+  let output = ''
+  const keep = (chunk: Buffer) => {
+    output = (output + chunk.toString()).slice(-20_000)
+  }
+  child.stdout?.on('data', keep)
+  child.stderr?.on('data', keep)
+  return new Promise((ok, fail) => {
+    const timer = setTimeout(() => {
+      child.kill()
+      fail(new Error(`still running after ${timeoutMs} ms:\n${output}`))
+    }, timeoutMs)
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      ok({ code, output })
+    })
+  })
 }
 
 /** What the robot was told, without the wall times, sequence numbers and each brain's own temporary folder for card sets. */
@@ -76,7 +99,7 @@ describe('the referee as a separate process, over loopback', () => {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     ;[tableUrl, url] = (await waitFor(brain, 'the brain', [/table for the referee at (http:\/\/\S+)/, /listening on (http:\/\/\S+)/])) as [string, string]
-    referee = spawn(python(), ['-S', '-m', 'brain.referee', '--table', tableUrl], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] })
+    referee = spawn(python(), ['-S', '-m', 'brain.referee', '--table', tableUrl, '--token', TEST_TABLE_TOKEN], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] })
     await waitFor(referee, 'the referee', [/(attached) to the table/])
     await post(url, '/test/reset')
   })
@@ -87,8 +110,20 @@ describe('the referee as a separate process, over loopback', () => {
     gateway?.stop()
   })
 
-  test('the table says a referee is attached', async () => {
-    expect(await get(tableUrl, '/table/attached')).toMatchObject({ attached: true })
+  test('the table says a referee is attached, to a caller with the token only', async () => {
+    expect(await get(tableUrl, '/table/attached', BEARER)).toMatchObject({ attached: true })
+    expect((await fetch(tableUrl + '/table/attached')).status).toBe(401)
+    expect((await fetch(tableUrl + '/table/attached', { headers: { Authorization: 'Bearer not-it' } })).status).toBe(401)
+  })
+
+  test('a referee without the token, or with another, is refused and stops with 3; the attached one plays on', async () => {
+    const bare = spawn(python(), ['-S', '-m', 'brain.referee', '--table', tableUrl], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GM_TABLE_TOKEN: '' } })
+    expect((await exitCode(bare)).code).toBe(2)
+    const wrong = spawn(python(), ['-S', '-m', 'brain.referee', '--table', tableUrl, '--token', 'not-it'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] })
+    const { code, output } = await exitCode(wrong)
+    expect(code).toBe(3)
+    expect(output).toMatch(/token/)
+    expect(await get(tableUrl, '/table/attached', BEARER)).toMatchObject({ attached: true })
   })
 
   test('after a reset the robot is set up, then the referee idle-listens', async () => {

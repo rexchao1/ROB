@@ -71,6 +71,10 @@ class DashError(ValueError):
     """A request the dashboard cannot apply (a bad value, a bad shape); answered 400."""
 
 
+class DashBusy(DashError):
+    """A head move while the host is counting, sweeping or dealing (D2); answered 409."""
+
+
 @dataclasses.dataclass(frozen=True)
 class Setting:
     key: str
@@ -273,6 +277,11 @@ class Dash:
         threading.Thread(target=speak, name="dash-say", daemon=True).start()
 
     def head(self, yaw: Any = None, pitch: Any = None) -> dict[str, float]:
+        """Move the head; refused while the host's own moves attribute faces to its yaw."""
+        with self.host._lock:  # noqa: SLF001
+            busy = bool(getattr(self.host, "busy", False))
+        if busy:
+            raise DashBusy("the host is counting")
         if yaw is not None:
             yaw = _number(yaw, -90, 90, "yaw")
         if pitch is not None:

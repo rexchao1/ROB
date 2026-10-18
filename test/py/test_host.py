@@ -453,6 +453,43 @@ def test_stop_said_while_paused_reaches_the_game(host, fake, clock):
     assert RESUMED not in _said(fake)
 
 
+def test_clear_forgets_a_pause_so_the_games_clock_starts_at_zero_again(host, fake, clock):
+    """D3: _paused_for and paused survive nothing: a reset after a pause starts the clock over."""
+    fake.device.heard.append("pause")
+    w = Worker(clock, host.listen, 4)
+    clock.advance(4 + PAUSED_WINDOW)
+    assert host.paused
+    fake.device.heard.append("resume")
+    clock.advance(PAUSED_WINDOW * 2 + 4)  # the window running ends, the next hears it: paused for two windows
+    assert w.done and host.now() == pytest.approx(clock.now() - PAUSED_WINDOW * 2, abs=0.01)
+    host.paused = True  # as a reset mid-pause would find it
+    host.clear()
+    assert not host.paused
+    assert clock.reset() == 0 and host.now() == 0.0
+
+
+def test_the_host_is_busy_while_it_counts_looks_at_heads_and_deals(host, fake, clock):
+    """D2: the dashboard leaves the head alone while the host's own moves attribute faces to its yaw."""
+    assert not host.busy
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
+    w = Worker(clock, host.count)
+    clock.advance(1)
+    assert host.busy and not w.done
+    clock.advance(30)
+    assert w.done and not host.busy
+    fake.device.set_table([{"bearing": b, "pose": "down"} for b in SEATS])
+    w = Worker(clock, host.faces_up)
+    clock.advance(0.1)
+    assert host.busy
+    clock.advance(10)
+    assert w.done and not host.busy
+    w = _dealing(host, fake, clock)
+    clock.advance(0.5)  # the head back from the last heads-down view to seat three, then the lean-in loop
+    assert host.busy
+    clock.advance(GIVE_UP + 2)
+    assert w.done and not host.busy
+
+
 def test_a_quiet_lobby_listens_in_longer_windows_and_closely_again_once_it_hears(host, fake, clock):
     host.start()
     try:

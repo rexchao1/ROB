@@ -9,8 +9,10 @@ import urllib.request
 
 import pytest
 from calls import call
+from conftest import dash
 
 from brain import keys
+from brain.__main__ import TEST_DASH_KEY
 from brain.keys import Keys, KeysError
 
 SECRET = "sk-test-0123456789abcdef"
@@ -20,26 +22,27 @@ def test_a_test_brain_reports_set_or_not_and_never_the_value(brain):
     status, got = call(brain.url, "GET", "/dash/api/keys")
     assert status == 200 and {k["key"] for k in got["keys"]} == {k.key for k in keys.KEYS}
     assert not any(k["set"] for k in got["keys"])
-    status, got = call(brain.url, "POST", "/dash/api/keys", {"ELEVENLABS_API_KEY": SECRET})
+    status, got = dash(brain.url, "POST", "/dash/api/keys", {"ELEVENLABS_API_KEY": SECRET})
     assert status == 200 and SECRET not in json.dumps(got)
     assert next(k for k in got["keys"] if k["key"] == "ELEVENLABS_API_KEY")["set"] is True
     for path in ("/dash/api/keys", "/dash/api/events?since=0", "/dash/api/settings", "/dash/api/state"):
         assert SECRET not in json.dumps(call(brain.url, "GET", path)[1])
     assert os.environ.get("ELEVENLABS_API_KEY") != SECRET  # a test brain keeps keys in memory
-    status, got = call(brain.url, "POST", "/dash/api/keys", {"ELEVENLABS_API_KEY": None})
+    status, got = dash(brain.url, "POST", "/dash/api/keys", {"ELEVENLABS_API_KEY": None})
     assert next(k for k in got["keys"] if k["key"] == "ELEVENLABS_API_KEY")["set"] is False
 
 
 def test_bad_keys_and_values_are_refused(brain):
-    assert call(brain.url, "POST", "/dash/api/keys", {"PATH": "/tmp"})[0] == 400
-    assert call(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": "two words"})[0] == 400
-    assert call(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": "a\nB=c"})[0] == 400
+    assert dash(brain.url, "POST", "/dash/api/keys", {"PATH": "/tmp"})[0] == 400
+    assert dash(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": "two words"})[0] == 400
+    assert dash(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": "a\nB=c"})[0] == 400
 
 
-def test_another_site_cannot_write_a_key(brain):
+def test_another_site_cannot_write_a_key_and_neither_can_a_page_without_the_key(brain):
+    """D86: the key the brain minted at this start, and the page's own origin (A2's check kept as a second layer)."""
     req = urllib.request.Request(
         brain.url + "/dash/api/keys", data=json.dumps({"STACKCHAN_TOKEN": "x"}).encode(), method="POST",
-        headers={"Content-Type": "text/plain", "Origin": "https://evil.example"},
+        headers={"Content-Type": "text/plain", "Origin": "https://evil.example", "X-Dash-Key": TEST_DASH_KEY},
     )
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(req, timeout=5)
@@ -48,12 +51,18 @@ def test_another_site_cannot_write_a_key(brain):
     req.headers["Origin"] = origin  # the dashboard's own page
     with urllib.request.urlopen(req, timeout=5) as res:
         assert res.status == 200
+    del req.headers["X-dash-key"]  # the same page without the key: a peer on the network with curl, or a rebound Host
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(req, timeout=5)
+    assert e.value.code == 403 and brain.host.body.token == "x"
+    assert dash(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": None}, key="not-the-key")[0] == 403
+    assert dash(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": None})[0] == 200
 
 
 def test_the_gateway_token_applies_at_once(brain):
-    call(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": "tok123"})
+    dash(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": "tok123"})
     assert brain.host.body.token == "tok123" and brain.host.body.gateway.token == "tok123"
-    call(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": None})
+    dash(brain.url, "POST", "/dash/api/keys", {"STACKCHAN_TOKEN": None})
     assert brain.host.body.token is None and brain.host.body.gateway.token is None
 
 

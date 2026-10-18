@@ -21,11 +21,14 @@ from brain.table import Card, Table
 
 class GameStopped(Exception):
     """The group asked to stop or restart (D27); the game ends where it is. reset: they
-    said "reset", "start over" or "restart", and the welcome comes next (D38)."""
+    said "reset", "start over" or "restart", and the welcome comes next (D38). round:
+    they said "restart the round" (D88); Mafia starts the round's night again and any
+    other game treats it as a plain stop."""
 
-    def __init__(self, reset: bool = False) -> None:
-        super().__init__("reset" if reset else "stop")
+    def __init__(self, reset: bool = False, round: bool = False) -> None:
+        super().__init__("reset" if reset else "round" if round else "stop")
         self.reset = reset
+        self.round = round
 
 
 @dataclass
@@ -97,6 +100,8 @@ class State:
 def hear(table: Table, seconds: float) -> str:
     """table.listen, except that a request to stop ends the game (GameStopped)."""
     heard = table.listen(seconds)
+    if ears.wants_round_restart(heard):
+        raise GameStopped(round=True)
     if ears.wants_to_stop(heard):
         raise GameStopped(reset=ears.wants_to_reset(heard))
     return heard
@@ -139,12 +144,14 @@ def _spoken(heard: str) -> int | None:
 
 
 def gather(table: Table, game: str, heard: str, state: State, options: Options, counted: int | None = None) -> int | None:
-    """Count the table, say the count, and agree on it with the group (D5, D6). A spoken
-    count that disagrees stops the start: the host says so, listens and counts again
-    until the spoken number and its count agree, a go-ahead ("okay") accepts the host's
-    count, and after options.count_tries disagreements it gives up. Returns the number
-    of seats, with the game started in `state`, or None when no game starts (why, in
-    state.stalled).
+    """Count the table, say the count, and agree on it with the group (D5, D6, D89,
+    D90). A spoken count that disagrees stops the start: the host says so ("I only see
+    five. Who's hiding?" above its count, "I see five. Is someone just watching?"
+    below), listens, and sweeps again unless the reply is a plain go-ahead ("okay",
+    no "no" or "not" in it) that accepts the host's count; silence or a disagreement
+    without a number is a disagreement, and after options.count_tries of them it gives
+    up with lines.COUNT_GIVE_UP. Returns the number of seats, with the game started in
+    `state`, or None when no game starts (why, in state.stalled).
 
     counted: the welcome has just counted the table (D40), so there is no second sweep
     and no count line; a count said with the game's name ("imposter with six people")
@@ -167,7 +174,7 @@ def gather(table: Table, game: str, heard: str, state: State, options: Options, 
         if spoken == n:
             break
         tries += 1
-        if tries > options.count_tries:
+        if tries >= options.count_tries:  # D89: the give-up comes on the third disagreement
             table.say(lines.COUNT_GIVE_UP)
             state.stalled = "no count"
             return None
@@ -179,10 +186,13 @@ def gather(table: Table, game: str, heard: str, state: State, options: Options, 
             continue
         if ears.agrees(reply):
             break
-        n = _count(table, state)  # somebody may have come out of hiding
+        n = _count(table, state)  # a disagreement or silence: somebody may have come out of hiding
     minimum = lines.MINIMUM[game]
     if n < minimum:
         table.say(lines.too_few(game, minimum))
+        pick = lines.suggested(n)
+        if pick is not None and pick != game:
+            table.say(lines.instead(pick))  # D98: a game this count can play, on every path
         state.stalled = "too few"
         return None
     state.game = game
@@ -236,15 +246,17 @@ def heads_down_check(table: Table, state: State) -> None:
 
 
 def whisper(table: Table, prompt: str, again: str, seats: int, valid: Callable[[int], bool], options: Options) -> int | None:
-    """A night whisper (D16): the prompt, a listen, and if no valid seat was made out,
-    once more, quietly (D26). None when still nothing."""
+    """A night whisper (D16): the prompt, a listen, then once more, quietly (D26), and a
+    second listen, always, so the asks never tell the table whether a whisper was heard
+    or whether the role is still in (D102). The first valid seat stands; the second
+    listen's seat counts only when the first gave none. None when neither did."""
     table.say(prompt)
-    seat = ears.seat_said(hear(table, options.whisper_seconds), seats)
-    if seat is not None and valid(seat):
-        return seat
+    first = ears.seat_said(hear(table, options.whisper_seconds), seats)
     table.say(again)
-    seat = ears.seat_said(hear(table, options.whisper_seconds), seats)
-    return seat if seat is not None and valid(seat) else None
+    second = ears.seat_said(hear(table, options.whisper_seconds), seats)
+    if first is not None and valid(first):
+        return first
+    return second if second is not None and valid(second) else None
 
 
 # --- D12, D13: votes -----------------------------------------------------------------------------
@@ -262,16 +274,18 @@ def _ask_vote(table: Table, state: State, voter: int, options: Options) -> int |
 def vote(table: Table, state: State, options: Options, rng: random.Random) -> int | None:
     """The host turns to each living player not sitting out, in seat order, and asks
     "Player one, who?" (D12); a vote not made out is asked for again, once. The tally is
-    said with the most votes first (ties in count by seat). A seat named by a majority of
-    the living players is out ("Player four, you're out."), and the seat is returned; a
-    tie at the top eliminates nobody (D13), and neither does a top seat short of a
-    majority. The game reveals the role."""
+    said with the most votes first (ties in count by seat). A seat named by more than
+    half of the players who may vote this round (the living minus those sitting out,
+    D97) is out ("Player four, you're out."), and the seat is returned; a tie at the
+    top eliminates nobody (D13), and neither does a top seat short of a majority
+    ("Nobody has a majority. Nobody leaves."). The game reveals the role."""
     state.phase = "vote"
     state.report(table)
     table.mood("tense")
     table.say(lines.flavor("vote", rng))
     votes: dict[int, int] = {}
-    for voter in [s for s in sorted(state.living) if s not in state.sitting_out]:
+    voters = [s for s in sorted(state.living) if s not in state.sitting_out]
+    for voter in voters:
         table.look(voter)
         table.say(lines.who(voter))
         target = _ask_vote(table, state, voter, options)
@@ -288,7 +302,7 @@ def vote(table: Table, state: State, options: Options, rng: random.Random) -> in
         table.say(lines.flavor("tie", rng))
         table.quip("tie", game=state.game)
         return None
-    if top * 2 <= len(state.living):
+    if top * 2 <= len(voters):
         table.say(lines.no_majority(ordered))
         return None
     table.say(lines.tally(ordered))

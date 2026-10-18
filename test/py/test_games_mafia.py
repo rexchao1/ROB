@@ -100,6 +100,31 @@ def test_the_night_checks_heads_three_times_and_whispers_are_asked_again_once():
     assert lines.killed(4) in t.said
 
 
+def test_d102_both_asks_are_said_every_night_whether_or_not_a_whisper_was_heard():
+    t = play(night(FakeTable(5), "player four", "player two"), max_rounds=1)
+    assert t.said.count(lines.MAFIA_AGAIN) == 1 and t.said.count(lines.DOCTOR_AGAIN) == 1
+    assert lines.killed(4) in t.said  # the first valid whisper stands
+
+
+def test_d102_the_first_valid_whisper_wins_over_the_second():
+    t = FakeTable(5)
+    t.reply(lines.MAFIA_WHISPER, "player four")
+    t.reply(lines.MAFIA_AGAIN, "player three")
+    t.reply(lines.DOCTOR_WHISPER, "player two")
+    play(t, max_rounds=1)
+    assert lines.killed(4) in t.said and lines.killed(3) not in t.said
+
+
+def test_d102_the_doctor_is_asked_twice_on_the_night_after_dying():
+    t = FakeTable(5)
+    t.reply(lines.MAFIA_WHISPER, "player five", "")
+    t.reply(lines.DOCTOR_WHISPER, "player two", "")
+    votes(t, {1: "two", 2: "three", 3: "four", 4: "one"})
+    play(t, max_rounds=2)
+    assert t.state["out"][:1] == [5]
+    assert t.said.count(lines.DOCTOR_AGAIN) == 2 and t.said.count(lines.MAFIA_AGAIN) == 2
+
+
 def test_the_mafia_cannot_target_themselves():
     t = FakeTable(5)
     t.reply(lines.MAFIA_WHISPER, "player one")
@@ -165,6 +190,51 @@ def test_the_group_can_vote_early():
     t.reply(lines.discussion(120), "okay we're ready, let's vote")
     play(t, max_rounds=1)
     assert lines.EARLY_VOTE in t.said and lines.TIME_VOTE not in t.said
+
+
+def test_d92_an_early_vote_after_the_half_still_gets_the_halfway_call():
+    t = night(FakeTable(5), "player four", "player four")
+    t.reply(lines.time_left(60), "let's vote")
+    play(t, max_rounds=1)
+    start = day_start(t)
+    assert t.said_at("One minute left.") == [start + 60]
+    assert t.said_at(lines.EARLY_VOTE) == [start + 70]
+    assert t.said.index("One minute left.") < t.said.index("Okay, let's vote.")
+    assert lines.TIME_VOTE not in t.said
+
+
+def test_d92_a_sentence_about_not_being_ready_does_not_end_the_day():
+    t = night(FakeTable(5), "player four", "player four")
+    t.reply(lines.discussion(120), "i'm not ready to vote")
+    t.hear("we're ready to hear from player two")
+    play(t, max_rounds=1)
+    assert lines.EARLY_VOTE not in t.said and lines.TIME_VOTE in t.said
+
+
+def test_d87_a_sentence_that_mentions_starting_over_is_talk():
+    t = night(FakeTable(5), "player four", "player four")
+    t.reply(lines.discussion(120), "i think we should start over with the accusations")
+    play(t, max_rounds=1)
+    assert lines.RESTARTING not in t.said and "One minute left." in t.said
+
+
+def test_d88_restart_the_round_starts_the_night_again_with_nothing_undone():
+    t = FakeTable(5)
+    t.reply(lines.MAFIA_WHISPER, "player four", "player two")
+    t.reply(lines.DOCTOR_WHISPER, "player three", "player three")
+    t.reply(lines.discussion(120), "restart the round")
+    t.sweep([3], [3])  # night one: three sits out
+    votes(t, {1: "two", 2: "one", 3: "two", 5: "two"})
+    outcome = games.play("mafia", t, random.Random(7), rig=RIG, options=Options(max_rounds=1))
+    assert outcome == "played"
+    assert "Okay, this round again." in t.said
+    i = t.said.index(lines.ROUND_AGAIN)
+    assert lines.HEADS_DOWN in t.said[i + 1 : i + 3]  # the night's flavor line may come between
+    assert t.said.count(lines.HEADS_DOWN) == 2 and t.said.count(lines.discussion(120)) == 2
+    assert lines.RESTARTING not in t.said and lines.STOPPING not in t.said
+    assert t.state["out"] == [4, 2] and t.state["round"] == 1  # four stays dead; the roles are the same
+    restarted = next(r for r in t.reports[t.reports.index(next(r for r in t.reports if r["out"] == [4])):] if r["phase"] == "night" and r["sitting_out"] == [])
+    assert restarted["warnings"] == {}
 
 
 def test_d18_the_eliminated_players_role_is_revealed():

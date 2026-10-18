@@ -36,7 +36,9 @@ Build all four now, quickly, in parallel; more features later. Look: clean and p
 
 ## The API (fixed before the two builders start)
 
-Everything is JSON unless said. All paths work in real and test mode. Errors are `{"error": "..."}` with 400 or 404.
+Everything is JSON unless said. All paths work in real and test mode, except `/dash/api/rig` (test mode only). Errors are `{"error": "..."}` with 400, 403, 404, 409 or 413.
+
+**The key (D86).** The brain mints a key at every start (`secrets.token_urlsafe(16)`) and prints it with the pages' addresses (`.../dash?key=...`, `.../dashboard?key=...`); the page reads it from its own address, keeps it in `sessionStorage` and sends it as the `X-Dash-Key` header on every request (`?key=` works too, for an `<img>`). Every POST under `/dash/api/*` and `/dashboard/*` needs it, and so do `GET /dash/api/photo`, `GET /dash/api/seat/<n>.jpg` and `GET /dash/api/events` (the camera, the players' faces, the log); without it, or with another, the answer is 403 whatever the request's origin. The other GETs stay open. A cross-origin request from a browser is answered with `Access-Control-Allow-Origin` only when its `Origin` is this page's own (the same host as `Host`); otherwise no such header at all, never `*`. `POST /dash/api/keys` also keeps its Origin-equals-Host check as a second layer. A body over 1 MiB is 413; a `Content-Length` that is not a number is 400. In test mode the key is fixed, `gm-test-dash-key` (`brain/__main__.py` `TEST_DASH_KEY`; `test/harness/brain.ts` `dashKey()`).
 
 | Route | Answer |
 |---|---|
@@ -46,25 +48,25 @@ Everything is JSON unless said. All paths work in real and test mode. Errors are
 | `face_style` (in state) | `{"bg", "ink", "cheek", "mouth"}` as `#rrggbb`: the robot's face colours from `brain/cards.py` |
 | `seats_info` (in state) | `[{"seat": n, "bearing": deg, "face": bool, "avatar": {"style": "lorelei", "seed": "seat-<n>-<count id>", "skin": hex or null, "hair": hex or "none", "options": {"seed", "skinColor"?: [hex], "hairColor"?: [hex]}} or null}]`; hex has no `#`. `face` and `avatar` fill in shortly after a count (cropped on the dash's own thread). Draw an avatar with `createAvatar(style, avatar.options).toString()` (an SVG string) from `/dash/vendor/dicebear.js`; a colour that could not be read is left out of `options` |
 | `GET /dash/api/robot` | `{"robot": {...}, "face_style": {...}}`, the same as in state |
-| `GET /dash/api/seat/<n>.jpg` | `image/jpeg`, 160x160, seat n's face from the last count; 404 until it is ready |
+| `GET /dash/api/seat/<n>.jpg` | `image/jpeg`, 160x160, seat n's face from the last count; 404 until it is ready; needs the key |
 | `POST /dash/api/volume` | body `{"volume": 0..100}` (a whole number); sets the robot's speaker now through the gateway's `set_volume`, not saved; answers `{"volume": n}`; 400 on a bad value or when the robot refuses |
 | `GET /dash/vendor/dicebear.js` | `text/javascript`: DiceBear 9 core and the Lorelei style (artwork CC0) as one ES module exporting `createAvatar` and `style`; built by `npm run build:avatars`, licenses in `brain/dash/vendor/LICENSES.md` |
-| `GET /dash/api/events?since=N` | `{"next": N2, "events": [{"id": n, "t": epoch_s, "kind": "say"\|"heard"\|"typed"\|"log"\|"game", "text": "..."}]}`; a ring of the last 500; `next` is the last id given, to pass back as `since` |
-| `GET /dash/api/photo` | `image/jpeg`, the latest camera frame with face boxes drawn (green close, white others); 404 before the first photo |
+| `GET /dash/api/events?since=N` | `{"next": N2, "events": [{"id": n, "t": epoch_s, "kind": "say"\|"heard"\|"typed"\|"log"\|"game", "text": "..."}]}`; a ring of the last 500; `next` is the last id given, to pass back as `since`; needs the key |
+| `GET /dash/api/photo` | `image/jpeg`, the latest camera frame with face boxes drawn (green close, white others); 404 before the first photo; needs the key |
 | `POST /dash/api/hear` | body `{"text": "..."}`; the host's next listen hears it instead of the microphone; `{"ok": true, "pending": n}` |
 | `POST /dash/api/game` | body `{"name": "mafia"\|"imposter"\|"wavelength"\|"stop"}`; queues "let's play <name>" or "stop the game" as typed hearing |
 | `POST /dash/api/say` | body `{"text": "..."}`; the host speaks it now (in a background thread, through the voice and the body) |
-| `POST /dash/api/head` | body `{"yaw"?: -90..90, "pitch"?: 5..85}`; moves the head; answers the new `{"yaw", "pitch"}` |
+| `POST /dash/api/head` | body `{"yaw"?: -90..90, "pitch"?: 5..85}`; moves the head; answers the new `{"yaw", "pitch"}`; 409 `{"error": "the host is counting"}` while the host counts, looks at heads or deals (D2: its own moves attribute faces to its yaw) |
 | `GET /dash/api/settings` | `{"values": {key: value}, "schema": [{"key", "label", "group", "kind": "number"\|"bool", "min", "max", "step", "unit", "help"}]}` |
 | `POST /dash/api/settings` | body `{key: value, ...}`; applied live, saved to `gamemaster.settings.json` beside `package.json`; answers like GET |
 | `GET /dash/api/content` | `{"imposter_words": [...], "spectra": ["cold - hot", ...]}` |
 | `POST /dash/api/content` | same shape (either key); applied live (`lines.IMPOSTER_WORDS`, `lines.SPECTRA`), saved in the settings file; answers like GET |
-| `GET /dash/api/keys` / `POST /dash/api/keys` | write-only API keys (`brain/keys.py`): GET answers `{"keys": [{"key", "label", "applies", "help", "set"}]}`, never a value; POST `{"KEY": "value"}` sets, `{"KEY": null}` clears; saved to `.env.local` (gitignored, mode 600; `brain/voice.py` and `brain/talk.py` read it too), read at start; refused (403) from another site's page |
-| `GET /dash/api/rig` / `POST /dash/api/rig` | the pending rigs, `{"<game>": {...}}` as `/test/rig` takes them (keys in `brain/games/__init__.py`) |
+| `GET /dash/api/keys` / `POST /dash/api/keys` | write-only API keys (`brain/keys.py`): GET answers `{"keys": [{"key", "label", "applies", "help", "set"}]}`, never a value; POST `{"KEY": "value"}` sets, `{"KEY": null}` clears; saved to `.env.local` (gitignored, mode 600; `brain/voice.py` and `brain/talk.py` read it too), read at start; refused (403) without the key and from another site's page |
+| `GET /dash/api/rig` / `POST /dash/api/rig` | test mode only (404 otherwise): the pending rigs, `{"<game>": {...}}` as `/test/rig` takes them (keys in `brain/games/__init__.py`) |
 
 Settings keys: `pitch` (head, 5..85), `hfov` (20..120), `sweep_step` (Camera, "Scan step", 10..45 degrees between the counting scan's photos; the scan takes ceil(180 / step) + 1 photos, reported as `"photos": n` beside `values` and `schema`; unset it is `vision.SWEEP_DEFAULT_DEG`, 12, or a third of the field of view if that is smaller), `score_min` (0.3..0.99), `close_width` (0.05..0.6), `listen_window` (1..15 s), `day_seconds` (10..300), `vote_seconds`, `whisper_seconds`, `clue_seconds` (1..20), `banter` (bool, quips on or off). Groups: "Camera", "Head", "Timing", "Voice".
 
-Options reach a remote referee only at its hello, so timing changes apply to the next referee start under `--referee remote`.
+Options reach a remote referee only at its hello, so timing changes apply to the next referee start under `--referee remote`. In local mode the lobby reads the host's options and listening window at each game and each idle listen (D1), so a change applies to the next one.
 
 ## Two screens (Rex, 03:55)
 

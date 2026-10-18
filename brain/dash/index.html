@@ -769,8 +769,17 @@ const HINTS = {
 };
 
 // ---------- network ----------
+// The dashboard's key (D86): from the page's own address (the brain prints it with ?key=), kept for the tab;
+// every request carries it, and the brain refuses a write, the camera and the faces without it.
+const DASH_KEY = (() => {
+  const fromUrl = new URLSearchParams(location.search).get("key");
+  try { if (fromUrl) sessionStorage.setItem("gm-key", fromUrl); return fromUrl || sessionStorage.getItem("gm-key") || ""; }
+  catch (e) { return fromUrl || ""; }
+})();
+const keyed = (url) => url + (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(DASH_KEY);  // an <img> cannot send a header
 async function api(path, body) {
-  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const opt = body === undefined ? { headers: { "X-Dash-Key": DASH_KEY } }
+    : { method: "POST", headers: { "Content-Type": "application/json", "X-Dash-Key": DASH_KEY }, body: JSON.stringify(body) };
   const r = await fetch("/dash/api/" + path, opt);
   let data = null;
   try { data = await r.json(); } catch (e) { /* not JSON */ }
@@ -1204,7 +1213,7 @@ function renderDrawer(s) {
     const img = $("photo");
     img.onload = () => { img.classList.add("on"); $("camEmpty").style.display = "none"; };
     img.onerror = () => { img.classList.remove("on"); $("camEmpty").style.display = ""; };
-    img.src = "/dash/api/photo?id=" + encodeURIComponent(p.id);
+    img.src = keyed("/dash/api/photo?id=" + encodeURIComponent(p.id));
   }
   if (!p) { $("photo").classList.remove("on"); $("camEmpty").style.display = ""; photoId = null; }
   const n = p && p.faces ? p.faces.length : 0;
@@ -1218,7 +1227,7 @@ function renderCrops(list) {
   if (sig === cropSig) return;
   cropSig = sig;
   $("crops").innerHTML = list.map((x) => '<figure>' + (x.face
-    ? '<img alt="Seat ' + x.seat + ' face" src="/dash/api/seat/' + x.seat + ".jpg?v=" + encodeURIComponent((x.avatar && x.avatar.seed) || "") + '">'
+    ? '<img alt="Seat ' + x.seat + ' face" src="' + keyed("/dash/api/seat/" + x.seat + ".jpg?v=" + encodeURIComponent((x.avatar && x.avatar.seed) || "")) + '">'
     : '<div class="none"></div>') + "<figcaption>Seat " + x.seat + "</figcaption></figure>").join("");
 }
 $("seeDet").addEventListener("toggle", () => { if ($("seeDet").open) { photoId = null; cropSig = ""; if (state) renderDrawer(state); } });
@@ -1227,7 +1236,8 @@ $("seeDet").addEventListener("toggle", () => { if ($("seeDet").open) { photoId =
 const HOST_LABEL = { piper: "Built-in", eleven: "ElevenLabs", anthropic: "Claude", gemini: "Gemini", ollama: "Ollama", off: "Scripted" };
 const cap = (k) => String(k).charAt(0).toUpperCase() + String(k).slice(1);
 async function hostApi(path, body) {
-  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const opt = body === undefined ? { headers: { "X-Dash-Key": DASH_KEY } }
+    : { method: "POST", headers: { "Content-Type": "application/json", "X-Dash-Key": DASH_KEY }, body: JSON.stringify(body) };
   const r = await fetch("/dashboard/" + path, opt);
   let data = null;
   try { data = await r.json(); } catch (e) { /* not JSON */ }

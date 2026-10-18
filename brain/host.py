@@ -46,6 +46,7 @@ from brain.body import Body, BodyError
 from brain.clock import Clock, ClockCancelled, VirtualClock
 from brain.games.common import GameStopped
 from brain.lobby import Lobby
+from brain.remote import MAX_LISTEN  # the gateway's longest listen: one cap, here and over the Table
 from brain.table import MOODS, Card
 
 POLL = 0.25  # seconds between photos while a card is owed: well inside D8's one second
@@ -60,7 +61,6 @@ TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a 
 TRUST = 4.0  # seconds the card stays up on a tap or "show me", the camera or not
 SPEAKERS = ("robot", "mac")
 LISTEN_WINDOW = 4.0  # the idle loop's listening window, waiting for a game's name
-MAX_LISTEN = 30.0  # the gateway's longest listen
 TURN_RATE = 240.0  # degrees per second at speed "high"
 TURN_SETTLE = 0.15  # seconds after the head arrives before a photo is trusted
 SWEEP_SPEED = 24  # degrees per second asked of each step of the counting sweep: the firmware eases a 12-degree step over about a third of a second, so the head glides from photo to photo
@@ -158,17 +158,20 @@ class Host:
         self.paused = False  # someone said "pause"; the game waits for "resume" or a head tap
         self._paused_for = 0.0  # seconds spent paused, left out of now() so a game's timers stop
         self.last_line: str | None = None  # the game's last line, for "say that again"
+        self.busy = False  # counting, sweeping or dealing: the dashboard leaves the head alone (D2); under _lock
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._started = threading.Event()
         self.clear()
 
     def clear(self) -> None:
-        """Forget the table: seats, the published state, rigs, the loaded cards."""
+        """Forget the table: seats, the published state, rigs, the loaded cards, the pause."""
         with self._lock:
             self.seat_bearings: list[float] = []
             self.state: dict[str, Any] | None = None
             self.rigs: dict[str, dict[str, Any]] = {}
+        self.paused = False  # someone said "pause"; the game waits for "resume" or a head tap
+        self._paused_for = 0.0  # seconds spent paused, left out of now() so a game's timers stop
         if self.dash is not None:
             self.dash.clear_seats()
         self.yaw = 0.0
@@ -404,11 +407,20 @@ class Host:
 
     def _views(self, pans: list[float]) -> list[tuple[float, list[vision.Face]]]:
         views = []
-        for pan in pans:
-            self._check_stop()
-            self._turn(pan)
-            views.append((self.yaw, self._look("night")))
+        self._set_busy(True)
+        try:
+            for pan in pans:
+                self._check_stop()
+                self._turn(pan)
+                views.append((self.yaw, self._look("night")))
+        finally:
+            self._set_busy(False)
         return views
+
+    def _set_busy(self, busy: bool) -> None:
+        """The head is the host's for now: Dash.head() is refused (D2)."""
+        with self._lock:
+            self.busy = busy
 
     def count(self) -> int:
         """The counting sweep (D5): a quick turn to the far left, then small gentle steps
@@ -417,12 +429,15 @@ class Host:
         the sweep's photos and crops each seat's face on its own thread."""
         if self.dash is not None:
             self.dash.count_started()
+        self._set_busy(True)
         try:
             found = self._sweep()
         except BaseException:
             if self.dash is not None:
                 self.dash.count_failed()
             raise
+        finally:
+            self._set_busy(False)
         with self._lock:
             self.seat_bearings = found
         if self.dash is not None:
@@ -523,6 +538,7 @@ class Host:
                 self._avatar("off", "off")
                 showing, shown_for = False, shown_for + (now - shown_at)
 
+        self._set_busy(True)
         try:
             while True:
                 self._check_stop()
@@ -605,6 +621,7 @@ class Host:
                         next_hear = start + HEAR_AFTER
                 self.clock.sleep(POLL)
         finally:
+            self._set_busy(False)
             if showing:
                 self._avatar("off", "off")
             self._avatar("idle", "idle")
@@ -752,9 +769,9 @@ class Host:
         go back to idle; forever (brain/lobby.py)."""
         self._setup()
         Lobby(
-            self, self.rng, options=self.options, listen_window=self.listen_window, recovery=RECOVERY,
+            self, self.rng, options=lambda: self.options, listen_window=lambda: self.listen_window, recovery=RECOVERY,
             rigs=self._take_rig, stopped=self._stop.is_set, log=self._log,
-        ).run(welcome=self.welcome_at_start)
+        ).run(welcome=self.welcome_at_start)  # the options and the window are read at each game and listen: the dashboard changes them live (D1)
 
     def _take_rig(self, game: str) -> dict[str, Any] | None:
         with self._lock:

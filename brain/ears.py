@@ -7,8 +7,12 @@ Every parser answers None rather than guess: a vote or a whisper the host cannot
 out is asked for again (OUT-OF-SCOPE.md), so a wrong number is worse than none.
 
 Whisper hears short numbers as words that sound like them ("for", "won", "too").
-Those count only right after "player", "number" or "seat", or when the whole
-utterance is a word or two, because "to" and "for" fill ordinary sentences.
+Those count only right after "player", "number" or "seat" (D91), because "to" and
+"for" fill ordinary sentences and "me too" is not a vote.
+
+A command to the host (stop, reset, vote now) is a short plain utterance, at most a
+few words with no negation, that is the command and little else (D87): "let's reset",
+"stop the game please"; a sentence that merely contains the word is talk.
 """
 
 from __future__ import annotations
@@ -39,13 +43,28 @@ _GAMES["wordle"] = ("wordle", "wordles", "wordel", "wurdle", "werdle")
 _SPLIT_GAMES.update({("word", "game"): "wordle", ("word", "games"): "wordle", ("words", "game"): "wordle"})
 _SPLIT_GAMES.update({("twenty", "questions"): "twenty", ("20", "questions"): "twenty",
                      ("twenty", "question"): "twenty", ("20", "question"): "twenty"})
-_STOP = (
-    "stop the game", "end the game", "quit the game", "cancel the game", "restart the game",
-    "restart the round", "start over", "stop playing",
-)
-_VOTE_NOW = ("let's vote", "lets vote", "ready to vote", "vote now", "we're ready", "were ready", "time to vote")
-_AGREE = ("okay", "ok", "fine", "yes", "yeah", "yep", "sure", "start", "go ahead", "let's go", "lets go",
+# Short plain commands (D87, D88, D92): the phrase, with at most these wrappers around it.
+_STOP = ("stop the game", "stop this game", "end the game", "end this game", "quit the game", "quit this game",
+         "cancel the game", "stop playing")
+_RESET = ("reset", "reset the game", "reset it", "restart", "restart the game", "restart this game", "restart it",
+          "start over", "start again", "start the game over", "start it over", "begin again")
+_ROUND_AGAIN = ("restart the round", "restart this round", "redo the round", "redo this round", "this round again",
+                "the round again", "round again", "do the round again", "do this round again")
+_VOTE_NOW = ("vote", "let's vote", "lets vote", "ready to vote", "vote now", "time to vote", "we're ready",
+             "were ready", "we are ready", "can we vote")
+_COMMAND_WRAPPERS = frozenset({
+    "okay", "ok", "alright", "hey", "rob", "um", "uh", "so", "yeah", "yes", "let's", "lets", "can", "we", "could",
+    "please", "just", "now", "i", "want", "to", "wanna", "guys", "everyone", "then", "already", "should", "it",
+    "all", "we're", "were", "ready", "think", "go", "good",
+})
+_NEGATIONS = frozenset({"don't", "dont", "not", "never", "no", "nope", "nah", "isn't", "wrong"})
+_AGREE = ("okay", "ok", "fine", "yes", "yeah", "yep", "sure", "start", "go ahead", "go on", "let's go", "lets go",
           "never mind", "nevermind", "that's right", "thats right", "correct", "right")
+# A vote or a guess: a negated seat is no seat, and a correction takes the last number.
+_NEGATED = frozenset({"not", "except", "but", "never", "don't", "dont", "without", "nobody", "neither", "nor"})
+_CORRECTIONS = frozenset({"no", "wait", "actually", "sorry", "mean", "rather", "instead", "scratch"})
+_NUMBER_FILLERS = frozenset({"uh", "um", "er", "umm", "hmm", "like"})
+_DROPPED = (("out", "of", "ten"), ("out", "of", "10"), ("on", "the", "scale"))
 
 
 def _tokens(text: str) -> list[str]:
@@ -75,6 +94,10 @@ def _numbers(tokens: list[str]) -> list[tuple[int, int]]:
             continue
         if t == "one" and i > 0 and tokens[i - 1] in ("no", "that", "this", "the", "which", "every", "any", "some"):
             continue
+        if i > 0 and tokens[i - 1] in ("you", "me", "us"):
+            continue  # "you two", "me too": people, not a count
+        if i + 1 < len(tokens) and tokens[i + 1] in ("sec", "second", "seconds", "minute", "moment"):
+            continue  # "one sec"
         out.append((i, n))
     return out
 
@@ -90,35 +113,75 @@ def _pointed(tokens: list[str]) -> list[int]:
     return out
 
 
+def _corrected(tokens: list[str]) -> list[str]:
+    """What stands after the last correction word ("four, no wait, two" -> ["two"])."""
+    cut = max((i for i, t in enumerate(tokens) if t in _CORRECTIONS), default=-1)
+    return tokens[cut + 1 :] if cut >= 0 else tokens
+
+
 def _one_number(tokens: list[str]) -> int | None:
-    """The single number an utterance names, or None when it names none or several."""
-    pointed = set(_pointed(tokens))
-    if len(pointed) == 1:
-        return pointed.pop()
-    if len(pointed) > 1:
+    """The single number an utterance names, or None when it names none, several, or
+    negates one (D91). A soundalike counts only after a pointer; a correction word
+    ("no wait", "actually", "i mean") keeps the last number."""
+    if any(t in _NEGATED for t in tokens) or " no one " in f" {' '.join(tokens)} ":
         return None
-    strict = {n for _, n in _numbers(tokens)}
-    if len(strict) == 1:
-        return strict.pop()
-    if len(strict) > 1:
-        return None
-    if 1 <= len(tokens) <= 2:
-        loose = {n for t in tokens if (n := _SOUNDALIKES.get(t)) is not None}
-        if len(loose) == 1:
-            return loose.pop()
+    tokens = _corrected(tokens)
+    named = {n for _, n in _numbers(tokens)} | set(_pointed(tokens))
+    return named.pop() if len(named) == 1 else None
+
+
+def _command(text: str, phrases: tuple[str, ...], max_tokens: int) -> bool:
+    """A short plain command (D87): at most max_tokens words, no negation, one of the
+    phrases with nothing but wrappers ("okay", "please", "can we") around it."""
+    tokens = _tokens(text)
+    if not 0 < len(tokens) <= max_tokens or any(t in _NEGATIONS for t in tokens):
+        return False
+    said = " ".join(tokens)
+    for phrase in sorted(phrases, key=len, reverse=True):
+        if f" {phrase} " in f" {said} ":
+            rest = said.replace(phrase, " ", 1).split()
+            if all(t in _COMMAND_WRAPPERS for t in rest):
+                return True
+    return False
+
+
+_REQUEST = frozenset({
+    "let's", "lets", "play", "please", "we", "want", "to", "how", "about", "can", "could", "start", "time", "with",
+    "people", "players", "of", "us", "again", "okay", "ok", "yeah", "i", "wanna", "the", "a", "game", "do", "round",
+    "try", "go", "for", "one", "more", "another", "hey", "rob", "maybe", "um", "uh", "now", "instead", "then",
+    "sure", "and", "there", "are", "we're", "were", "some", "everyone", "all", "next", "this", "that",
+})
+
+
+def _game_at(tokens: list[str]) -> tuple[str, int, int] | None:
+    """The first game the tokens name, with the span of its name: (game, start, end)."""
+    for i, t in enumerate(tokens):
+        for game, names in _GAMES.items():
+            if t in names or t.rstrip("s") in names:
+                return game, i, i + 1
+        if i + 1 < len(tokens) and (t, tokens[i + 1]) in _SPLIT_GAMES:
+            return _SPLIT_GAMES[(t, tokens[i + 1])], i, i + 2
     return None
 
 
 def game_named(text: str) -> str | None:
-    """The game a sentence names ("let's play mafia" -> "mafia"), the first if several."""
+    """The game a request names (D94): the name as the whole utterance or in a request
+    frame ("let's play mafia", "wordle please", "imposter with six people"), the first
+    if several. The name inside other talk ("that was a hot seat") is None."""
     tokens = _tokens(text)
-    for i, t in enumerate(tokens):
-        for game, names in _GAMES.items():
-            if t in names or t.rstrip("s") in names:
-                return game
-        if i + 1 < len(tokens) and (t, tokens[i + 1]) in _SPLIT_GAMES:
-            return _SPLIT_GAMES[(t, tokens[i + 1])]
-    return None
+    found = _game_at(tokens)
+    if found is None:
+        return None
+    game, start, end = found
+    rest = tokens[:start] + tokens[end:]
+    return game if all(t in _REQUEST or _strict(t) is not None for t in rest) else None
+
+
+def game_mentioned(text: str) -> str | None:
+    """The game a sentence mentions anywhere ("that was a hot seat yesterday"): the
+    doubtful hearing D94 confirms with "Hot Seat? Say yes to play it."."""
+    found = _game_at(_tokens(text))
+    return None if found is None else found[0]
 
 
 def count_said(text: str) -> int | None:
@@ -142,7 +205,8 @@ def count_said(text: str) -> int | None:
 
 
 def bare_number(text: str, lo: int = 1, hi: int = 20) -> int | None:
-    """An utterance that is just a number ("six.", "6", "uh six"), in lo..hi."""
+    """An utterance that is just a number ("six.", "6", "uh six"), in lo..hi; no
+    soundalike without a pointer ("sex", "for"), no "you two" (D91)."""
     tokens = [t for t in _tokens(text) if t not in ("uh", "um", "er", "like", "its", "it's", "just")]
     if not 1 <= len(tokens) <= 2:
         return None
@@ -151,41 +215,58 @@ def bare_number(text: str, lo: int = 1, hi: int = 20) -> int | None:
 
 
 def seat_said(text: str, seats: int) -> int | None:
-    """The seat a vote or a whisper names: "player four", "four", "4", "number four",
-    "i vote for four", "player for"; only 1..seats, else None."""
+    """The seat a vote or a whisper names (D91): "player four", "four", "4", "number
+    four", "i vote for four", "player for"; only 1..seats, else None. Two seats, a
+    negation ("anyone but four") or "me too" are None; a correction keeps the last."""
     n = _one_number(_tokens(text))
     return n if n is not None and 1 <= n <= seats else None
 
 
 def number_said(text: str, lo: int = 1, hi: int = 10) -> int | None:
-    """A guess: the one number an utterance names, in lo..hi ("six", "i think seven",
-    "7"); None for none, several, or out of range."""
-    n = _one_number(_tokens(text))
+    """A guess (D95): the one number in a short answer, in lo..hi ("six", "i'd say
+    seven", "seven out of ten", "nine, no, eight"); None for none, several, out of
+    range, or a number inside a longer sentence (more than six words)."""
+    tokens = [t for t in _tokens(text) if t not in _NUMBER_FILLERS]
+    for dropped in _DROPPED:
+        for i in range(len(tokens) - len(dropped) + 1):
+            if tuple(tokens[i : i + len(dropped)]) == dropped:
+                tokens = tokens[:i] + tokens[i + len(dropped) :]
+                break
+    if len(tokens) > 6:
+        return None
+    n = _one_number(tokens)
     return n if n is not None and lo <= n <= hi else None
 
 
 def agrees(text: str) -> bool:
-    """A go-ahead after the host's count ("okay", "yes", "fine, start")."""
-    t = " " + " ".join(_tokens(text)) + " "
+    """A plain go-ahead after the host's count ("okay", "yes", "fine, start"): a reply
+    with a "no" or a "not" in it is a disagreement (D89)."""
+    tokens = _tokens(text)
+    if any(t in _NEGATIONS for t in tokens):
+        return False
+    t = " " + " ".join(tokens) + " "
     return any(f" {a} " in t for a in _AGREE)
 
 
 def wants_to_stop(text: str) -> bool:
-    """The group asks to stop or restart (D27: the group may restart by saying so)."""
-    t = " ".join(_tokens(text))
-    return wants_to_reset(text) or any(p in t for p in _STOP)
-
-
-_RESET = re.compile(r"\b(?:reset|restart(?:ed|ing)?|start (?:over|again)|begin again)\b")
+    """A short plain request to stop, reset or restart the round (D27, D87)."""
+    return wants_to_reset(text) or wants_round_restart(text) or _command(text, _STOP, 5)
 
 
 def wants_to_reset(text: str) -> bool:
-    """"reset", "start over", "restart": the welcome again, ending any game (D38)."""
-    return bool(_RESET.search(" ".join(_tokens(text))))
+    """"reset", "start over", "restart" said on their own: the welcome again, ending any
+    game (D38, D87); a sentence that contains the word is talk."""
+    return _command(text, _RESET, 5)
+
+
+def wants_round_restart(text: str) -> bool:
+    """"restart the round", "redo the round", "this round again" (D88): Mafia starts the
+    round's night again; other games stop."""
+    return _command(text, _ROUND_AGAIN, 5)
 
 
 _PAUSE = re.compile(r"\b(?:pause|pause the game|hold the game|shut up|be quiet|quiet please|stop talking|hush)\b")
-_RESUME = re.compile(r"\b(?:resume|unpause|un pause|continue|keep going|play on|we're back|were back|i'm back|im back|back to the game|let's go|lets go|go on)\b")
+_RESUME = re.compile(r"\b(?:resume|unpause|un pause|continue|keep going|carry on|play on|we're back|were back|i'm back|im back|back to the game)\b")
 _HALT = {"stop", "wait"}  # said on their own, with at most a word or two of _HALT_FILL, a pause
 _HALT_FILL = {"stop", "wait", "please", "okay", "ok", "rob", "hey", "robot"}
 
@@ -203,7 +284,8 @@ def wants_pause(text: str) -> bool:
 
 
 def wants_resume(text: str) -> bool:
-    """"resume", "unpause", "we're back", "keep going": the end of a pause."""
+    """"resume", "unpause", "we're back", "keep going": the end of a pause. "let's go"
+    and "go on" are a yes, never a resume (D93)."""
     return bool(_RESUME.search(" ".join(_tokens(text))))
 
 
@@ -327,7 +409,7 @@ def wants_later(text: str) -> bool:
 def asks_rules(text: str) -> str | None:
     """The game a question about the rules names ("how do you play imposter?"), else None.
     "How about Mafia?" is a choice, not a question."""
-    game = game_named(text)
+    game = game_mentioned(text)
     if game is None or _has(text, ("how about", "what about")):
         return None
     return game if _has(text, _ASK_RULES) else None
@@ -355,6 +437,7 @@ def meaningful(text: str, answering: bool = False) -> bool:
 
 
 def wants_to_vote(text: str) -> bool:
-    """The group is ready to vote before the day's time is up."""
-    t = " ".join(_tokens(text))
-    return any(p in t for p in _VOTE_NOW)
+    """The group is ready to vote before the day's time is up (D92): a short plain
+    "let's vote", "we're ready to vote", "vote now"; a longer or negated sentence
+    ("i'm not ready to vote", "we're ready to hear from player two") is talk."""
+    return _command(text, _VOTE_NOW, 5)

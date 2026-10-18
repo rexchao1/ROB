@@ -18,6 +18,8 @@ import json
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+MAX_BODY = 1 << 20  # bytes of system info a device may send; more is 413
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -27,15 +29,25 @@ def main() -> None:
 
     class Handler(BaseHTTPRequestHandler):
         def answer(self) -> None:
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if not 0 <= length <= MAX_BODY:  # not a number, or more than a device's system info: unread, the connection closed
+                self.close_connection = True
+                self.send(413 if length > MAX_BODY else 400, {"error": "bad Content-Length"})
+                return
             if length:
                 self.rfile.read(length)  # the device's system info; not needed
-            body = json.dumps({
+            self.send(200, {
                 # url present and version equal to the device's: "Current is the latest version"
                 "firmware": {"version": args.version, "url": ""},
                 "server_time": {"timestamp": int(time.time() * 1000), "timezone_offset": -(time.altzone if time.localtime().tm_isdst else time.timezone) // 60},
-            }).encode()
-            self.send_response(200)
+            })
+
+        def send(self, status: int, payload: dict) -> None:
+            body = json.dumps(payload).encode()
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()

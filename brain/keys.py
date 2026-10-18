@@ -77,8 +77,9 @@ def load_env(path: Path = ENV_FILE) -> None:
         os.environ.setdefault(name, value)
 
 
-def _write_env(path: Path, updates: dict[str, str | None]) -> None:
-    """Set or remove keys in .env, keeping every other line as it was; owner-only."""
+def write_env(path: Path, updates: dict[str, str | None]) -> None:
+    """Set or remove keys in .env, keeping every other line as it was; owner-only (the
+    brain's start writes the generated table token through here too)."""
     try:
         lines = path.read_text().splitlines()
     except OSError:
@@ -138,7 +139,7 @@ class Keys:
                 else:
                     self._memory[name] = value
         else:
-            _write_env(self.path, updates)
+            write_env(self.path, updates)
             for name, value in updates.items():
                 if value is None:
                     os.environ.pop(name, None)

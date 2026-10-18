@@ -68,6 +68,14 @@ export interface World {
   voting?: boolean
   /** Mafia: the game time the day's discussion began (within a twentieth of a second). */
   dayBegan?: number
+  /** said().length just after a timed When's mark: the line due at the mark is before this index. */
+  dueBy?: number
+  /** The lines of said() a sweep When covers: a line the players hear in it is heard once. */
+  window?: { from: number; to: number }
+  /** The seats the current vote should ask, when the scenario names them (D97: sit-outs excluded). */
+  voters?: number[]
+  /** Wavelength: the first round's psychic, when the Background names it (D103). */
+  firstPsychic?: number
 }
 
 export type Step<W = World> = Registry<W>
@@ -127,6 +135,7 @@ export const MAFIA_DOWN = 'Mafia, heads back down.'
 export const DOCTOR_WHISPER = 'Doctor, whisper who you save.'
 export const DOCTOR_DOWN = 'Doctor, head back down.'
 export const MORNING = "Everyone, heads up. It's morning."
+export const GOOD_GAME = 'Good game, everyone.'
 export const EARLY_VOTE = "Okay, let's vote."
 export const CLUES = "One word each, in seat order. Don't make it too easy."
 export const IMPOSTER_VOTE = "Who's the Imposter? Let's vote."
@@ -140,8 +149,11 @@ export const DISCUSSION = /^You have .+\. Talk it out\.$/
 export const VOTE_END = /^(?:[A-Z][a-z-]+ for Player [a-z]+[,.]|Nobody voted\.)/
 /** The prompt after each night sweep. */
 export const AFTER_SWEEP = new RegExp(`^(?:${[MAFIA_WHISPER, DOCTOR_WHISPER, MORNING].map(escape).join('|')})$`)
+export const NO_GUESS = 'No guess. Zero points.'
 export const POINTS = /^(?:[A-Z][a-z-]* points?\.|No guess\. Zero points\.)$/
 export const NAMED = new RegExp(`\\bPlayer (${ONES.slice(1, 11).join('|')})\\b`, 'g')
+/** The games' spoken names (brain/lines.py GAME_NAMES). */
+export const GAME_NAMES = ['Mafia', 'Imposter', 'Wavelength', 'Twenty Questions', 'Hot Seat', 'Wordle']
 
 function escape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -320,6 +332,28 @@ export async function photosBetween(w: World, from: number, to: number): Promise
   return (await record(w)).filter((c) => c.tool === 'take_photo' && c.line >= from && c.line < to).map((c) => c.yaw)
 }
 
+/** The number of listens (microphone windows) the host opened after line `from` and before line `to`. */
+export async function listensBetween(w: World, from: number, to: number): Promise<number> {
+  return (await record(w)).filter((c) => c.tool === 'listen' && c.line >= from && c.line < to).length
+}
+
+/** The synthetic camera's horizontal field of view (test/fixtures/table.py HFOV_DEG). */
+export const HFOV = 60
+
+/**
+ * The photos of one whole sweep of the table (D96): the first at the far left (-90),
+ * the last at the far right (90), each after the one before, and no two further apart
+ * than the camera sees at once.
+ */
+export function expectSweep(photos: number[], what: string): void {
+  expect(photos[0], `${what}: the first photo`).toBe(-90)
+  expect(photos.at(-1), `${what}: the last photo`).toBe(90)
+  for (let i = 1; i < photos.length; i++) {
+    expect(photos[i]! - photos[i - 1]!, `${what}: the turn from ${photos[i - 1]} to ${photos[i]}`).toBeGreaterThan(0)
+    expect(photos[i]! - photos[i - 1]!, `${what}: the turn from ${photos[i - 1]} to ${photos[i]}`).toBeLessThan(HFOV)
+  }
+}
+
 /** The head faced this seat (within the tolerance a seat is told apart by). */
 export function expectFacing(w: World, yaw: number, seat: number, what: string): void {
   expect(Math.abs(yaw - bearing(w, seat)), `${what}: the head at ${yaw}, ${player(seat)} at ${bearing(w, seat)}`).toBeLessThanOrEqual(10)
@@ -489,6 +523,21 @@ export async function voteOut(w: World, seat: number): Promise<Ask[]> {
   return asks
 }
 
+/**
+ * The game is over, read from the far side: the host signed off ("Good game, everyone."),
+ * said nothing after it, and says nothing more in the two minutes of game time that follow
+ * (a host that played on after a win would call the next night here).
+ */
+export async function expectGameOver(w: World): Promise<void> {
+  const b = brain(w)
+  const said = await b.said()
+  const last = said.lastIndexOf(GOOD_GAME)
+  expect(last, 'the host signing off').toBeGreaterThanOrEqual(w.since ?? 0)
+  expect(said.slice(last + 1), 'what the host said after signing off').toEqual([])
+  await b.advance(120)
+  expect((await b.said()).slice(last + 1), 'what the host said in the two minutes after signing off').toEqual([])
+}
+
 // --- steps more than one feature reads -----------------------------------------------------
 
 /** A game's Background: the friends seated, the game named (it starts when a step needs it). */
@@ -502,17 +551,33 @@ export function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+/**
+ * The line was played since the When (toContain); not before a timed When's mark and by
+ * just after it (notBefore, dueBy); and exactly once within a sweep When's window.
+ */
 export function defineHear(reg: Step): void {
   reg.define(/^the players hear the host say "(.+)"$/, async (w, line) => {
-    expect(await heard(w)).toContain(text(line))
-    if (w.notBefore !== undefined) {
-      expect((await brain(w).said()).slice(w.since ?? 0, w.notBefore), 'said before its time').not.toContain(text(line))
-    }
+    await expectHeard(w, text(line))
   })
 }
 
+export async function expectHeard(w: World, line: string): Promise<void> {
+  const said = await brain(w).said()
+  const since = w.since ?? 0
+  expect(said.slice(since)).toContain(line)
+  if (w.notBefore !== undefined) {
+    expect(said.slice(since, w.notBefore), 'said before its time').not.toContain(line)
+  }
+  if (w.dueBy !== undefined) {
+    expect(said.slice(since, w.dueBy), 'said by its time').toContain(line)
+  }
+  if (w.window !== undefined) {
+    expect(said.slice(w.window.from, w.window.to).filter((l) => l === line), `"${line}" in the sweep's window`).toHaveLength(1)
+  }
+}
+
 export function defineSomeoneSays(reg: Step): void {
-  reg.define(/^someone says "(.+)"$/, async (w, words) => {
+  reg.define(/^someone says "([^"]+)"$/, async (w, words) => {
     when(w)
     await says(w, text(words))
   })

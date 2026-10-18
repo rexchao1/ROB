@@ -8,6 +8,13 @@
                   [--referee local|remote] [--table-host ADDR] [--table-port N] [--table-token T]
   python -m brain --test --gateway <fake>/mcp --pcm <fake>/pcm [--port 0]
 
+Two secrets, both minted here. The Table's token (D85) is required under --referee
+remote: --table-token or GM_TABLE_TOKEN, else one is generated at this start, written
+to .env.local (owner-only) and said on stdout; qnx/deploy.sh carries it to the Pi. The
+dashboard's key (D86) is new at every start and printed as part of the page's address
+(?key=...); the page sends it back on every write. Under --test both are fixed
+(TEST_TABLE_TOKEN, TEST_DASH_KEY), known to test/harness/brain.ts.
+
 The real loop runs on the wall clock against the stackchan-mcp gateway daemon (MCP at
 :8767/mcp, PCM at :8766/pcm by default), speaks with the recorded lines and Piper
 behind them, and serves GET /state on --port for watching a game.
@@ -29,6 +36,7 @@ import dataclasses
 import json
 import os
 import random
+import secrets
 import socket
 import sys
 import tempfile
@@ -44,7 +52,7 @@ from brain.body import Body, Gateway
 from brain.clock import RealClock, VirtualClock
 from brain.dash import SETTINGS_FILE, Dash
 from brain.host import RECOVERY, Host
-from brain.keys import ENV_FILE, load_env
+from brain.keys import ENV_FILE, load_env, write_env
 from brain.remote import PORT as TABLE_PORT
 from brain.remote import TableServer
 from brain.server import FakeControl, serve
@@ -54,6 +62,8 @@ from brain.voice import ELEVEN_MODEL, ELEVEN_VOICE, TestVoice, VoiceError, env, 
 
 
 ROOT = Path(__file__).resolve().parent.parent
+TEST_TABLE_TOKEN = "gm-test-table-token"  # --test: the Table's token, as test/harness/brain.ts and the integration test send it
+TEST_DASH_KEY = "gm-test-dash-key"  # --test: the dashboard's key, as test/harness/brain.ts dashKey() sends it
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -140,16 +150,17 @@ def main(argv: list[str] | None = None) -> int:
     Dash(host, mode="real", referee=args.referee, settings_path=SETTINGS_FILE, keys_path=ENV_FILE).load()
     if args.referee == "remote":
         table = TableServer(
-            host, host.clock, args.table_host or "0.0.0.0", args.table_port, args.table_token,
+            host, host.clock, args.table_host or "0.0.0.0", args.table_port, _table_token(args.table_token),
             setup=host._setup, rigs=_rigs(host), hello=_hello(host, args.seed),  # noqa: SLF001
         ).start()
-        print(f"gamemaster: table for the referee at {_reachable(table)}", flush=True)
-    server = serve(host, args.host, args.port)
+        print(f"gamemaster: table for the referee at {_reachable(table)} (the token is GM_TABLE_TOKEN in .env.local; qnx/deploy.sh carries it to the Pi)", flush=True)
+    dash_key = secrets.token_urlsafe(16)
+    server = serve(host, args.host, args.port, dash_key=dash_key)
     print(f"gamemaster: listening on http://{args.host}:{server.server_address[1]} (gateway {args.gateway}, pcm {pcm})", flush=True)
     dashboard_url = _dashboard_url(args.host, server.server_address[1])
-    print(f"gamemaster: game screen at {dashboard_url.removesuffix('/dashboard')}/dash", flush=True)
-    print(f"gamemaster: dashboard at {dashboard_url}"
-          + ("" if args.host == "0.0.0.0" else " (this Mac only; --host 0.0.0.0 opens it to phones on the network)"), flush=True)
+    print(f"gamemaster: game screen at {dashboard_url.removesuffix('/dashboard')}/dash?key={dash_key}", flush=True)
+    print(f"gamemaster: dashboard at {dashboard_url}?key={dash_key} (the key is new at every start; the page keeps it"
+          + ("" if args.host == "0.0.0.0" else "; this Mac only: --host 0.0.0.0 opens it to every device on the network") + ")", flush=True)
     if args.referee == "local":
         host.start()
     try:
@@ -172,6 +183,7 @@ class TestBrain:
     clock: VirtualClock
     reset: Callable[..., None]  # reset(welcome=False)
     table: TableServer | None = None  # --referee remote: the Table the referee plays through
+    dash_key: str = TEST_DASH_KEY  # what a write under /dash/api or /dashboard carries (X-Dash-Key)
 
     @property
     def url(self) -> str:
@@ -192,11 +204,13 @@ def make_test_brain(
     table_address: str = "127.0.0.1",
     table_port: int = 0,
     table_token: str | None = None,
+    dash_key: str = TEST_DASH_KEY,
 ) -> TestBrain:
     """Build the test-mode brain against the fake gateway at `gateway` (its /mcp URL) and
     start the host's loop; the caller runs server.serve_forever(). With referee="remote"
     the host runs no loop: its Table is served (and started) for a referee instead, and
-    a reset starts that over."""
+    a reset starts that over. The Table's token and the dashboard's key are the fixed
+    test ones unless given."""
     base = gateway.rsplit("/", 1)[0]
     body = Body(Gateway(gateway), pcm or base + "/pcm")
     clock = VirtualClock()
@@ -224,7 +238,7 @@ def make_test_brain(
 
     if referee == "remote":
         table = TableServer(
-            host, clock, table_address, table_port, table_token,
+            host, clock, table_address, table_port, table_token or TEST_TABLE_TOKEN,
             setup=host._setup, rigs=_rigs(host), hello=_hello(host, seed, test=True),  # noqa: SLF001
         )
 
@@ -234,9 +248,9 @@ def make_test_brain(
                 table.reset(wipe)
                 clock.settle()
 
-        server = serve(host, address, port, fake=fake, reset=reset_remote)
+        server = serve(host, address, port, fake=fake, reset=reset_remote, dash_key=dash_key)
         table.start()
-        return TestBrain(server, host, clock, reset_remote, table)
+        return TestBrain(server, host, clock, reset_remote, table, dash_key)
 
     def reset(welcome: bool = False) -> None:
         with resetting:
@@ -246,9 +260,9 @@ def make_test_brain(
             host.start()
             clock.settle()
 
-    server = serve(host, address, port, fake=fake, reset=reset)
+    server = serve(host, address, port, fake=fake, reset=reset, dash_key=dash_key)
     host.start()
-    return TestBrain(server, host, clock, reset)
+    return TestBrain(server, host, clock, reset, dash_key=dash_key)
 
 
 def _rigs(host: Host) -> Callable[[str], dict | None]:
@@ -271,6 +285,19 @@ def _hello(host: Host, seed: int | None, test: bool = False) -> Callable[[], dic
         "test": test,
         "welcome": host.welcome_at_start,
     }
+
+
+def _table_token(given: str | None, path: Path = ENV_FILE) -> str:
+    """The Table's token (D85): the flag or GM_TABLE_TOKEN, else one made now and written
+    to .env.local as GM_TABLE_TOKEN (owner-only, the other lines kept), where the next
+    start and qnx/deploy.sh find it."""
+    if given:
+        return given
+    token = secrets.token_urlsafe(24)
+    write_env(path, {"GM_TABLE_TOKEN": token})
+    os.environ["GM_TABLE_TOKEN"] = token
+    print(f"gamemaster: no table token was set: one was generated and written to {path} as GM_TABLE_TOKEN", flush=True)
+    return token
 
 
 def _dashboard_url(address: str, port: int) -> str:
@@ -307,8 +334,9 @@ def _test(args: argparse.Namespace, options: games.Options) -> int:
         table_token=args.table_token,
     )
     if brain.table is not None:
-        print(f"gamemaster: table for the referee at {_reachable(brain.table)}", flush=True)
+        print(f"gamemaster: table for the referee at {_reachable(brain.table)} (token {TEST_TABLE_TOKEN})", flush=True)
     print(f"gamemaster: listening on {brain.url} (test mode, gateway {args.gateway})", flush=True)
+    print(f"gamemaster: game screen at {brain.url}/dash?key={brain.dash_key}", flush=True)
     try:
         brain.server.serve_forever(poll_interval=0.05)
     except KeyboardInterrupt:
