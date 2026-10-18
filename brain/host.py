@@ -197,6 +197,7 @@ class Host:
         self._manifest: dict[str, Any] | None = None
         self._loaded_path: str | None = None
         self._loading: threading.Thread | None = None
+        self._loading_path: str | None = None
         self._load_error: Exception | None = None
         self.recap.clear()
 
@@ -692,11 +693,15 @@ class Host:
         if str(path) == self._loaded_path and self._load_error is None:
             self._manifest = manifest
             return
+        if str(path) == self._loading_path and self._loading is not None and self._loading.is_alive():
+            self._manifest = manifest  # already on its way: a setup retry must not queue it again
+            return
         self._manifest = manifest
         self._load_error = None
         if self.virtual:
             self._load(str(path))  # in order, so a test's record of calls is the same every run
         else:
+            self._loading_path = str(path)
             self._loading = threading.Thread(target=self._load, args=(str(path),), name="avatar-load", daemon=True)
             self._loading.start()
 
