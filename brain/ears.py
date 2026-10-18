@@ -176,7 +176,7 @@ def wants_to_stop(text: str) -> bool:
     return wants_to_reset(text) or any(p in t for p in _STOP)
 
 
-_RESET = re.compile(r"\b(?:reset|restart(?:ed|ing)?|start (?:over|again)|begin again)\b")
+_RESET = re.compile(r"\b(?:reset|restart|start (?:over|again)|begin again)\b")  # not "restarted": "you never restarted?" is talk
 
 
 def wants_to_reset(text: str) -> bool:
@@ -292,7 +292,7 @@ _LATER = ("not now", "not yet", "maybe later", "later", "give us a minute", "giv
 _ASK_RULES = ("how do", "how does", "how is", "how's", "hows", "how to", "how you play", "what is", "what's", "whats",
               "explain", "rules", "teach", "remind us", "never played", "know how")
 _ASK_GAMES = ("what games", "which games", "what can we play", "what do you have", "what have you got",
-              "what you got", "what do you got", "options")
+              "what you got", "what do you got", "options", "what else", "anything else", "other games", "what other")
 _ASK_PICK = ("what should we play", "what do you recommend", "recommend", "suggest", "you pick", "you choose",
              "your call", "which one", "what game", "up to you")
 _FILLER = {"oh", "uh", "um", "umm", "uhh", "hmm", "hm", "mm", "mhm", "ah", "eh", "er", "huh", "you", "the", "a",

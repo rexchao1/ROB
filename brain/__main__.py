@@ -44,7 +44,7 @@ from brain.body import Body, Gateway
 from brain.clock import RealClock, VirtualClock
 from brain.dash import SETTINGS_FILE, Dash
 from brain.host import RECOVERY, Host
-from brain.keys import ENV_FILE, load_env
+from brain.keys import env_file, load_env
 from brain.remote import PORT as TABLE_PORT
 from brain.remote import TableServer
 from brain.server import FakeControl, serve
@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         welcome=args.welcome == "on",
         talk=talk,
     )
-    Dash(host, mode="real", referee=args.referee, settings_path=SETTINGS_FILE, keys_path=ENV_FILE).load()
+    Dash(host, mode="real", referee=args.referee, settings_path=SETTINGS_FILE, keys_path=env_file()).load()
     if args.referee == "remote":
         table = TableServer(
             host, host.clock, args.table_host or "0.0.0.0", args.table_port, args.table_token,

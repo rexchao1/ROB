@@ -265,7 +265,7 @@ def env(name: str) -> str | None:
     value = os.environ.get(name)
     if value:
         return value
-    path = ROOT / ".env.local"
+    path = Path(os.environ.get("GM_ENV_FILE") or ROOT / ".env.local")
     try:
         rows = path.read_text().splitlines()
     except OSError:

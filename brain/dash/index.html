@@ -607,8 +607,8 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
 <!-- Paused (lobby or game) -->
 <div class="paused" id="paused" hidden role="status">
   <div class="box">
-    <div class="w">Paused</div>
-    <div class="d">Say "resume" or tap the robot's head.</div>
+    <div class="w" id="pausedWord">Paused</div>
+    <div class="d" id="pausedHint">Say "resume" or tap the robot's head.</div>
     <button class="big" id="resumeBtn">Resume</button>
   </div>
 </div>
@@ -837,11 +837,14 @@ function render() {
   const name = (g && g.game) || lastGameName || starting;
   document.body.dataset.screen = inGame ? "game" : "lobby";
   $("lobby").hidden = inGame; $("game").hidden = !inGame;
-  const paused = s.paused === true;
+  const paused = s.paused === true, asleep = !paused && s.asleep === true;
   $("stopBtn").hidden = !inGame || !!(g && g.over);
   $("pauseBtn").hidden = $("stopBtn").hidden || paused;
-  $("paused").hidden = !paused;
-  document.body.classList.toggle("is-paused", paused);
+  $("paused").hidden = !paused && !asleep;
+  $("pausedWord").textContent = asleep ? "Napping" : "Paused";
+  $("pausedHint").textContent = asleep ? "ROB isn't listening. Tap the robot's head to wake it." : 'Say "resume" or tap the robot\'s head.';
+  $("resumeBtn").textContent = asleep ? "Wake ROB" : "Resume";
+  document.body.classList.toggle("is-paused", paused || asleep);
   const tone = inGame && !g.over ? (TONE[g.phase] || "idle") : "idle";
   if (document.body.dataset.tone !== tone) document.body.dataset.tone = tone;
   setScene(inGame ? sceneFor(name, g.phase) : "lobby");

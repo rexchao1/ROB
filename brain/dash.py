@@ -249,6 +249,7 @@ class Dash:
             "photo": self.photo_info(),
             "typed_pending": pending,
             "paused": bool(getattr(host, "paused", False)),
+            "asleep": bool(getattr(host, "asleep", False)),
             "robot": self.robot(),
             "face_style": FACE_STYLE,
             "seats_info": self.seats_info(seats),

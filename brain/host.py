@@ -70,9 +70,10 @@ PHOTO_RETRY_WAIT = 3.0  # seconds between those tries; the robot reconnects on i
 SCAN_ON = (0, 22, 40)  # the ring's colour for the part of the counting sweep done so far
 SCAN_SEEN = (0, 90, 30)  # the ring's colour where the sweep saw a face
 RING = 12  # LEDs on the ring
-RECOVERY = "Sorry, I lost my place. Say a game's name to start again."
+RECOVERY = "Sorry, I lost my place. Tap my head to start again."
 PAUSED_WINDOW = 10.0  # seconds per listen while paused: the robot chimes each time its microphone opens
 PAUSED_LEDS = (6, 6, 10)  # the ring while paused
+ASLEEP_LEDS = (2, 2, 4)  # the ring while the host naps between games, its microphone off
 PAUSED = "Paused. Say resume or tap my head when you're ready."
 RESUMED = "Okay, back to it."
 
@@ -156,6 +157,7 @@ class Host:
         self._injected: deque[str] = deque()  # the dashboard's typed lines, heard at the next listen
         self.robot_ok: bool | None = None  # the last listen reached the robot (None: not tried yet)
         self.paused = False  # someone said "pause"; the game waits for "resume" or a head tap
+        self.asleep = False  # napping between games: no listening until a tap on the head
         self._paused_for = 0.0  # seconds spent paused, left out of now() so a game's timers stop
         self.last_line: str | None = None  # the game's last line, for "say that again"
         self._thread: threading.Thread | None = None
@@ -173,6 +175,7 @@ class Host:
             self.dash.clear_seats()
         self.yaw = 0.0
         self._listening = False
+        self.asleep = False
         self._manifest: dict[str, Any] | None = None
         self._loaded_path: str | None = None
         self._loading: threading.Thread | None = None
@@ -246,12 +249,18 @@ class Host:
         game's last line."""
         while True:
             text = self._hear(seconds)
-            if ears.wants_pause(text):
+            if ears.wants_pause(text) and self._in_game():
                 text = self._pause()
                 if text:  # "stop the game" or "reset" said while paused: the game hears it
                     return text
             elif not self._command(text):
                 return text
+
+    def _in_game(self) -> bool:
+        """A game is on (from its count to its end): "pause" holds it. Between games a
+        "stop" or "shut up" goes to the lobby, which naps."""
+        state = self.state
+        return not (state is None or state.get("phase") == "welcome" or state.get("over"))
 
     def _command(self, text: str) -> bool:
         """A speaker change or "say that again", done; False for anything else."""
@@ -310,11 +319,49 @@ class Host:
         self._speak(RESUMED)
         return ""
 
+    def sleep(self, seconds: float) -> str | None:
+        """Nap between games, for at most `seconds` a call (the lobby calls again, so a
+        referee's call never holds the table for long): the microphone off (no chime
+        every few seconds), the ring dim, the head's touch read every TOUCH_EVERY
+        seconds. "" for a tap, the line typed on either page, or None when the time ran
+        out with neither."""
+        self._check_stop()
+        if not self.asleep:
+            self._log("asleep: a tap on the head wakes me")
+            if self.dash is not None:
+                self.dash.record("game", "asleep")
+            self.body.leds([ASLEEP_LEDS])
+            self._listening = False
+            self.asleep = True
+        start = checked = self.clock.now()
+        woke: str | None = None
+        while woke is None and self.clock.now() - start < seconds:
+            typed = self._take_injected()
+            if not typed and self.dash is not None:
+                typed = (self.dash.take_typed() or "").lower()  # the game screen's Wake ROB and its buttons
+            if typed:
+                woke = typed
+                break
+            self.wait(TOUCH_EVERY)
+            now = self.clock.now()
+            if self.body.touched(now - checked + 0.5):
+                woke = ""
+            checked = now
+        if woke is None:
+            return None
+        self.asleep = False
+        self._log("awake" + (f" (typed): {woke}" if woke else ": the head was tapped"))
+        if self.dash is not None:
+            self.dash.record("game", "awake")
+        self.body.leds([self.ring])
+        return woke
+
     def _hear(self, seconds: float, typed_too: bool = True) -> str:
         """The robot's microphone for `seconds`, or a line typed on the dashboard. With
         typed_too False (the deal's short listens, which read typed lines on their own)
         only the microphone."""
         self._check_stop()
+        self.asleep = False
         self._cue(True)
         typed = self._take_injected() if typed_too else ""
         if typed_too and not typed and self.dash is not None:
@@ -678,6 +725,7 @@ class Host:
         if name not in MOODS:
             raise ValueError(f"mood must be one of {MOODS}")
         self._check_stop()
+        self.asleep = False  # the ring is the mood's again; a nap after this dims it anew
         self._avatar("idle", "idle")
         self.ring = MOOD_LEDS[name]
         self.body.leds([self.ring])

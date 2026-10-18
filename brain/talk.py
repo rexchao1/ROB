@@ -136,9 +136,10 @@ _env_lock = threading.Lock()
 _env_loaded = False
 
 
-def load_env_local(path: Path = ENV_FILE) -> None:
-    """KEY=VALUE lines from .env.local into os.environ, once; a variable
-    already set wins. Comments, blank lines and `export ` are allowed."""
+def load_env_local(path: Path | None = None) -> None:
+    """KEY=VALUE lines from .env.local (or the file GM_ENV_FILE names) into os.environ,
+    once; a variable already set wins. Comments, blank lines and `export ` are allowed."""
+    path = path or Path(os.environ.get("GM_ENV_FILE") or ENV_FILE)
     global _env_loaded
     with _env_lock:
         if _env_loaded:
@@ -372,6 +373,8 @@ class Talk:
             return structured(situation, text)
         text = self._ask(self._system(), self._prompt(situation, heard, facts), max_tokens=80, temperature=0.9)
         line = fit(text, facts)
+        if text and line is None:
+            self._log(f"talk: dropped a line ROB would not say (too long, a number, a seat): {text.strip()[:120]}")
         if situation == "twenty.guesser" and line is not None and not (
             line.rstrip().endswith("?") or re.match(r"(?i)^guess\s*:", line.strip())
         ):
@@ -440,9 +443,15 @@ class Talk:
                 else "Reply in one short, playful line, then steer back to picking a game."
             )
             pick = f" You suggested {facts['suggestion']}." if facts.get("suggestion") else ""
+            games = (
+                f" The only games you can host are {facts['games']}: never name or offer any other game."
+                if facts.get("games") else ""
+            )
             return (
                 "Game night is about to start and the group is picking a game."
-                f"{pick} Someone just said: \"{said}\"\n{ask}\n"
+                f"{pick}{games} Someone just said: \"{said}\"\n{ask}\n"
+                "If they ask for something small, like a joke, give it in one sentence first. "
+                f"At most {MAX_SENTENCES} sentences and {MAX_WORDS} words in all. "
                 "Do not use any numbers and do not say 'player' or 'seat'. Output only the line."
             )
         if situation == "twenty.guesser":

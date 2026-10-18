@@ -97,3 +97,10 @@ class Table(Protocol):
         internet, a slow answer, or a line that would not do); the caller then says a
         scripted line. Says nothing itself, and decides nothing (D14)."""
         ...
+
+    def sleep(self, seconds: float) -> str | None:
+        """Nap between games for at most `seconds`: hear nothing (the microphone off)
+        until a tap on the host's head ('') or a line typed for it on the operator's
+        pages (that line, lower-cased); None when the time ran out with neither, and the
+        caller naps again. Says nothing."""
+        ...

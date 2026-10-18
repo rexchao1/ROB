@@ -26,6 +26,12 @@ ENV_FILE = Path(__file__).resolve().parent.parent / ".env.local"
 MAX_LEN = 512
 
 
+def env_file() -> Path:
+    """The keys' file: .env.local, or the one GM_ENV_FILE names (the tests point it at an
+    empty file, so no test ever reads or writes the real keys)."""
+    return Path(os.environ.get("GM_ENV_FILE") or ENV_FILE)
+
+
 @dataclasses.dataclass(frozen=True)
 class Key:
     key: str
@@ -54,8 +60,9 @@ class KeysError(ValueError):
     """A key the dashboard does not know, or a value it will not write; answered 400."""
 
 
-def read_env(path: Path = ENV_FILE) -> dict[str, str]:
+def read_env(path: Path | None = None) -> dict[str, str]:
     """KEY=value pairs from a .env file (quotes stripped); empty when there is none."""
+    path = path or env_file()
     try:
         text = path.read_text()
     except OSError:
@@ -71,7 +78,7 @@ def read_env(path: Path = ENV_FILE) -> dict[str, str]:
     return out
 
 
-def load_env(path: Path = ENV_FILE) -> None:
+def load_env(path: Path | None = None) -> None:
     """Fill in the environment from .env; a variable already set wins."""
     for name, value in read_env(path).items():
         os.environ.setdefault(name, value)

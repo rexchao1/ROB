@@ -2,7 +2,7 @@
 
 A game master for a table of friends, so nobody has to sit out to host: a StackChan (camera, turning head, screen, microphone, speaker) counts the table, deals private roles on its own screen to whoever leans in alone, catches heads-up players at night, takes votes by voice, and runs Mafia (then Imposter, then Wavelength) with a narrator's voice. The brain is a Raspberry Pi that is its own offline network. LA Hacks 2026.
 
-The contract is `features/` (the feature files bind; `DESIGN.md` bounds; `DOCKET.md` holds the rulings). The build plan is `docs/BUILD-PLAN.md`; the operator dashboard has its own, `docs/DASHBOARD-PLAN.md`.
+The contract is `features/` (the feature files bind; `DESIGN.md` bounds; `DOCKET.md` holds the rulings). The build plan is `docs/BUILD-PLAN.md`; the operator dashboard has its own, `docs/DASHBOARD-PLAN.md`; one-step start and stop, `docs/STARTUP-PLAN.md`.
 
 ## Layout
 
@@ -42,7 +42,7 @@ Three boxes on the Pi's own Wi-Fi network, `gamemaster` (2.4 GHz, WPA2, no inter
 
 ## The welcome, the games, the talk and the dashboard
 
-When the brain starts, and whenever someone says "reset", "start over" or "restart", the host greets the table, counts, says hi to each seat, suggests a game for the headcount (one: Twenty Questions; two: Wavelength; three or four: Imposter; five or more: Mafia) and chats until the group picks one. Say a game's name to start it any time: "Mafia", "Imposter", "Wavelength", "Twenty Questions" (one player or more; the host asks who thinks of the secret), "Hot Seat" (two or more; name something in the category before time runs out), "Wordle" (one or more; say or spell five-letter words). "Stop the game" stops; "reset" goes back to the welcome.
+When the brain starts, and whenever someone says "reset", "start over" or "restart", the host greets the table, counts, says hi to each seat, suggests a game for the headcount (one: Twenty Questions; two: Wavelength; three or four: Imposter; five or more: Mafia) and chats until the group picks one. Say a game's name to start it any time: "Mafia", "Imposter", "Wavelength", "Twenty Questions" (one player or more; the host asks who thinks of the secret), "Hot Seat" (two or more; name something in the category before time runs out), "Wordle" (one or more; say or spell five-letter words). "Stop the game" stops; "reset" goes back to the welcome. After a game, or once the chat dies down ("not now", or silence after two nudges), ROB says it is taking a nap and stops listening, so it does not chime or pick up room noise: tap its head (or press Wake ROB on the game screen) and it says it is up, looks around and suggests a game again.
 
 Keys go in `.env.local` (gitignored), one `NAME=value` a line. Everything works with none of them:
 

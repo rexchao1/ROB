@@ -69,7 +69,7 @@ PORT = 8090
 LEASE = 5.0  # real seconds without a request before the referee counts as gone
 HOLD = 15.0  # real seconds a /table/call waits for its answer before answering "pending"
 PATIENCE = 60.0  # real seconds RemoteTable keeps retrying an unreachable server
-METHODS = ("now", "wait", "say", "look", "count", "prepare", "show_private", "listen", "faces_up", "mood", "report", "quip", "chat")
+METHODS = ("now", "wait", "say", "look", "count", "prepare", "show_private", "listen", "faces_up", "mood", "report", "quip", "chat", "sleep")
 
 
 class RemoteError(Exception):
@@ -495,6 +495,10 @@ class RemoteTable:
     def chat(self, situation: str, heard: str = "", **facts: Any) -> str | None:
         line = self._call("chat", situation, heard, **facts)
         return line if isinstance(line, str) else None
+
+    def sleep(self, seconds: float) -> str | None:
+        woke = self._call("sleep", seconds)
+        return woke if isinstance(woke, str) else None
 
     # --- the wire -----------------------------------------------------------------
 

@@ -4,7 +4,7 @@ Mac or a phone on the same network (open the server to it with --host 0.0.0.0).
   GET  /dashboard            the page (self-contained: no outside assets), in three tabs:
                               Play, ROB (personality, voice, speaker) and AI (provider,
                               model, effort, the talk's status and a test call)
-  GET  /dashboard/state      {"robot", "paused", "settings", "personas", "games", "talks",
+  GET  /dashboard/state      {"robot", "paused", "asleep", "settings", "personas", "games", "talks",
                               "talk_models", "efforts", "voices", "eleven_voices",
                               "speakers", "talk_status", "state", "feed"}; the page polls
                               it each second
@@ -78,6 +78,7 @@ def state(host: Any) -> dict[str, Any]:
     return {
         "robot": getattr(host, "robot_ok", None),
         "paused": bool(getattr(host, "paused", False)),
+        "asleep": bool(getattr(host, "asleep", False)),
         "settings": settings.snapshot(),
         "personas": [{"key": p.key, "label": p.label} for p in personas.PERSONAS.values()],
         "games": [{"key": g, "label": LABELS.get(g, g.replace("_", " ").title())} for g in games.GAMES],
@@ -241,7 +242,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <div class="top">
-  <header><h1>Game master</h1><span id="paused" class="pill warn" hidden>paused</span><span id="robot" class="pill">robot: ?</span></header>
+  <header><h1>Game master</h1><span id="paused" class="pill warn" hidden>paused</span><span id="asleep" class="pill" hidden>asleep: tap its head to wake it</span><span id="robot" class="pill">robot: ?</span></header>
   <nav role="tablist">
     <button role="tab" data-tab="play">Play</button>
     <button role="tab" data-tab="rob">ROB</button>
@@ -348,6 +349,7 @@ function render(d) {
   r.textContent = d.robot === true ? "robot connected" : d.robot === false ? "robot not answering" : "robot: not heard from yet";
   r.className = "pill" + (d.robot === true ? " ok" : d.robot === false ? " bad" : "");
   $("paused").hidden = !d.paused;
+  $("asleep").hidden = !d.asleep;
   $("pause").className = d.paused ? "on" : "";
   gameLabels = Object.fromEntries(d.games.map(g => [g.key, g.label]));
   const s = d.state || {}, set = d.settings;

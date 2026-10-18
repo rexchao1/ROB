@@ -403,6 +403,11 @@ class _Scripted(FakeTable):
         self.left -= 1
         return super().listen(seconds)
 
+    def sleep(self, seconds):
+        """A nap ends the script: nobody taps the head."""
+        self._note("sleep", None)
+        raise TableRefused("the script is over: the host is napping")
+
 
 def _run(referee):
     with pytest.raises(TableRefused):
@@ -417,7 +422,8 @@ def test_the_referee_plays_the_game_it_hears_named_and_goes_back_to_idle(monkeyp
     _run(Referee(table, log=lambda msg: None))
     assert played == [("wavelength", "let's play wavelength", {"psychic": 2})]
     assert [(kind, value) for _, kind, value in table.log if kind in ("mood", "look")] == [("mood", "idle"), ("look", None)]
-    assert table.said == []
+    assert table.said == [lines.NAP]  # then it naps until a tap
+    assert table.log[-1][1] == "sleep"
 
 
 def test_a_game_that_fails_says_the_brains_recovery_line_and_goes_back_to_idle(monkeypatch):
@@ -428,7 +434,8 @@ def test_a_game_that_fails_says_the_brains_recovery_line_and_goes_back_to_idle(m
     monkeypatch.setattr(games, "play", broken)
     table = _Scripted("let's play mafia")
     _run(Referee(table, log=lambda msg: None))
-    assert table.said == ["Five of you.", "Lost."]
+    assert table.said == ["Five of you.", "Lost."]  # no nap line: the recovery line says to tap
+    assert table.log[-1][1] == "sleep"
     assert [(kind, value) for _, kind, value in table.log if kind in ("mood", "look")] == [("mood", "idle"), ("look", None)]
 
 
@@ -481,7 +488,7 @@ def test_the_robot_dropping_off_wifi_between_games_is_waited_out(monkeypatch):
     _run(Referee(table, log=logged.append))
     assert played == ["mafia"]
     assert [value for _, kind, value in table.log if kind == "wait"] == [PAUSE] * 3
-    assert table.said == [] and table.hellos == 1
+    assert table.said == [lines.NAP] and table.hellos == 1
     assert sum("did not answer" in m for m in logged) == 1, logged
     assert any("answered again" in m for m in logged)
 

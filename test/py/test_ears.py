@@ -166,3 +166,13 @@ def test_speaker_said(text, place):
 def test_say_that_again():
     assert ears.wants_repeat("Can you say that again?") and ears.wants_repeat("what did you say")
     assert not ears.wants_repeat("player two")
+
+
+def test_restarted_said_in_passing_is_not_a_reset():
+    assert not ears.wants_to_reset("in the background. yeah. you never really restarted? well, no.")
+    assert ears.wants_to_reset("restart") and ears.wants_to_reset("let's start over")
+
+
+def test_what_else_asks_for_the_games():
+    assert ears.asks_games("what else do you got?")
+    assert ears.asks_games("any other games?")

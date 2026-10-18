@@ -97,7 +97,7 @@ Feature: The welcome
     Then the players hear one short reply from the host that names Mafia
 
   @D56
-  Scenario: Silence gets two nudges, then quiet
+  Scenario: Silence gets two nudges, then a nap
     Given five friends are seated around a table with the host in the middle
     And the welcome has suggested Mafia and asked
     When twenty-five seconds pass with nothing said
@@ -105,7 +105,16 @@ Feature: The welcome
     When another twenty-five seconds pass with nothing said
     Then the players hear the host nudge them once more
     When another twenty-five seconds pass with nothing said
-    Then the players hear the host say nothing
+    Then the players hear the host say "I'll take a nap. Tap my head when you want me."
+    And the host does not listen again until someone taps its head
+
+  Scenario: A tap on the head wakes the napping host, which counts and suggests a game
+    Given five friends are seated around a table with the host in the middle
+    And the host is napping
+    When someone taps the host's head
+    Then the players hear the host say it is up
+    And the players see the host sweep the whole table
+    And the players hear the host suggest Mafia and end on a question
 
   @D57 @D38
   Scenario: Reset in the middle of a game ends it and the welcome comes again
@@ -116,12 +125,13 @@ Feature: The welcome
     And the players hear the host greet them, name itself ROB and say it is looking
 
   @D58
-  Scenario: Not now gets a line and the host waits quietly
+  Scenario: Not now gets a line and the host naps
     Given five friends are seated around a table with the host in the middle
     And the welcome has suggested Mafia and asked
     When someone says "not now"
-    Then the players hear the host say it will be there when they are ready
+    Then the players hear the host say to tap its head when they are ready
     And the players hear no nudge in the next two minutes
+    And the host does not listen again until someone taps its head
 
   @D59 @D6
   Scenario: A headcount above the host's gets a second look

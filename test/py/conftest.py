@@ -5,7 +5,9 @@ GM_REAL_NET=1, set by hand, lifts the guard (as in test/setup/no-network.ts)."""
 import ipaddress
 import os
 import socket
+import tempfile
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +22,16 @@ def _loopback(address) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False  # a DNS name: never resolved here
+
+
+# No test reads or writes the real keys in .env.local: the brain, the voice and the
+# talk read GM_ENV_FILE instead, an empty file here (subprocesses inherit it).
+_KEYS = Path(tempfile.mkdtemp(prefix="gm-keys-")) / ".env.local"
+_KEYS.touch()
+os.environ["GM_ENV_FILE"] = str(_KEYS)
+for _name in ("STACKCHAN_TOKEN", "GM_TABLE_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID", "GEMINI_API_KEY",
+              "ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID"):
+    os.environ.pop(_name, None)
 
 
 @pytest.fixture(autouse=True)

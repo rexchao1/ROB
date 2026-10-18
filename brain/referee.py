@@ -35,7 +35,7 @@ from brain.lobby import Lobby
 from brain.remote import RemoteTable, TableRefused, TableReset, TableUnreachable
 
 RETRY = 2.0  # seconds between attempts to reach the table
-RECOVERY = "Sorry, I lost my place. Say a game's name to start again."  # the brain's line when it sends none
+RECOVERY = "Sorry, I lost my place. Tap my head to start again."  # the brain's line when it sends none
 LISTEN_WINDOW = 4.0
 
 
@@ -76,12 +76,13 @@ class Referee:
             self._attach(hello)
             try:
                 welcome = bool(hello.get("welcome")) and not hello.get("calls") and not lost  # a fresh table
-                if lost or (first and hello.get("calls")):  # picking up after a cut, or after another referee
+                nap = lost or bool(first and hello.get("calls"))  # picking up after a cut, or after another referee
+                if nap:
                     if lost:
-                        self._say_recovery()
+                        self._say_recovery()  # "... Tap my head to start again."
                     self._idle()
                 lost = first = False
-                self.idle_loop(welcome)
+                self.idle_loop(welcome, nap=nap)
             except TableReset:
                 self._log("referee: the table started over")
             except TableUnreachable as e:
@@ -102,14 +103,15 @@ class Referee:
             self._log(f"referee: attached to the table at {getattr(self.table, 'url', '?')} (epoch {hello['epoch']})")
         self.epoch = hello["epoch"]
 
-    def idle_loop(self, welcome: bool = False) -> None:
-        """The welcome (when the brain asks for it on a fresh table), then listen for a
-        game's name, play it, go back to idle; until stop()."""
+    def idle_loop(self, welcome: bool = False, nap: bool = False) -> None:
+        """The welcome (when the brain asks for it on a fresh table), or a nap until a
+        tap (`nap`: picking a table up), else a listen for a game's name; then games and
+        naps (brain/lobby.py), until stop()."""
         self._lobby = Lobby(
             self.table, self.rng, options=self.options, listen_window=self.listen_window, recovery=self.recovery,
             rigs=self.table.rig, stopped=self.stopped.is_set, log=lambda msg: self._log(f"referee: {msg}"),
         )
-        self._lobby.run(welcome)
+        self._lobby.run(welcome, nap=nap)
 
     def _say_recovery(self) -> None:
         try:

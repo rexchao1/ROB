@@ -29,6 +29,11 @@ from brain import lines
 from brain.table import MOODS, Card
 
 
+class Runaway(BaseException):
+    """A loop the test never meant to run on: a BaseException, so the lobby's handler
+    (which waits out an Exception) cannot swallow it."""
+
+
 class FakeTable:
     def __init__(self, seats: int = 5, counts: list[int] | None = None, no_lean: set[int] | None = None) -> None:
         self.clock = 0.0
@@ -46,6 +51,9 @@ class FakeTable:
         self._last_line: str | None = None
         self.listens = 0
         self.max_listens = 2000  # a runaway game fails the test instead of hanging it
+        self.wakes: deque[str | None] = deque()  # what ends each nap call: '' a tap, a typed line, None nothing
+        self.sleeps = 0
+        self.max_sleeps = 50
 
     # --- scripting ---------------------------------------------------------------
 
@@ -137,6 +145,20 @@ class FakeTable:
 
     def quip(self, slot: str, **context: Any) -> None:
         self._note("quip", slot)
+
+    def sleep(self, seconds: float) -> str | None:
+        """A nap call: the next of table.wakes ('' a tap, a typed line, or None for a
+        call that ran out, `seconds` passing); None (nobody taps) when none is scripted.
+        Raises Runaway (which the lobby cannot catch) once max_sleeps calls are made."""
+        assert seconds > 0
+        self.sleeps += 1
+        if self.sleeps > self.max_sleeps:
+            raise Runaway("the host kept napping: a runaway loop")
+        woke = self.wakes.popleft() if self.wakes else None
+        if woke is None:
+            self.clock += seconds
+        self._note("sleep", woke)
+        return None if woke is None else woke.lower()
 
     def chat(self, situation: str, heard: str = "", **facts: Any) -> str | None:
         """The talk model's line: the next of table.chats (a list), else None (no model)."""

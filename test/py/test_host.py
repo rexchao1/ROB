@@ -361,20 +361,46 @@ def test_the_loop_starts_the_named_game(host, fake, clock):
         host.stop()
 
 
-def test_a_game_that_fails_says_so_and_the_host_listens_again(host, fake, clock, monkeypatch):
+def test_a_game_that_fails_says_so_and_the_host_naps_until_a_tap(host, fake, clock, monkeypatch):
     def broken(*_args, **_kwargs):
         raise RuntimeError("a bug in the rules")
 
     monkeypatch.setattr(games, "play", broken)
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
     host.start()
     try:
         clock.settle()
         fake.device.heard.append("let's play imposter")
         clock.advance(host.listen_window + 0.5)  # the first listen ends at 4.15, after the setup's turn
         assert _said(fake) == [RECOVERY]
+        assert host.asleep
         listens = len(_calls(fake, "listen"))
-        clock.advance(host.listen_window)
-        assert len(_calls(fake, "listen")) == listens + 1
+        clock.advance(30)
+        assert len(_calls(fake, "listen")) == listens  # asleep: the microphone stays off
+        assert _calls(fake, "get_touch_state")  # it reads the head instead
+        fake.device.touching = True
+        clock.advance(1.5)
+        fake.device.touching = False
+        clock.advance(20)
+        assert not host.asleep
+        assert _said(fake)[1] in lines.WOKE
+    finally:
+        host.stop()
+
+
+def test_a_line_typed_while_the_host_naps_wakes_it_and_is_answered(host, fake, clock, monkeypatch):
+    played = []
+    monkeypatch.setattr(games, "play", lambda name, table, rng, **kw: played.append(name))
+    host.start()
+    try:
+        clock.settle()
+        fake.device.heard.append("let's play imposter")
+        clock.advance(host.listen_window + 0.5)
+        assert played == ["imposter"] and host.asleep
+        assert _said(fake) == [lines.NAP]
+        host.inject("let's play wavelength")
+        clock.advance(2)
+        assert played == ["imposter", "wavelength"]
     finally:
         host.stop()
 
@@ -414,6 +440,7 @@ def test_stop_ends_a_game_wherever_it_is_without_a_word(host, fake, clock, monke
 
 
 def test_pause_holds_the_listen_and_the_games_clock_until_resume(host, fake, clock):
+    host.state = {"game": "mafia", "phase": "night", "over": False}  # a pause holds a game
     fake.device.heard.append("pause")
     w = Worker(clock, host.listen, 4)
     clock.advance(4)
@@ -431,6 +458,7 @@ def test_pause_holds_the_listen_and_the_games_clock_until_resume(host, fake, clo
 
 
 def test_a_tap_on_the_head_ends_the_pause(host, fake, clock):
+    host.state = {"game": "mafia", "phase": "night", "over": False}  # a pause holds a game
     fake.device.heard.append("pause")
     w = Worker(clock, host.listen, 4)
     clock.advance(4 + PAUSED_WINDOW)
@@ -444,6 +472,7 @@ def test_a_tap_on_the_head_ends_the_pause(host, fake, clock):
 
 
 def test_stop_said_while_paused_reaches_the_game(host, fake, clock):
+    host.state = {"game": "mafia", "phase": "night", "over": False}  # a pause holds a game
     fake.device.heard.append("pause")
     w = Worker(clock, host.listen, 4)
     clock.advance(4)

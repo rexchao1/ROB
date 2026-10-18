@@ -373,6 +373,11 @@ def _registered() -> list[str]:
     return list(MINIMUM)
 
 
+def game_names() -> str:
+    """Every game built, spoken: "Mafia, Imposter, ... and Twenty Questions"."""
+    return _join(_registered(), "and")
+
+
 def suggested(seats: int) -> str | None:
     """The game a headcount points to (D38): two Wavelength, three or four Imposter, five
     or more Mafia, one player Twenty Questions, else Wordle; when that game is not built,
@@ -503,13 +508,23 @@ def instead(game: str) -> str:
 
 
 LATER = (
-    "No rush. Say a game's name whenever you're ready.",
-    "Cool, I'll be here. Just say a game when you want one.",
+    "No rush. Tap my head when you're ready to play.",
+    "Cool, I'll take a nap. Tap my head when you want a game.",
+)
+NAP = "I'll take a nap. Tap my head when you want me."  # the host stops listening until a tap wakes it
+WOKE = (
+    "I'm up! Let me see who's here.",
+    "Hey, I'm awake. Let me see who's here.",
 )
 
 
 def later(rng: random.Random) -> str:
     return rng.choice(LATER)
+
+
+def woke(rng: random.Random) -> str:
+    """A tap on the head woke the host: said before it counts the table."""
+    return rng.choice(WOKE)
 
 
 def _nudges(game: str | None) -> tuple[str, ...]:
@@ -595,6 +610,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
         WAVELENGTH_TALK, WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
+        NAP, *WOKE,
     ]
     out += [mafia_intro(1), mafia_intro(2)]
     out += [too_few(g, m) for g, m in MINIMUM.items()]

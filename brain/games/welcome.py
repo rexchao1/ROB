@@ -11,7 +11,7 @@ What the group says is read in this order (brain/ears.py):
   a question about a game       its rules, from the script, and "Want to play it?"
   a game's name                 that game, on this count (a count said with it still
                                 has to agree: "imposter with six people", D39)
-  "not now", "stop"             a line, then the host waits quietly
+  "not now", "stop"             a line, then the host naps until a tap on its head
   a headcount                   "I only see five. Who's hiding?", a pause, a second look
   "what games?", "you pick"     the games, or the suggestion again
   "nah", "something else"       the other games the count can play
@@ -20,8 +20,9 @@ What the group says is read in this order (brain/ears.py):
                                 scripted one; capped and rate-limited (D39, D42)
   anything else                 noise: nothing (D39)
 
-Silence gets at most two nudges; then the conversation ends without a word and the
-host waits for a game's name (D39). The rules, the count and the suggestion are code
+Silence gets at most two nudges; then the host says it is taking a nap and stops
+listening until a tap on its head wakes it (D39). Woken, it says it is up, counts and
+suggests a game (wake(): no hello to each seat), and the talk goes on as before. The rules, the count and the suggestion are code
 (D14, D42): the talk model only writes the small-talk lines, and a line it writes that
 does not fit is replaced by a scripted one.
 """
@@ -58,6 +59,10 @@ class Welcome:
         self.listen_window = listen_window
         self.seats = 0
         self.suggestion: str | None = None
+        self.nudged = 0
+        self.chats = 0
+        self.recounts = 0
+        self.replied_at = float("-inf")
 
     # --- the greeting -------------------------------------------------------------
 
@@ -69,10 +74,21 @@ class Welcome:
         self._count()
         self._hellos()
         self._suggest()
-        self.nudged = 0
-        self.chats = 0
-        self.recounts = 0
-        self.replied_at = float("-inf")
+
+    def wake(self) -> None:
+        """A tap woke the host: "I'm up", the count, the suggestion; no hello to each seat."""
+        self.table.mood("idle")
+        self._say(lines.woke(self.rng))
+        self._count()
+        self._suggest()
+
+    def instead_of(self, game: str) -> None:
+        """After "Mafia needs at least four players." outside the talk: a look, then a
+        game this count can play."""
+        self.table.mood("idle")
+        self._count()
+        self.later = lines.nudges(lines.suggested(self.seats), self.rng)
+        self.too_few(game)
 
     def _count(self) -> None:
         self.seats = self.table.count()
@@ -101,11 +117,13 @@ class Welcome:
 
     # --- the conversation -----------------------------------------------------------
 
-    def converse(self) -> Choice | str | None:
+    def converse(self, first: str = "") -> Choice | str | None:
         """Listen and answer until the group picks a game (a Choice), says "reset"
-        (RESTART), or goes quiet or asks to wait (None)."""
+        (RESTART), or goes quiet or asks to wait (None: the host naps until a tap).
+        `first`: words already heard (typed on the dashboard to wake the host),
+        answered before the first listen."""
         while True:
-            heard = self.table.listen(self.listen_window)
+            heard, first = first or self.table.listen(self.listen_window), ""
             now = self.table.now()
             if heard.strip():
                 answer = self._hear(heard, now)
@@ -113,7 +131,8 @@ class Welcome:
                     return None if answer == "" else answer
             if now - self.quiet_since >= self.options.nudge_seconds:
                 if self.nudged >= min(self.options.nudges, len(self.later)):
-                    return None  # waits quietly, for a game's name
+                    self._say(lines.NAP)
+                    return None  # sleeps until a tap
                 self._ask(self.later[self.nudged])
                 self.nudged += 1
 
@@ -131,8 +150,8 @@ class Welcome:
         if game is not None:
             fresh = self.seats > 0 and now - self.counted_at <= self.options.count_fresh_seconds
             return Choice(game, heard, self.seats if fresh else None)
-        if ears.wants_later(heard) or ears.wants_to_stop(heard):
-            self._say(lines.later(self.rng))
+        if ears.wants_later(heard) or ears.wants_to_stop(heard) or ears.wants_pause(heard):
+            self._say(lines.later(self.rng))  # "shut up", "not now": a line, then a nap
             return ""
         answering = now - self.asked_at <= self.options.answer_seconds
         spoken = ears.count_said(heard) or (ears.bare_number(heard) if answering else None)
@@ -180,7 +199,7 @@ class Welcome:
         """Small talk: a short reply, rate-limited and capped (D39, D42)."""
         if self.chats >= self.options.max_chats or now - self.replied_at < self.options.reply_gap_seconds:
             return
-        facts: dict[str, Any] = {"players": self.seats, "answering": answering}
+        facts: dict[str, Any] = {"players": self.seats, "answering": answering, "games": lines.game_names()}
         if self.suggestion is not None:
             facts["suggestion"] = lines.game_name(self.suggestion)
         line = _fit(self.table.chat("welcome", heard, **facts))
