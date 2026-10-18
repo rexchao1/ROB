@@ -458,12 +458,211 @@ def record_mac(duration_ms: int) -> bytes:
     return pcm
 
 
+AUDIO_DIR = os.environ.get("GM_AUDIO_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".cache", "audio")
+KEEP_S = 30  # seconds of the stream kept in memory
+BACKLOG_S = 12.0  # a listen hears what was said up to this long before it, since the last listen
+PREROLL_FRAMES = 5  # 0.3 s kept before the voice starts, so the first word is whole
+MAX_UTTERANCE_S = 15.0  # one listen hears at most this much of someone talking
+BARGE_FRAMES = 5  # 0.3 s of voice out of the last BARGE_OF frames: someone is talking over ROB
+BARGE_OF = 7
+VOICE_PORT = int(os.environ.get("GM_VOICE_PORT", "8769"))
+
+
+class MicStream:
+    """The Mac's microphone as one stream that never closes (rob-audio's mic.sock, ROB's
+    own voice already taken out): frames kept for KEEP_S with their loudness and whether
+    they are a voice. A listen takes what was said since the last one, so nothing said
+    while ROB talks or thinks is lost, and nothing is cut at either end
+    (docs/LISTEN-PLAN.md)."""
+
+    def __init__(self, detector=None, speech_rms: float = SPEECH_RMS) -> None:
+        self.frames: deque[tuple[bytes, float, bool]] = deque(maxlen=KEEP_S * 1000 // FRAME_MS)
+        self.end = 0  # index of the next frame to arrive
+        self.cursor = 0  # index of the first frame no listen has taken
+        self.detector = detector
+        self.speech_rms = speech_rms
+        self.cond = __import__("threading").Condition()
+        self.last = 0.0  # time.monotonic() of the last frame
+
+    def live(self) -> bool:
+        return time.monotonic() - self.last < 1.0
+
+    def push(self, pcm: bytes) -> None:
+        rms = frame_rms(pcm)
+        voice = rms >= self.speech_rms
+        if self.detector is not None:
+            try:
+                voice = self.detector.feed(pcm) and rms >= self.speech_rms / 4
+            except Exception as exc:  # a broken detector must not stop the stream
+                log.warning("voice detector failed on the stream (%s); loudness alone from here", exc)
+                self.detector = None
+        with self.cond:
+            self.frames.append((pcm, rms, voice))
+            self.end += 1
+            self.last = time.monotonic()
+            self.cond.notify_all()
+
+    def _frame(self, i: int) -> tuple[bytes, float, bool] | None:
+        base = self.end - len(self.frames)
+        return self.frames[i - base] if base <= i < self.end else None
+
+    def _wait_for(self, i: int, until: float) -> bool:
+        """With the lock held: True once frame i is in, False at `until` (monotonic)."""
+        while self.end <= i:
+            left = until - time.monotonic()
+            if left <= 0 or not self.cond.wait(min(left, 0.5)):
+                if time.monotonic() >= until:
+                    return False
+        return True
+
+    def take(self, duration_ms: int) -> tuple[bytes, str]:
+        """What someone says next, as 16 kHz 16-bit PCM, and how the listen went: from what
+        was said since the last listen (up to BACKLOG_S back), else from now for up to
+        duration_ms; ends END_SILENCE_MS after the voice stops. b"" when nobody spoke."""
+        end_frames = max(1, END_SILENCE_MS // FRAME_MS)
+        with self.cond:
+            base = self.end - len(self.frames)
+            i = max(self.cursor, base, self.end - int(BACKLOG_S * 1000 // FRAME_MS))
+            backlog = self.end - i
+            give_up = time.monotonic() + duration_ms / 1000
+            recent: deque[bool] = deque(maxlen=4)
+            start = None
+            quiet = 0
+            while True:
+                hard_stop = give_up if start is None else time.monotonic() + 5.0
+                if not self._wait_for(i, hard_stop):
+                    break
+                frame = self._frame(i)
+                voice = frame is not None and frame[2]
+                recent.append(voice)
+                if start is None:
+                    if sum(recent) >= 3:
+                        start = i - len(recent) + 1
+                        quiet = 0
+                else:
+                    quiet = 0 if voice else quiet + 1
+                    if quiet >= end_frames or i - start >= MAX_UTTERANCE_S * 1000 // FRAME_MS:
+                        i += 1
+                        break
+                i += 1
+            self.cursor = i
+            if start is None:
+                return b"", f"nobody spoke ({backlog * FRAME_MS / 1000:.1f} s before the listen and {duration_ms / 1000:.1f} s after)"
+            first = max(start - PREROLL_FRAMES, self.end - len(self.frames))
+            pcm = b"".join(f[0] for k in range(first, i) if (f := self._frame(k)) is not None)
+            how = f"speech {(i - start) * FRAME_MS / 1000:.1f} s"
+            return pcm, how + (f", {backlog * FRAME_MS / 1000:.1f} s of backlog looked at" if backlog else "")
+
+    def peek(self, ms: int) -> bytes:
+        """The last `ms` of the stream, without taking it from the next listen."""
+        with self.cond:
+            n = min(len(self.frames), ms // FRAME_MS)
+            return b"".join(f[0] for f in list(self.frames)[len(self.frames) - n:])
+
+    def voice_after(self, index: int, wait_s: float) -> bool:
+        """True as soon as BARGE_FRAMES of the BARGE_OF frames from `index` on are a voice:
+        someone started talking. False after wait_s with nobody."""
+        until = time.monotonic() + wait_s
+        window: deque[bool] = deque(maxlen=BARGE_OF)
+        with self.cond:
+            i = max(index, self.end - len(self.frames))
+            while self._wait_for(i, until):
+                frame = self._frame(i)
+                window.append(frame is not None and frame[2])
+                if sum(window) >= BARGE_FRAMES:
+                    return True
+                i += 1
+        return False
+
+    def run(self, path: str) -> None:
+        """Read rob-audio's mic.sock for ever, reconnecting when it restarts."""
+        import socket
+
+        frame = 16000 * 2 * FRAME_MS // 1000
+        said = False
+        while True:
+            try:
+                with socket.socket(socket.AF_UNIX) as sock:
+                    sock.connect(path)
+                    log.info("the Mac's microphone: streaming from %s (ROB's voice taken out)", path)
+                    said = False
+                    pending = b""
+                    while True:
+                        data = sock.recv(8192)
+                        if not data:
+                            break
+                        pending += data
+                        while len(pending) >= frame:
+                            self.push(pending[:frame])
+                            pending = pending[frame:]
+            except OSError as exc:
+                if not said:
+                    log.info("the Mac's microphone: no stream at %s (%s); listens record with ffmpeg", path, exc)
+                    said = True
+            time.sleep(1.0)
+
+
+def serve_voice(stream: MicStream, port: int = VOICE_PORT) -> None:
+    """GET /voice?wait=S on 127.0.0.1:port: {"voice": true} as soon as someone starts
+    talking after the request, false after S seconds; {"live": false} with no stream.
+    Outside the gateway's one-at-a-time command queue, so ROB's head and face keep moving
+    while the brain waits on it."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import parse_qs, urlparse
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            url = urlparse(self.path)
+            if url.path != "/voice":
+                self.send_error(404)
+                return
+            try:
+                wait = min(60.0, max(0.0, float(parse_qs(url.query).get("wait", ["10"])[0])))
+            except ValueError:
+                wait = 10.0
+            if not stream.live():
+                body = {"live": False, "voice": False}
+            else:
+                body = {"live": True, "voice": stream.voice_after(stream.end, wait)}
+            data = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):  # the gateway's log is for listens
+            pass
+
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError as exc:
+        log.warning("no voice endpoint on port %d (%s): ROB cannot be talked over", port, exc)
+        return
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, name="voice", daemon=True).start()
+
+
 def install_mac_mic() -> None:
     """Let listen take "source": "mac" and hear through this Mac's microphone."""
     import numpy as np
     from stackchan_mcp import stdio_server
 
     real_listen = stdio_server.listen_and_transcribe
+    import threading
+
+    stream = MicStream(VoiceDetector(ears.vad) if ears.vad is not None else None)
+    threading.Thread(target=stream.run, args=(os.path.join(AUDIO_DIR, "mic.sock"),), name="mic", daemon=True).start()
+    serve_voice(stream)
+
+    def record(duration_ms: int) -> bytes:
+        if not stream.live():
+            return record_mac(duration_ms)
+        pcm, how = stream.take(duration_ms)
+        log.info("listen (Mac mic stream): %s", how)
+        return pcm
 
     async def listen_and_transcribe(arguments, **kwargs):
         if arguments.get("source") != "mac" or ears.hear is None:
@@ -471,7 +670,9 @@ def install_mac_mic() -> None:
         duration_ms = arguments.get("duration_ms", 5000)
         if isinstance(duration_ms, bool) or not isinstance(duration_ms, int) or not 100 <= duration_ms <= 30_000:
             raise ValueError(f"'duration_ms' must be an integer from 100 to 30000; got {duration_ms!r}")
-        pcm = await asyncio.to_thread(record_mac, duration_ms)
+        pcm = await asyncio.to_thread(record, duration_ms)
+        if not pcm:
+            return {"engine": "faster-whisper", "text": "", "language": "en", "duration_ms": 0, "frame_count": 0}
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         started = time.monotonic()
         text, note, voiced = await asyncio.to_thread(ears.hear, audio)

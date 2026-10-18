@@ -17,4 +17,4 @@ Only the user can power the robot or the Pi, and `scripts/wifi.sh game` needs th
 
 ## Plans
 
-- Work that spans sessions has a plan in `docs/*-PLAN.md`. Read `docs/CONTROL-PLAN.md` before touching how ROB takes commands (stop, pause, sleep, interrupting him), the welcome, Wavelength or the head count.
+- Work that spans sessions has a plan in `docs/*-PLAN.md`. Read `docs/CONTROL-PLAN.md` before touching how ROB takes commands (stop, pause, sleep, interrupting him), the welcome, Wavelength or the head count. Read `docs/LISTEN-PLAN.md` before touching how ROB hears: the Mac microphone, echo, listening while he talks, or speech-to-text.

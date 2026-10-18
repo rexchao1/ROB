@@ -45,6 +45,8 @@ TOUCH_SAME_EVENT = 0.5  # seconds: two reports of an event this close are the sa
 TOUCH_SLACK = 1.5  # seconds: an event this close to a counted hold is that hold ending
 STREAM_STEP = 0.1  # seconds of audio per piece when a line is streamed so it can be cut off
 STREAM_LEAD = 1.0  # seconds a streamed line runs ahead of real time, so the gateway never runs dry
+PLAY_SOCK = os.environ.get("GM_PLAY_SOCK") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".cache", "audio", "play.sock")
+VOICE_URL = os.environ.get("GM_VOICE_URL", "http://127.0.0.1:8769/voice")  # the gateway's "has someone started talking"
 PLAYED_AFTER = 0.2  # seconds past a line's length by which this Mac has played it: afplay starts in about 60 ms, the built-in speakers add 13 (measured 2026-10-18)
 
 
@@ -303,6 +305,19 @@ class Body:
         text = answer.data.get("text", "") if isinstance(answer.data, dict) else ""
         return text if isinstance(text, str) else ""
 
+    def voice_started(self, wait: float) -> bool | None:
+        """Waits up to `wait` s for someone to start talking into the Mac's microphone
+        stream (the gateway's voice endpoint): True when they did, False when nobody did,
+        None when there is no stream (no rob-audio, or an older gateway)."""
+        try:
+            with urllib.request.urlopen(f"{VOICE_URL}?wait={wait:.1f}", timeout=wait + 5) as res:
+                answer = json.loads(res.read())
+        except (urllib.error.URLError, OSError, ValueError):
+            return None
+        if not answer.get("live"):
+            return None
+        return bool(answer.get("voice"))
+
     def play(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
         """Play 16 kHz mono s16le PCM on the speaker; returns once it has played. mouth:
         on the Mac's speaker, move the robot's mouth with it (False while a card is up,
@@ -334,6 +349,44 @@ class Body:
             raise BodyError(f"POST /pcm: {e}") from None
 
     def _play_here(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
+        """Play on this Mac: through rob-audio when it runs (so the Mac's microphone does
+        not hear ROB, docs/LISTEN-PLAN.md), else afplay."""
+        if os.path.exists(PLAY_SOCK):
+            try:
+                self._play_helper(pcm, mouth=mouth, abort=abort)
+                return
+            except OSError:
+                pass  # the helper went away mid-start: afplay below
+        self._play_afplay(pcm, mouth=mouth, abort=abort)
+
+    def _play_helper(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
+        """rob-audio's play.sock: the line's length and its PCM; one byte back once it has
+        played. Setting `abort` sends a cut (length 0)."""
+        import socket
+        import struct
+
+        with socket.socket(socket.AF_UNIX) as sock:
+            sock.connect(PLAY_SOCK)
+            sock.sendall(struct.pack("<I", len(pcm)) + pcm)
+            try:
+                if mouth:
+                    self.gateway.call("set_mouth_sequence", {"steps": mouth_steps(pcm)})
+            except BodyError:
+                pass  # the line still plays; only the mouth stays still
+            limit = time.monotonic() + len(pcm) / (SAMPLE_RATE * 2) + 5.0
+            sock.settimeout(0.05)
+            while time.monotonic() < limit:
+                if abort is not None and abort.is_set():
+                    sock.sendall(struct.pack("<I", 0))
+                    abort = None
+                try:
+                    if sock.recv(1):
+                        return
+                    return  # the helper closed: the line is over either way
+                except TimeoutError:
+                    continue
+
+    def _play_afplay(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
         """Play on this machine's audio output (afplay) while the robot moves its mouth;
         returns once the line has played. afplay lingers about 0.8 s after the sound
         ends before it exits, so it is waited for only the line's length and

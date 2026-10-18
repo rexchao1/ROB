@@ -116,6 +116,8 @@ stop() {
     [ -n "$p" ] && [ "$(folder "$p")" = "$ROOT" ] && kill "$p" 2>/dev/null || true
   done
   rm -f "$PIDS"
+  pkill -f "$ROOT/.cache/bin/rob-audio" 2>/dev/null || true
+  rm -f .cache/audio/*.sock
   [ -f "$LOGS/hotspot-referee" ] && { stop_hotspot_referee; rm -f "$LOGS/hotspot-referee"; }
   # Logs can contain speech and private game details. Keep only by explicit opt-in.
   if [ "${GM_KEEP_LOGS:-}" != 1 ]; then rm -f "$LOGS/"*.log; fi
@@ -180,6 +182,13 @@ preflight() {
   fi
   if ! grep -qE '^(ANTHROPIC_API_KEY|GEMINI_API_KEY)=.' .env.local 2>/dev/null; then
     say "no AI key in .env.local: ROB uses its scripted lines (the dashboard's Keys tab can add one)"
+  fi
+  # rob-audio: ROB's voice and the Mac's microphone with his voice taken out (docs/LISTEN-PLAN.md)
+  if [ ! -x .cache/bin/rob-audio ] || [ scripts/rob-audio.swift -nt .cache/bin/rob-audio ]; then
+    mkdir -p .cache/bin
+    say "building rob-audio (echo cancellation for the Mac's microphone)"
+    swiftc -O -swift-version 5 scripts/rob-audio.swift -o .cache/bin/rob-audio 2> "$LOGS/rob-audio-build.log" ||
+      say "rob-audio did not build ($LOGS/rob-audio-build.log): the Mac's microphone will hear ROB's own voice"
   fi
   command -v stackchan-mcp > /dev/null || { say "stackchan-mcp is not installed (uv tool install stackchan-mcp)" >&2; exit 1; }
   # the gateway's ears: Whisper large-v3-turbo on the Mac's GPU (scripts/gateway.py)
@@ -264,6 +273,12 @@ start() {
       kill "$p"; sleep 1
       p=""
     fi
+  fi
+  if [ -x .cache/bin/rob-audio ]; then
+    pkill -f "$ROOT/.cache/bin/rob-audio" 2>/dev/null || true
+    rm -f .cache/audio/*.sock
+    nohup "$ROOT/.cache/bin/rob-audio" "$ROOT/.cache/audio" > "$LOGS/rob-audio.log" 2>&1 &
+    echo $! >> "$PIDS"
   fi
   if [ -z "$p" ]; then
     # scripts/gateway.py: the same gateway, with each listen ending when the talker stops

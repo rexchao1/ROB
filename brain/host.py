@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import random
+import re
 import sys
 import threading
 import time
@@ -59,6 +60,8 @@ HEAR_AFTER = 4.0  # nobody close this long after the lean-in line: a short liste
 HEAR_EVERY = 6.0  # and again this often; photos stop while the host listens (one gateway command at a time)
 HEAR_SECONDS = 3.0  # each of those listens
 TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a hand on it is "show me"
+BARGE_HEAR = 8.0  # seconds to hear someone out after they talked over ROB in a game
+VOICE_POLL = 10.0  # seconds per wait on the gateway's voice endpoint while a line plays
 BARGE_WINDOW = 2.0  # seconds per listen on the Mac's microphone while ROB talks, for a command over his line
 FACE_RETRY = 10.0  # seconds between tries to put ROB's face back on a robot that dropped off
 TOUCH_SINCE = 5.0  # between games, a touch this long before a listen began (while ROB talked) still counts
@@ -172,6 +175,8 @@ class Host:
         self.last_line: str | None = None  # the game's last line, for "say that again"
         self._face_tried = float("-inf")  # time.monotonic() of the last reload after the robot dropped off
         self._barged_at = float("-inf")  # time.monotonic() of the last command heard over ROB's line
+        self._voice_cut = False  # the last line was cut by someone talking over it (any words)
+        self._said_lately: deque[tuple[float, str]] = deque(maxlen=3)  # (time.monotonic(), line): his echo check
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._started = threading.Event()
@@ -216,6 +221,14 @@ class Host:
         self.last_line = line
         cut = self._speak(line)
         if cut:
+            if self._voice_cut:
+                self._voice_cut = False
+                if self._in_game():  # hear them out: a command acts, anything else waits for the line again
+                    heard = self._hear(BARGE_HEAR, typed_too=False)
+                    if heard and ears.hard_command(heard):
+                        with self._lock:
+                            self._injected.appendleft(heard)
+                # between games what they said stays in the microphone stream for the next listen
             self._interrupt()  # in a game: the stop or the pause, now
             if self._in_game():
                 self._speak(line)  # back from a pause: the line again, whole
@@ -262,6 +275,7 @@ class Host:
         self._check_stop()
         self._log(f"say: {line}")
         self._note("said", line)
+        self._said_lately.append((time.monotonic(), line))
         if self._listening and not self.paused:
             made: dict[str, Any] = {}
 
@@ -319,6 +333,18 @@ class Host:
         """While `line` plays, listen in BARGE_WINDOW pieces; a hard command (ears.
         hard_command) cuts the line off and waits at the front of the typed queue. The
         microphone hears ROB too, so a command his own line holds is never taken."""
+        if self.body.speaker == "mac":  # rob-audio takes his voice out: any voice over the line cuts it
+            while not done.is_set():
+                talking = self.body.voice_started(VOICE_POLL)
+                if talking is None:
+                    break  # no stream: hard commands only, below
+                if talking and not done.is_set():
+                    self._log("someone talked over my line: stopping")
+                    self._voice_cut = True
+                    cut.set()
+                    return
+            else:
+                return
         if ears.hard_command(line):
             return
         while not done.is_set():
@@ -334,6 +360,16 @@ class Host:
                     self._injected.appendleft(heard)
                 cut.set()
                 return
+
+    def _my_echo(self, said: str) -> bool:
+        """`said` is mostly ROB's own words from the last 20 s: his voice back through the
+        microphone (the robot's speaker, which rob-audio cannot take out)."""
+        words = re.findall(r"[a-z']+", said.lower())
+        if len(words) < 2:
+            return False
+        now = time.monotonic()
+        mine = {w for t, line in self._said_lately if now - t < 20 for w in re.findall(r"[a-z']+", line.lower())}
+        return sum(w in mine for w in words) >= 0.8 * len(words)
 
     def _cue(self, listening: bool) -> None:
         """The ring: "listening" while the host listens, else the mood's colour (D43);
@@ -510,6 +546,9 @@ class Host:
                 raise
             if said.strip() and ears.hard_command(said) and time.monotonic() - self._barged_at < BARGE_WINDOW + 1.0:
                 said = ""  # the tail of the command already heard over ROB's line: taken once
+            if said.strip() and self._my_echo(said):
+                self._log(f"heard my own line, dropped: {said}")
+                said = ""
             heard.append(said)
             self.robot_ok = True
             left -= chunk
