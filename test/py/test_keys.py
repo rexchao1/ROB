@@ -74,3 +74,19 @@ def test_the_env_file_keeps_other_lines_is_owner_only_and_fills_in_the_environme
     assert os.environ["ELEVENLABS_VOICE_ID"] == "from-shell"  # the environment wins
     with pytest.raises(KeysError):
         k.set({"HOME": "x"})
+
+
+def test_unchanged_keys_do_not_write_even_when_file_and_environment_differ(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text('# keep the quotes\nSTACKCHAN_TOKEN="same"\n')
+    monkeypatch.setenv("STACKCHAN_TOKEN", "other")
+    k = Keys(env)
+    with monkeypatch.context() as patch:
+        patch.setattr(keys.os, "open", lambda *a, **kw: pytest.fail("unchanged key wrote a file"))
+        k.set({"STACKCHAN_TOKEN": "same", "ELEVENLABS_VOICE_ID": None})
+        k.set({})
+    assert os.environ["STACKCHAN_TOKEN"] == "same"
+    assert env.read_text() == '# keep the quotes\nSTACKCHAN_TOKEN="same"\n'
+    missing = tmp_path / "missing"
+    Keys(missing).set({"STACKCHAN_TOKEN": None})
+    assert not missing.exists()

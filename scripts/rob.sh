@@ -80,6 +80,8 @@ stop() {
     [ -n "$p" ] && [ "$(folder "$p")" = "$ROOT" ] && kill "$p" 2>/dev/null || true
   done
   rm -f "$PIDS"
+  # Logs can contain speech and private game details. Keep only by explicit opt-in.
+  if [ "${GM_KEEP_LOGS:-}" != 1 ]; then rm -f "$LOGS/"*.log; fi
   n=0
   while [ -n "$(running)" ] && [ "$n" -lt 10 ]; do n=$((n + 1)); sleep 0.5; done
   left=$(running)
@@ -167,6 +169,8 @@ start() {
     return
   fi
   pick_network
+  # Starting a new run always discards the previous run, even in debug mode.
+  for log in "$LOGS/"*.log; do [ ! -f "$log" ] || : > "$log"; done
   : > "$PIDS"
 
   p=$(listening 8767)
@@ -180,10 +184,10 @@ start() {
   fi
   if [ -z "$p" ]; then
     # scripts/gateway.py: the same gateway, with each listen ending when the talker stops
-    VISION_HOST=$IP nohup "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http >> "$LOGS/gateway.log" 2>&1 &
+    VISION_HOST=$IP nohup "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http > "$LOGS/gateway.log" 2>&1 &
     echo $! >> "$PIDS"
   fi
-  [ -n "$(listening 8768)" ] || { nohup python3 scripts/ota-stub.py --port 8768 >> "$LOGS/ota-stub.log" 2>&1 & echo $! >> "$PIDS"; }
+  [ -n "$(listening 8768)" ] || { nohup python3 scripts/ota-stub.py --port 8768 > "$LOGS/ota-stub.log" 2>&1 & echo $! >> "$PIDS"; }
   n=0
   until [ -n "$(listening 8767)" ]; do
     n=$((n + 1)); [ "$n" -ge 30 ] && { say "the gateway did not start ($LOGS/gateway.log)" >&2; exit 1; }
