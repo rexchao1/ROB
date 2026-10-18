@@ -47,7 +47,6 @@ const WIP: WipEntry[] = [
   ] },
   { feature: 'wavelength', scenarios: [
     'A guess is read from a short answer', 'A number inside a longer sentence is talk', 'No guess the host can read scores zero',
-    'The psychic rotates and the total is announced after three rounds', // D103: "Player five was the psychic in the first round" replaces the rigged reading
   ] },
   { feature: 'imposter', scenarios: ['A tied vote lets the Imposter survive'] },
 ]

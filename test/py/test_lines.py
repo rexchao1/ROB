@@ -83,7 +83,7 @@ def test_fixed_lines_cover_the_per_seat_lines_once_each():
         lines.count_line(5), lines.only_see(5), lines.lean_in(10), lines.warn(3), lines.sit_out(3),
         lines.who(7), lines.killed(4), lines.was(4, lines.VILLAGER), lines.village_wins(1), lines.MAFIA_WIN,
         lines.points(9), lines.total(23), lines.ONE_AT_A_TIME, lines.time_left(60), lines.TIME_VOTE,
-        lines.imposter_survives(3), lines.clue(5), lines.psychic_clue(2),
+        lines.imposter_survives(3), lines.clue(5), lines.guesser_turn(2), lines.ask_category(2, 4),
     ]:
         assert line in fixed, line
     assert lines.tally([(4, 3), (1, 2)]) not in fixed  # composed at play time

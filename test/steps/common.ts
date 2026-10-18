@@ -56,10 +56,11 @@ export interface World {
   asks?: Ask[]
   /** The living players when the current vote began. */
   livingAtVote?: number[]
-  /** Wavelength: this round's psychic, spectrum and target, as the Background gives them. */
-  psychic?: number
-  spectrum?: string
+  /** Wavelength: this round's guesser and secret number, as the scenario gives them. */
+  guesser?: number
   target?: number
+  /** Wavelength: the guesser of each round played, in order. */
+  guessers?: number[]
   /** Imposter: the index of the line that ended the clue turns. */
   cluesEnd?: number
   /** The game time a second face leaned in beside the first (D8). */
@@ -130,7 +131,6 @@ export const MORNING = "Everyone, heads up. It's morning."
 export const EARLY_VOTE = "Okay, let's vote."
 export const CLUES = "One word each, in seat order. Don't make it too easy."
 export const IMPOSTER_VOTE = "Who's the Imposter? Let's vote."
-export const TALK = "Everyone else, talk it over. Tell me your number when you're ready."
 export const LEAN_IN = /^Player ([a-z]+), lean in\.$/
 export const WHO = /^Player ([a-z]+), who\?$/
 export const CLUE = /^Player ([a-z]+), one word\.$/
@@ -181,8 +181,8 @@ export interface GameState {
   round: number
   over: boolean
   winner: string | null
-  psychic?: number
-  next_psychic?: number
+  guesser?: number
+  next_guesser?: number
   scores?: number[]
   total?: number
 }
