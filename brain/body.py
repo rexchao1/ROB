@@ -71,11 +71,20 @@ class Gateway:
         self._protocol = PROTOCOL_VERSION
         self._lock = threading.Lock()  # the session handshake and the request ids
         self._next_id = 0
+        self.dropped = False  # a call found the robot gone: on its return it shows its stock face until ROB's set is loaded again
 
     # --- tools -------------------------------------------------------------------
 
     def call(self, name: str, args: dict[str, Any] | None = None, timeout: float | None = None) -> ToolResult:
         """Call one tool and return its answer; raise BodyError on any refusal."""
+        try:
+            return self._call(name, args, timeout)
+        except BodyError as e:
+            if "ESP32" in str(e):
+                self.dropped = True
+            raise
+
+    def _call(self, name: str, args: dict[str, Any] | None, timeout: float | None) -> ToolResult:
         result = self._request("tools/call", {"name": name, "arguments": args or {}}, timeout)
         text = "\n".join(item.get("text", "") for item in result.get("content", []) if item.get("type") == "text")
         images = [base64.b64decode(item["data"]) for item in result.get("content", []) if item.get("type") == "image"]

@@ -60,6 +60,7 @@ HEAR_EVERY = 6.0  # and again this often; photos stop while the host listens (on
 HEAR_SECONDS = 3.0  # each of those listens
 TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a hand on it is "show me"
 BARGE_WINDOW = 2.0  # seconds per listen on the Mac's microphone while ROB talks, for a command over his line
+FACE_RETRY = 10.0  # seconds between tries to put ROB's face back on a robot that dropped off
 TOUCH_SINCE = 5.0  # between games, a touch this long before a listen began (while ROB talked) still counts
 TRUST = 4.0  # seconds the card stays up on a touch or "show me", the camera or not
 REVEAL_HOLD = 2.0  # seconds a reveal card stays up after its line, before the host's face comes back
@@ -169,6 +170,7 @@ class Host:
         self.asleep = False  # napping between games: no listening until a tap on the head
         self._paused_for = 0.0  # seconds spent paused, left out of now() so a game's timers stop
         self.last_line: str | None = None  # the game's last line, for "say that again"
+        self._face_tried = float("-inf")  # time.monotonic() of the last reload after the robot dropped off
         self._barged_at = float("-inf")  # time.monotonic() of the last command heard over ROB's line
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -363,6 +365,7 @@ class Host:
         tap on the head, a speaker change moves the voice, "say that again" repeats the
         game's last line. Between games a hand on the head is "pause": the lobby and the
         welcome take it as a nap."""
+        self._face_back()
         while True:
             start = self.clock.now()
             text = self._hear(seconds)
@@ -465,6 +468,7 @@ class Host:
                 woke = typed
                 break
             self.wait(TOUCH_EVERY)
+            self._face_back()
             now = self.clock.now()
             if self.body.touched(now - checked + 0.5, now):
                 woke = ""
@@ -860,7 +864,26 @@ class Host:
         if self.dash is not None:
             self.dash.robot_face(shown)
 
+    def _face_back(self) -> None:
+        """The robot dropped off and came back showing its stock face: load ROB's set
+        again (the game's cards in a game, else his face alone), at most every
+        FACE_RETRY seconds while it stays away."""
+        gateway = getattr(self.body, "gateway", None)
+        if self.virtual or not getattr(gateway, "dropped", False) or time.monotonic() - self._face_tried < FACE_RETRY:
+            return
+        self._face_tried = time.monotonic()
+        gateway.dropped = False
+        self._loaded_path = None
+        if self._manifest is not None and self._in_game():
+            if self._loading is not None:
+                self._loading.join()
+                self._loading = None
+            self._load(self._manifest_path())
+        else:
+            self.prepare([])
+
     def _wait_for_cards(self) -> dict[str, Any]:
+        self._face_back()
         if self._manifest is None:
             raise HostError("show_private before prepare")
         if self._loading is not None:
@@ -887,6 +910,7 @@ class Host:
         self.asleep = False  # the ring is the mood's again; a nap after this dims it anew
         if name == "idle":
             self.recap.clear()  # every game ends on the idle look (games.play), so its recap goes with it
+        self._face_back()
         self._avatar("idle", "idle")
         self.ring = MOOD_LEDS[name]
         self.body.leds([self.ring])

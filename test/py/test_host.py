@@ -638,3 +638,23 @@ def test_rob_s_own_command_words_never_cut_his_line(host, monkeypatch):
     monkeypatch.setattr(host.body, "play", play)
     host.say("I don't see anyone yet. Sit where I can see you and say reset.")
     assert not plays[0].is_set()
+
+
+def test_after_the_robot_drops_off_its_face_is_loaded_again_between_games(host, monkeypatch):
+    loads = []
+    monkeypatch.setattr(host, "virtual", False)
+    monkeypatch.setattr(host, "prepare", lambda cards: loads.append(list(cards)))
+    host.body.gateway.dropped = True
+    host.mood("idle")
+    host.mood("idle")  # once, not on every call
+    assert loads == [[]] and host.body.gateway.dropped is False
+
+
+def test_a_robot_error_marks_the_robot_dropped(body, monkeypatch):
+    def gone(*_args, **_kwargs):
+        raise BodyError("set_all_leds: ESP32 communication error: ESP32 disconnected")
+
+    monkeypatch.setattr(body.gateway, "_call", gone)
+    with pytest.raises(BodyError):
+        body.leds([(1, 2, 3)])
+    assert body.gateway.dropped
