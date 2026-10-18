@@ -104,13 +104,13 @@ def test_settings_apply_live_round_trip_and_refuse_bad_values(brain, restore):
     status, got = call(brain.url, "GET", "/dash/api/settings")
     assert status == 200
     keys = [s["key"] for s in got["schema"]]
-    assert keys == ["pitch", "hfov", "sweep_step", "score_min", "close_width", "listen_window", "day_seconds", "vote_seconds", "whisper_seconds", "clue_seconds", "banter"]
+    assert keys == ["pitch", "hfov", "sweep_step", "sweep_speed", "score_min", "close_width", "listen_window", "day_seconds", "vote_seconds", "whisper_seconds", "clue_seconds", "banter"]
     assert {s["group"] for s in got["schema"]} == {"Camera", "Head", "Timing", "Voice"}
-    change = {"pitch": 30, "hfov": 70, "score_min": 0.6, "close_width": 0.3, "listen_window": 6, "day_seconds": 60, "vote_seconds": 5, "banter": False}
+    change = {"pitch": 30, "hfov": 70, "sweep_speed": 60, "score_min": 0.6, "close_width": 0.3, "listen_window": 6, "day_seconds": 60, "vote_seconds": 5, "banter": False}
     status, got = call(brain.url, "POST", "/dash/api/settings", change)
     assert status == 200 and all(got["values"][k] == v for k, v in change.items())
     host = brain.host
-    assert host.body.pitch == 30 and host.hfov == 70 and host.listen_window == 6
+    assert host.body.pitch == 30 and host.hfov == 70 and host.listen_window == 6 and host.sweep_speed == 60
     assert vision.SCORE_MIN == 0.6 and vision.CLOSE_WIDTH == 0.3
     assert host.options.day_seconds == 60 and host.options.vote_seconds == 5 and host.options.clue_seconds == 6
     assert call(brain.url, "GET", "/dash/api/settings")[1]["values"] == got["values"]
@@ -121,7 +121,7 @@ def test_settings_apply_live_round_trip_and_refuse_bad_values(brain, restore):
 
 def test_the_scan_step_sets_how_many_photos_a_count_takes(brain, fake, restore):
     got = call(brain.url, "GET", "/dash/api/settings")[1]
-    assert got["values"]["sweep_step"] == 12 and got["photos"] == 16  # unset: the default glide, 12 degrees
+    assert got["values"]["sweep_step"] == 15 and got["photos"] == 13  # unset: the default glide, 15 degrees
     got = call(brain.url, "POST", "/dash/api/settings", {"sweep_step": 30})[1]
     assert got["values"]["sweep_step"] == 30 and got["photos"] == 7
     assert vision.sweep_pans() == [-90, -60, -30, 0, 30, 60, 90]

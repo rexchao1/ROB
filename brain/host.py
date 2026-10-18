@@ -63,7 +63,7 @@ LISTEN_WINDOW = 4.0  # the idle loop's listening window, waiting for a game's na
 MAX_LISTEN = 30.0  # the gateway's longest listen
 TURN_RATE = 240.0  # degrees per second at speed "high"
 TURN_SETTLE = 0.15  # seconds after the head arrives before a photo is trusted
-SWEEP_SPEED = 24  # degrees per second asked of each step of the counting sweep: the firmware eases a 12-degree step over about a third of a second, so the head glides from photo to photo
+SWEEP_SPEED = 40  # degrees per second asked of each step of the counting sweep by default (the dashboard's "Scan speed"): the firmware eases a 15-degree step over about a quarter of a second, so the head glides from photo to photo
 SEATED_SPREAD = 60  # degrees either side of the middle that seats taken on the group's word are spread across
 RETURN_SPEED = 60  # degrees per second back to the middle after the count: about a second, not a snap
 PHOTO_TRIES = 3  # a photo that fails (the robot dropped off Wi-Fi for a moment) is tried this often
@@ -143,6 +143,7 @@ class Host:
         self.options = options if options is not None else games.Options()
         self.hfov = hfov
         self.listen_window = listen_window
+        self.sweep_speed = SWEEP_SPEED  # the dashboard's "Scan speed"
         self.keep_photos = Path(keep_photos) if keep_photos is not None else None
         if self.keep_photos is not None:
             self.keep_photos.mkdir(parents=True, exist_ok=True)
@@ -498,7 +499,7 @@ class Host:
         self._listening = False  # the sweep's ring replaces the cue
         for i, pan in enumerate(pans):
             self._check_stop()
-            self._turn(pan, None if i == 0 else SWEEP_SPEED)
+            self._turn(pan, None if i == 0 else int(self.sweep_speed))
             faces = self._look("count")
             views.append((self.yaw, faces))
             for f in faces:

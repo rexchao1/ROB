@@ -40,7 +40,7 @@ CLOSE_WIDTH: float = 0.25  # a face at least this fraction of the frame's width 
 SEAT_TOLERANCE_DEG: float = 10.0  # sightings closer than this are one seat; a face up this near a seat is that seat
 SCORE_MIN: float = 0.5  # YuNet's confidence floor (the drawn faces score 0.5 to 0.9; real faces score higher)
 EDGE_MARGIN_DEG: float = 6.0  # a face this near the frame's edge may be cut off and missed; plan views without relying on it
-SWEEP_DEFAULT_DEG: float = 12.0  # the counting sweep's stops are at most this far apart (and a third of the field of view): small steps the head can glide through, and every face in four or five photos
+SWEEP_DEFAULT_DEG: float = 15.0  # the counting sweep's stops are at most this far apart (and a third of the field of view): small steps the head can glide through, and every face in about four photos
 SWEEP_STEP_DEG: float | None = None  # the dashboard's "Scan step" when the operator sets it: the stops' spacing instead of the default
 
 # The widths (pixels) the frame is run at: wider for seated faces, narrower for close ones.

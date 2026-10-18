@@ -92,6 +92,11 @@ SCHEMA: tuple[Setting, ...] = (
         "Degrees the head turns between photos while counting; the scan takes 180 / step + 1 photos. "
         "Above half the field of view a seat may be seen in only one photo and missed.",
     ),
+    Setting(
+        "sweep_speed", "Scan speed", "Camera", "number", 10, 90, 1, "deg/s",
+        "How fast the head turns between photos while counting. Faster finishes sooner; "
+        "if counts start missing people, slow it down.",
+    ),
     Setting("score_min", "Face score floor", "Camera", "number", 0.3, 0.99, 0.01, "", "A face scoring below this is not a face."),
     Setting("close_width", "Close-face width", "Camera", "number", 0.05, 0.6, 0.01, "of frame", "A face this wide is leaning in to the screen."),
     Setting("listen_window", "Idle listen window", "Voice", "number", 1, 15, 0.5, "s", "How long each idle listen waits for a game's name."),
@@ -418,6 +423,7 @@ class Dash:
             "pitch": host.body.pitch,
             "hfov": host.hfov,
             "sweep_step": vision.sweep_step(host.hfov),
+            "sweep_speed": host.sweep_speed,
             "score_min": vision.SCORE_MIN,
             "close_width": vision.CLOSE_WIDTH,
             "listen_window": host.listen_window,
@@ -456,6 +462,8 @@ class Dash:
                 host.hfov = float(value)
             elif key == "sweep_step":
                 vision.SWEEP_STEP_DEG = float(value)
+            elif key == "sweep_speed":
+                host.sweep_speed = int(round(value))
             elif key == "score_min":
                 vision.SCORE_MIN = float(value)
                 with vision._lock:  # noqa: SLF001 - the detector was built with the old floor

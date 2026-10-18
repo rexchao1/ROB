@@ -143,7 +143,7 @@ def test_count_turns_quickly_to_the_start_then_glides_and_fills_the_ring(host, f
 
 def test_a_sweep_step_waits_until_the_head_has_settled():
     assert glide_seconds(0, SWEEP_SPEED) == TURN_SETTLE
-    assert 0.28 <= glide_seconds(vision.SWEEP_DEFAULT_DEG, SWEEP_SPEED) <= 0.36  # 0.3 s measured sharp on the robot
+    assert 0.2 <= glide_seconds(vision.SWEEP_DEFAULT_DEG, SWEEP_SPEED) <= 0.3  # quicker than the 0.32 s of 12 degrees at 24, measured sharp on the robot
     assert glide_seconds(90, RETURN_SPEED) > glide_seconds(12, RETURN_SPEED)
 
 

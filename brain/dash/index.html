@@ -1420,7 +1420,7 @@ setInterval(poll, 1000);
 poll();
 
 // ---------- tuning: the Camera tab (head, scan, face finder) and the Game tab (the rest) ----------
-const CAMERA_KEYS = ["pitch", "sweep_step", "hfov", "score_min", "close_width"];
+const CAMERA_KEYS = ["pitch", "sweep_step", "sweep_speed", "hfov", "score_min", "close_width"];
 const CAMERA_GROUPS = ["Camera", "Head"];
 const GROUP_ORDER = ["Timing", "Voice"], GROUP_LABEL = { Voice: "Listening and quips" };
 const pendingSet = {}; let setT;
@@ -1470,7 +1470,7 @@ function settingRow(f, v, withHelp, photos) {
   }
   const deg = f.unit === "\u00b0" || f.unit === "deg";
   const unit = !f.unit ? "" : deg ? "\u00b0" : "<small>" + esc(f.unit) + "</small>";
-  // the scan step reads as the photos it takes: "12° · 16 photos"
+  // the scan step reads as the photos it takes: "15° · 13 photos"
   const extra = f.key === "sweep_step" ? '<small data-ph></small>' : "";
   row.innerHTML = lab + '<input type="range" min="' + f.min + '" max="' + f.max + '" step="' + (f.step || 1) + '" value="' + v + '" aria-label="' + esc(f.label || f.key) + '">' +
     '<div class="val num"><span>' + fmtVal(v, f.step) + "</span>" + unit + extra + '</div><span class="tick" aria-hidden="true">\u2713</span>';
