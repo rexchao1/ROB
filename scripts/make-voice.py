@@ -1,16 +1,24 @@
-"""Record the host's fixed lines once with ElevenLabs (D30), into voice/<line_key>.wav.
+"""Record the host's fixed lines once with ElevenLabs (D30), into voice/<voice id>/<line_key>.wav.
 
-The brain plays a recorded line when one exists (brain/voice.py, CachedVoice) and
-speaks the rest with the local voice, so this runs by hand, once, with a key, and
-never in a test lane. Lines already recorded are skipped, so a rerun only fills gaps.
+The brain plays a recorded line when one exists in the voice ROB speaks in now
+(brain/voice.py, CachedVoice) and speaks the rest live, so this runs by hand, once per
+voice, with a key, and never in a test lane. Lines already recorded in that voice are
+skipped, so a rerun only fills gaps.
 
   python scripts/make-voice.py --dry-run                 # list what it would record
-  ELEVENLABS_API_KEY=... python scripts/make-voice.py --voice-id <id>
+  ELEVENLABS_API_KEY=... python scripts/make-voice.py    # the brain's default voice
+  ELEVENLABS_API_KEY=... python scripts/make-voice.py --voice-id george
+
+The voice: an ElevenLabs voice id, or one of the dashboard's voices by name (chris,
+jessica, george, charlie, brian); by default ELEVENLABS_VOICE_ID, else the brain's own
+default (brain.voice.ELEVEN_VOICE), the voice the brain speaks in when nothing else is
+picked. Each voice has its own folder, so the recordings of one never play in another's
+place.
 
 The lines: brain.lines.fixed_lines() (every line the host can say whose words are
 known ahead of time), plus voice/lines.txt if present (one line per row, # comments).
 Each WAV is 16 kHz mono 16-bit, ElevenLabs' pcm_16000 output wrapped as a WAV, and
-voice/index.tsv lists every recording's key and text.
+voice/<voice id>/index.tsv lists every recording's key and text.
 """
 
 from __future__ import annotations
@@ -28,8 +36,9 @@ from typing import Callable, Protocol
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from brain.keys import load_env  # noqa: E402 - after the path
-from brain.voice import line_key, pcm_to_wav  # noqa: E402
+from brain import personas  # noqa: E402 - after the path
+from brain.keys import load_env  # noqa: E402
+from brain.voice import ELEVEN_VOICE, line_key, pcm_to_wav  # noqa: E402
 
 API = "https://api.elevenlabs.io/v1/text-to-speech"
 DEFAULT_MODEL = "eleven_multilingual_v2"
@@ -129,22 +138,25 @@ def main(argv: list[str] | None = None, tts: TTS | None = None, lines: list[str]
     if tts is None:
         load_env()  # the key and voice set from the dashboard (.env)
     parser = argparse.ArgumentParser(prog="make-voice.py", description=__doc__.split("\n\n")[0])
-    parser.add_argument("--voice-id", default=os.environ.get("ELEVENLABS_VOICE_ID"), help="ElevenLabs voice id (or ELEVENLABS_VOICE_ID)")
+    parser.add_argument("--voice-id", default=os.environ.get("ELEVENLABS_VOICE_ID") or ELEVEN_VOICE,
+                        help=f"ElevenLabs voice id or a dashboard voice's name (default ELEVENLABS_VOICE_ID, else {ELEVEN_VOICE})")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"ElevenLabs model (default {DEFAULT_MODEL})")
-    parser.add_argument("--out", type=Path, default=ROOT / "voice", help="where the WAVs go (default voice/)")
+    parser.add_argument("--out", type=Path, default=ROOT / "voice", help="where the voices' folders go (default voice/)")
     parser.add_argument("--lines-file", type=Path, default=ROOT / "voice" / "lines.txt", help="extra lines, one per row")
     parser.add_argument("--dry-run", action="store_true", help="list the lines it would record; call nothing")
     args = parser.parse_args(argv)
 
+    named = personas.VOICES.get(args.voice_id.lower())
+    voice_id = named.eleven_id if named else args.voice_id
+    if not voice_id.isalnum():
+        parser.error(f"--voice-id {voice_id!r} is not an ElevenLabs voice id (letters and digits) or a voice's name")
     todo = unique((fixed_lines() if lines is None else lines) + extra_lines(args.lines_file))
     if tts is None and not args.dry_run:
         key = os.environ.get("ELEVENLABS_API_KEY")
         if not key:
             parser.error("ELEVENLABS_API_KEY is not set")
-        if not args.voice_id:
-            parser.error("--voice-id (or ELEVENLABS_VOICE_ID) is required")
-        tts = ElevenLabs(key, args.voice_id, args.model)
-    record(todo, args.out, tts, dry_run=args.dry_run)
+        tts = ElevenLabs(key, voice_id, args.model)
+    record(todo, args.out / voice_id, tts, dry_run=args.dry_run)
     return 0
 
 

@@ -206,12 +206,32 @@ class Host:
 
     def _speak(self, line: str) -> None:
         """Say a line; the host's own lines (the pause, the speaker) come here directly,
-        so "say that again" still repeats the game's."""
+        so "say that again" still repeats the game's. Right after a listen the ring turns
+        back while the line's audio is being made, not after, which takes one robot
+        round trip (about 70 ms) off every answer."""
         self._check_stop()
         self._log(f"say: {line}")
         self._note("said", line)
-        pcm = self.voice.pcm(line)
-        self._cue(False)
+        if self._listening and not self.paused:
+            made: dict[str, Any] = {}
+
+            def make() -> None:
+                try:
+                    made["pcm"] = self.voice.pcm(line)
+                except BaseException as e:  # noqa: BLE001 - raised below, on the host's thread
+                    made["error"] = e
+
+            maker = threading.Thread(target=make, name="voice", daemon=True)
+            maker.start()
+            try:
+                self._cue(False)
+            finally:
+                maker.join()
+            if "error" in made:
+                raise made["error"]
+            pcm = made["pcm"]
+        else:
+            pcm = self.voice.pcm(line)
         if self.dash is None:
             self.body.play(pcm)
             return
