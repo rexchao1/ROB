@@ -335,7 +335,11 @@ class ElevenVoice:
         hit = self._memo.get(key)
         if hit is not None:
             return hit
-        path = self.cache_dir / f"{key}.pcm" if self.cache_dir is not None else None
+        from brain.voice_cache import fixed_keys
+
+        # One-off speech stays in the bounded RAM memo, even if an old disk file exists.
+        scripted = line_key(text) in fixed_keys()
+        path = self.cache_dir / f"{key}.pcm" if self.cache_dir is not None and scripted else None
         if path is not None and path.is_file():
             pcm = path.read_bytes()
             self._memo.put(key, pcm)

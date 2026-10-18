@@ -132,3 +132,35 @@ def test_piper_speaks_a_composed_line():
     assert 1.0 < voice.seconds(pcm) < 6.0
     assert np.abs(np.frombuffer(pcm, "<i2")).max() > 1000
     assert voice.make_voice(None, PIPER_MODEL).pcm("Hello.")  # Piper alone is a voice
+
+
+def test_eleven_keeps_only_scripted_speech_on_disk(tmp_path, monkeypatch):
+    import hashlib
+
+    from brain.lines import fixed_lines
+
+    scripted = fixed_lines()[0]
+    composed = "A one-off answer about tonight's conversation."
+    monkeypatch.setattr(voice.ElevenVoice, "_wanted", lambda self: "test-voice")
+    fetched = []
+
+    def fetch(self, text, voice_id):
+        fetched.append(text)
+        return b"\x01\x00"
+
+    monkeypatch.setattr(voice.ElevenVoice, "_fetch", fetch)
+    v = voice.ElevenVoice("test-key", cache_dir=tmp_path)
+    assert v.pcm(scripted) == b"\x01\x00"
+    assert len(list(tmp_path.glob("*.pcm"))) == 1
+    assert voice.ElevenVoice("test-key", cache_dir=tmp_path).pcm(scripted) == b"\x01\x00"
+    assert fetched == [scripted]  # another instance reuses the fixed disk recording
+    key = hashlib.sha256(f"test-voice\0{v.model}\0{composed}".encode()).hexdigest()
+    old = tmp_path / f"{key}.pcm"
+    old.write_bytes(b"old conversation audio")
+    assert v.pcm(composed) == b"\x01\x00"  # never reads a legacy conversational recording
+    assert v.pcm(composed) == b"\x01\x00"  # repeat uses RAM
+    assert fetched == [scripted, composed]
+    assert old.read_bytes() == b"old conversation audio"  # no migration or deletion
+    v.pcm("Another new answer.")
+    assert len(list(tmp_path.glob("*.pcm"))) == 2  # only the fixed line and the legacy file
+    assert not list(tmp_path.glob("*.tmp"))

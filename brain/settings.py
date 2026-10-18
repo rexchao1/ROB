@@ -66,16 +66,18 @@ def load(path: Path) -> None:
 def update(**changes: Any) -> dict[str, Any]:
     """Change some settings; an unknown name is a KeyError. Returns the new snapshot."""
     with _lock:
-        for name, value in changes.items():
+        for name in changes:
             if not hasattr(current, name):
                 raise KeyError(name)
+        changed = any(name in SAVED and getattr(current, name) != value for name, value in changes.items())
+        for name, value in changes.items():
             setattr(current, name, value)
         snap = asdict(current)
-    if file is not None and any(n in SAVED for n in changes):
-        try:
-            file.write_text(json.dumps({n: snap[n] for n in SAVED}) + "\n")
-        except OSError:
-            pass
+        if file is not None and changed:
+            try:
+                file.write_text(json.dumps({n: snap[n] for n in SAVED}) + "\n")
+            except OSError:
+                pass
     return snap
 
 

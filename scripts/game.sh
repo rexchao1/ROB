@@ -19,6 +19,7 @@ listening() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -1; }
 STARTED=""
 stop() {
   for p in $STARTED; do kill "$p" 2>/dev/null || true; done
+  if [ "${GM_KEEP_LOGS:-}" != 1 ]; then rm -f "$LOGS/"*.log; fi
 }
 trap stop EXIT
 trap 'exit 130' INT TERM
@@ -31,6 +32,9 @@ for port in 8080 "$TABLE_PORT"; do
   if [ -n "$p" ]; then echo "game: port $port is taken (pid $p, $(ps -p "$p" -o comm=)); is a brain already running?" >&2; exit 1; fi
 done
 
+# Only the current run belongs in this folder's logs.
+for log in "$LOGS/"*.log; do [ ! -f "$log" ] || : > "$log"; done
+
 p=$(listening 8767)
 if [ -n "$p" ]; then
   host=$(ps -E -p "$p" -o command= | tr ' ' '\n' | sed -n 's/^VISION_HOST=//p' | head -1)
@@ -41,7 +45,7 @@ if [ -n "$p" ]; then
   echo "game: the gateway is already running (pid $p), VISION_HOST=$host"
 else
   # scripts/gateway.py: the same gateway, with each listen ending when the talker stops
-  VISION_HOST=$IP "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http >> "$LOGS/gateway.log" 2>&1 &
+  VISION_HOST=$IP "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http > "$LOGS/gateway.log" 2>&1 &
   STARTED="$STARTED $!"
   echo "game: gateway started (pid $!, VISION_HOST=$IP, log $LOGS/gateway.log)"
 fi
@@ -50,7 +54,7 @@ p=$(listening 8768)
 if [ -n "$p" ]; then
   echo "game: the OTA stub is already running (pid $p)"
 else
-  python3 scripts/ota-stub.py --port 8768 >> "$LOGS/ota-stub.log" 2>&1 &
+  python3 scripts/ota-stub.py --port 8768 > "$LOGS/ota-stub.log" 2>&1 &
   STARTED="$STARTED $!"
   echo "game: OTA stub started (pid $!, log $LOGS/ota-stub.log)"
 fi
