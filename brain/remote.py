@@ -191,8 +191,12 @@ class TableServer:
         return f"http://{host}:{port}"
 
     def attached(self) -> bool:
+        """A request within the lease, or the referee's call still running (a long line or
+        listen holds its request open, so it sends nothing new until the answer)."""
         with self._cv:
-            return time.monotonic() - self._seen < self.lease
+            job = self._calls.get(self._owner) if self._owner is not None else None
+            busy = job is not None and not job.done.is_set()
+            return busy or time.monotonic() - self._seen < self.lease
 
     def start(self) -> TableServer:
         """The worker (which runs the setup first) and the HTTP server, on daemon threads."""

@@ -312,6 +312,20 @@ def test_a_long_call_is_answered_pending_and_asked_for_again(served):
     assert table.log == [("wait", 0.5)]
 
 
+def test_a_referee_waiting_on_a_long_call_still_counts_as_attached(served):
+    server, table = served(lease=0.2, hold=5.0)
+    remote = _attached(server)
+    seen = []
+    t = threading.Thread(target=remote.listen, args=(0.8,))
+    t.start()
+    while t.is_alive():
+        seen.append(server.attached())
+        time.sleep(0.05)
+    assert seen and all(seen)
+    time.sleep(0.3)
+    assert not server.attached()
+
+
 def test_a_malformed_call_is_refused(served):
     server, _ = served()
     for bad in ({}, {"session": "s", "id": 1, "method": "fly"}, {"session": "s", "id": "1", "method": "say"},
