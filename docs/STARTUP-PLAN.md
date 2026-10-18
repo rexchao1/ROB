@@ -31,7 +31,7 @@ Started 2026-10-18.
 2. **Something already running?** For each of ports 8080, 8766, 8767, 8768 and 8090, it finds the process and the folder it runs from. If it's this folder's ROB, it says so and just opens the dashboard. If it's another folder, it names that folder and asks "Stop it and start this one? [Y/n]".
 3. **Pick the network.** It pings the Pi at 10.77.0.1.
    - The Pi answers: it uses the Pi's referee (`--referee remote`) with the Mac at 10.77.0.2.
-   - The Pi doesn't answer but `gamemaster` is in range: it asks "The Pi is up. Join its network? (asks for your Mac password)". Yes runs `scripts/wifi.sh game`, then continues as above.
+   - The Pi doesn't answer but `gamemaster` is in range: the Wi-Fi scan takes about 18 s, so it runs in the background and the end of startup says to run `scripts/wifi.sh game` then `npm run restart` (it used to ask and join, which held every start for the scan).
    - Neither: it runs the games on the Mac (`--referee local`) and uses the Mac's current Wi-Fi address as `VISION_HOST`. It says which network the robot must be on to join.
 4. **Start in the background.** It starts the gateway, the update stub and the brain with `nohup`, logs to `.cache/game/`, and writes their process IDs to `.cache/game/pids`. It closes Terminal without stopping anything.
 5. **Wait and report.** It polls `GET /state` until the brain answers, then watches the brain's log until the robot has joined (up to about 60 s). Then it prints one block: which network, where the games run, the dashboard and game-screen addresses, and how to stop. It opens the dashboard in the browser. If the robot doesn't join, it says what to check: robot on, which Wi-Fi it saved, a tap on its screen at boot for setup mode.

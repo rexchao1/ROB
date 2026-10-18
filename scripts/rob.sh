@@ -8,7 +8,7 @@
 #   scripts/rob.sh restart [-y] [brain flags...] npm run restart
 #   scripts/rob.sh status                        npm run status
 #
-# -y answers yes to every question (stop another copy, join gamemaster). The games run on
+# -y answers yes to every question (stop another copy). The games run on
 # the Pi's referee when the Pi answers at PI_ADDR, else here on the Mac. Logs and the
 # process IDs go to .cache/game/. The Wi-Fi is left as it is by stop; scripts/wifi.sh back.
 set -eu
@@ -148,12 +148,11 @@ pick_network() {
     say "the Pi answers: the games run on its referee, the Mac at $IP"
     return
   fi
-  if [ "$(wifi_addr)" != "$MAC_ADDR" ] && system_profiler SPAirPortDataType 2>/dev/null | grep -q "^ *$SSID:"; then
-    if ask "The Pi's $SSID network is in range. Join it? (asks for your Mac password)"; then
-      scripts/wifi.sh game
-      IP=$MAC_ADDR; REFEREE=remote
-      return
-    fi
+  # A Wi-Fi scan takes about 18 s, so it runs in the background and start() only
+  # mentions the Pi's network at the end if the scan found it by then.
+  rm -f "$LOGS/scan"
+  if [ "$(wifi_addr)" != "$MAC_ADDR" ]; then
+    (system_profiler SPAirPortDataType > "$LOGS/scan.part" 2>/dev/null && mv "$LOGS/scan.part" "$LOGS/scan") &
   fi
   IP=$(wifi_addr)
   [ -n "$IP" ] || { say "this Mac has no Wi-Fi address; join the network the robot uses and run this again" >&2; exit 1; }
@@ -207,19 +206,19 @@ start() {
     sleep 1
   done
 
-  say "waiting for the robot (turn it on if it is off)"
+  # A robot that is already on rejoins within a few seconds; one still booting shows up
+  # on the dashboard when it joins, so there is no point holding the terminal for it.
   n=0
-  until robot_joined; do
-    n=$((n + 1))
-    if [ "$n" -ge 60 ]; then
-      say "the robot has not joined after 60 s. Check that it is on, and on the same Wi-Fi as this Mac"
-      say "(to change its Wi-Fi, tap its screen 5 to 9 s after power-on for setup mode; README, Setting up the robot)."
-      say "ROB keeps waiting in the background; npm run status shows when it joins."
-      break
-    fi
-    sleep 1
-  done
-  robot_joined && say "the robot is connected"
+  until robot_joined || [ "$n" -ge 8 ]; do n=$((n + 1)); sleep 1; done
+  if robot_joined; then
+    say "the robot is connected"
+  else
+    say "the robot has not joined yet: turn it on, on the same Wi-Fi as this Mac; the dashboard shows when it joins"
+    say "(to change its Wi-Fi, tap its screen 5 to 9 s after power-on for setup mode; README, Setting up the robot)."
+  fi
+  if [ -s "$LOGS/scan" ] && grep -q "^ *$SSID:" "$LOGS/scan"; then
+    say "the Pi's $SSID network is in range: scripts/wifi.sh game, then npm run restart, runs the games on the Pi"
+  fi
 
   dash=$(sed -n 's/^gamemaster: dashboard at //p' "$LOGS/brain.log" | tail -1)
   echo
