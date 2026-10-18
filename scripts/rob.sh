@@ -44,6 +44,14 @@ robot_joined() {
 }
 wifi_addr() { [ -n "$DEV" ] && ipconfig getifaddr "$DEV" 2>/dev/null || true; }
 pi_up() { ping -c 1 -t 1 "$PI_ADDR" > /dev/null 2>&1; }
+# The Pi as a client of the iPhone hotspot (no gamemaster, so no referee from boot):
+# start runs one over ssh, and stop ends it, since a referee alone retries forever.
+HOTSPOT_PI=qnxuser@172.20.10.14
+hotspot_pi_up() { ping -c 1 -t 1 "${HOTSPOT_PI#*@}" > /dev/null 2>&1; }
+pi_ssh() { ssh -o BatchMode=yes -o ConnectTimeout=5 ${GM_SSH_OPTS:-} "$HOTSPOT_PI" "$@"; }
+stop_hotspot_referee() {
+  pi_ssh 'for p in $(pidin -f aen ar 2>/dev/null | awk "/brain.referee/ && !/awk/ { print \$1 }"); do kill $p; done' 2>/dev/null || true
+}
 # Every process on ROB's ports, one "pid port folder" a line.
 running() {
   for port in $PORTS; do
@@ -62,7 +70,9 @@ status() {
       say "port $port: $(ps -p "$p" -o comm= | xargs basename) (pid $p) from $dir"
     done
   fi
-  if pi_up; then say "the Pi answers at $PI_ADDR"; else say "the Pi does not answer"; fi
+  if pi_up; then say "the Pi answers at $PI_ADDR"
+  elif hotspot_pi_up; then say "the Pi answers on the iPhone hotspot at ${HOTSPOT_PI#*@}"
+  else say "the Pi does not answer"; fi
   say "this Mac's Wi-Fi address: $(wifi_addr)"
   if [ -n "$(listening 8767)" ]; then
     if robot_joined; then say "the robot is connected"; else say "the robot is not connected"; fi
@@ -106,6 +116,7 @@ stop() {
     [ -n "$p" ] && [ "$(folder "$p")" = "$ROOT" ] && kill "$p" 2>/dev/null || true
   done
   rm -f "$PIDS"
+  [ -f "$LOGS/hotspot-referee" ] && { stop_hotspot_referee; rm -f "$LOGS/hotspot-referee"; }
   # Logs can contain speech and private game details. Keep only by explicit opt-in.
   if [ "${GM_KEEP_LOGS:-}" != 1 ]; then rm -f "$LOGS/"*.log; fi
   n=0
@@ -206,8 +217,31 @@ pick_network() {
   fi
   IP=$(wifi_addr)
   [ -n "$IP" ] || { say "this Mac has no Wi-Fi address; join the network the robot uses and run this again" >&2; exit 1; }
+  if hotspot_pi_up && pi_ssh true 2>/dev/null; then
+    REFEREE=remote
+    say "the Pi answers on the hotspot: the games run on its referee, the Mac at $IP"
+    return
+  fi
   REFEREE=local
   say "no Pi: the games run on this Mac, at $IP on the current Wi-Fi; the robot has to be on the same network"
+}
+
+# The rules as they are in this folder go to the Pi (qnx/deploy.sh, with the table token
+# the brain just made), then a referee runs there against this Mac's Table.
+start_hotspot_referee() {
+  stop_hotspot_referee
+  if ! GM_PI=$HOTSPOT_PI sh qnx/deploy.sh > "$LOGS/deploy.log" 2>&1; then
+    say "could not copy the rules to the Pi ($LOGS/deploy.log); the games will not start until a referee runs" >&2
+    return 0
+  fi
+  nohup ssh -o BatchMode=yes -o ServerAliveInterval=10 ${GM_SSH_OPTS:-} "$HOTSPOT_PI" \
+    "cd gm && exec python3 -u -m brain.referee --table 'http://$IP:$TABLE_PORT'" > "$LOGS/referee.log" 2>&1 &
+  echo $! >> "$PIDS"
+  : > "$LOGS/hotspot-referee"
+  n=0
+  until grep -q 'referee: playing' "$LOGS/referee.log" 2>/dev/null || [ "$n" -ge 15 ]; do n=$((n + 1)); sleep 1; done
+  if grep -q 'referee: playing' "$LOGS/referee.log"; then say "the Pi's referee is playing"
+  else say "the Pi's referee did not report in ($LOGS/referee.log)" >&2; fi
 }
 
 start() {
@@ -255,6 +289,7 @@ start() {
     fi
     sleep 1
   done
+  [ "$REFEREE" = remote ] && ! pi_up && start_hotspot_referee
 
   # A robot that is already on rejoins within a few seconds; one still booting shows up
   # on the dashboard when it joins, so there is no point holding the terminal for it.
