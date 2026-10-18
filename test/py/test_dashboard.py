@@ -53,9 +53,9 @@ def test_effort_applies_and_a_wrong_one_is_a_400():
     host = StubHost()
     assert _post(host, "/dashboard/settings", {"effort": "high"}) == (200, settings.snapshot())
     assert settings.current.effort == "high"
-    code, answer = _post(host, "/dashboard/settings", {"effort": "nope", "persona": "roaster"})
+    code, answer = _post(host, "/dashboard/settings", {"effort": "nope", "persona": "sarcastic"})
     assert code == 400 and "effort" in answer["error"]
-    assert settings.current.effort == "high" and settings.current.persona == "host"  # nothing half applied
+    assert settings.current.effort == "high" and settings.current.persona == "friendly"  # nothing half applied
 
 
 def test_the_speaker_goes_through_the_host():

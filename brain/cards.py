@@ -120,13 +120,14 @@ class FaceTheme:
 
 # One per personality (brain/personas.py, Persona.face).
 FACE_THEMES: dict[str, FaceTheme] = {
-    "host": FaceTheme(bg=(16, 24, 64), ink=(244, 246, 255), iris=(56, 200, 255), pupil=(12, 16, 40), cheek=(255, 112, 150), mouth=(72, 8, 32), tongue=(255, 104, 128), spark=(255, 208, 72)),
-    "roaster": FaceTheme(bg=(40, 16, 48), ink=(240, 236, 244), iris=(232, 72, 200), pupil=(24, 8, 28), cheek=(216, 88, 152), mouth=(64, 8, 40), tongue=(240, 104, 152), spark=(184, 120, 224)),
-    "hype": FaceTheme(bg=(72, 24, 8), ink=(255, 248, 232), iris=(255, 200, 32), pupil=(48, 16, 4), cheek=(255, 88, 64), mouth=(80, 12, 8), tongue=(255, 112, 96), spark=(255, 232, 96)),
-    "spooky": FaceTheme(bg=(20, 8, 40), ink=(224, 232, 240), iris=(96, 255, 128), pupil=(8, 20, 12), cheek=(144, 72, 192), mouth=(16, 40, 24), tongue=(96, 200, 120), spark=(120, 255, 160)),
-    "chill": FaceTheme(bg=(8, 48, 52), ink=(236, 252, 248), iris=(112, 232, 200), pupil=(4, 28, 28), cheek=(255, 152, 136), mouth=(48, 16, 24), tongue=(255, 128, 128), spark=(176, 248, 224)),
+    "friendly": FaceTheme(bg=(16, 24, 64), ink=(244, 246, 255), iris=(56, 200, 255), pupil=(12, 16, 40), cheek=(255, 112, 150), mouth=(72, 8, 32), tongue=(255, 104, 128), spark=(255, 208, 72)),
+    "sarcastic": FaceTheme(bg=(40, 16, 48), ink=(240, 236, 244), iris=(232, 72, 200), pupil=(24, 8, 28), cheek=(216, 88, 152), mouth=(64, 8, 40), tongue=(240, 104, 152), spark=(184, 120, 224)),
+    "energetic": FaceTheme(bg=(72, 24, 8), ink=(255, 248, 232), iris=(255, 200, 32), pupil=(48, 16, 4), cheek=(255, 88, 64), mouth=(80, 12, 8), tongue=(255, 112, 96), spark=(255, 232, 96)),
+    "dramatic": FaceTheme(bg=(20, 8, 40), ink=(224, 232, 240), iris=(96, 255, 128), pupil=(8, 20, 12), cheek=(144, 72, 192), mouth=(16, 40, 24), tongue=(96, 200, 120), spark=(120, 255, 160)),
+    "calm": FaceTheme(bg=(8, 48, 52), ink=(236, 252, 248), iris=(112, 232, 200), pupil=(4, 28, 28), cheek=(255, 152, 136), mouth=(48, 16, 24), tongue=(255, 128, 128), spark=(176, 248, 224)),
+    "grumpy": FaceTheme(bg=(40, 36, 36), ink=(236, 232, 228), iris=(255, 128, 48), pupil=(28, 12, 4), cheek=(200, 104, 88), mouth=(56, 16, 12), tongue=(232, 112, 96), spark=(255, 176, 96)),
 }
-DEFAULT_FACE = "host"
+DEFAULT_FACE = "friendly"
 
 
 def style_of(card: Card) -> CardStyle:

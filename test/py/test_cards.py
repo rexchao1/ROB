@@ -158,4 +158,4 @@ def test_every_personality_has_a_face():
 
     faces = {p.face for p in personas.PERSONAS.values()}
     assert faces <= set(cards.FACE_THEMES) and len(faces) == len(personas.PERSONAS)
-    assert cards.pack([], face="spooky")[0] != cards.pack([], face="host")[0]
+    assert cards.pack([], face="dramatic")[0] != cards.pack([], face="friendly")[0]

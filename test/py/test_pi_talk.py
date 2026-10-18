@@ -15,7 +15,7 @@ def picks(monkeypatch):
 
 class Remote:
     def __init__(self):
-        self.choices = {"talk": "anthropic", "talk_model": "claude-haiku-5-5", "effort": "low", "persona": "host"}
+        self.choices = {"talk": "anthropic", "talk_model": "claude-haiku-5-5", "effort": "low", "persona": "friendly"}
         self.chats = []
         self.quips = []
         self.said = []
@@ -65,7 +65,7 @@ def test_choices_follow_dashboard_mid_game_without_writing_settings(tmp_path, mo
     assert table.hello()["epoch"] == "one"
     assert talk.prepared == 1
     assert table.chat("welcome", "hello", remembered=["we hate Wordle"]) == "Pi reply."
-    remote.choices.update(talk="gemini", talk_model="gemini-2.5-flash", effort="high", persona="spooky")
+    remote.choices.update(talk="gemini", talk_model="gemini-2.5-flash", effort="high", persona="dramatic")
     table.chat("welcome", "how are you")
     assert {k: talk.replies[-1][3][k] for k in settings.TALK} == remote.choices
     assert not path.exists()

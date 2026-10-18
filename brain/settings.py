@@ -12,10 +12,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from brain import personas
+
 
 @dataclass
 class Settings:
-    persona: str = "host"  # a key of brain.personas.PERSONAS
+    persona: str = "friendly"  # a key of brain.personas.PERSONAS
     talk: str = "anthropic"  # anthropic | gemini | ollama | off
     talk_model: str | None = None  # None: the provider's default
     effort: str = "low"  # one of brain.talk.EFFORTS: low is quickest, a party host wants speed
@@ -65,7 +67,8 @@ def load(path: Path) -> None:
     with _lock:
         for name in SAVED:
             if name in saved and _fits(name, saved[name]):
-                setattr(current, name, saved[name])
+                value = personas.RENAMED.get(saved[name], saved[name]) if name == "persona" else saved[name]
+                setattr(current, name, value)
 
 
 def update(**changes: Any) -> dict[str, Any]:

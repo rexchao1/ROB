@@ -47,8 +47,8 @@ def test_the_welcome_prompt_carries_the_talk_so_far_and_says_what_the_games_are(
     assert 'Just now someone said: "uh, how are you?"' in prompt
     assert "In Imposter, everyone gets the same secret word" in prompt and "Want to play it?" not in prompt
     assert "Answer what they said first" in prompt
-    settings.current.persona = "spooky"
-    assert "campy horror narrator" in t._system()  # noqa: SLF001
+    settings.current.persona = "dramatic"
+    assert "Builds suspense and drags out every reveal" in t._system()  # noqa: SLF001
 
 
 def test_a_welcome_reply_has_room_to_finish(anthropic, monkeypatch):
@@ -81,10 +81,10 @@ def test_the_greeting_is_written_ahead_taken_at_once_and_the_next_one_started(an
     assert first is not None and first.startswith("Hey, I'm ROB.")
     _settled(t)
     assert len(prompts) == 3  # the next greeting, for the next "reset"
-    settings.current.persona = "spooky"
+    settings.current.persona = "dramatic"
     assert t.reply("welcome.greeting", "", {}) is not None
     _settled(t)
-    assert "campy horror narrator" in systems[-2]  # written again for the new personality
+    assert "Builds suspense and drags out every reveal" in systems[-2]  # written again for the new personality
     settings.current.talk = "off"
     calls = len(prompts)
     assert t.reply("welcome.woke", "", {}) is None and len(prompts) == calls

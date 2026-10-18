@@ -593,8 +593,8 @@ D74 2026-10-18 [I>V]
 
 D75 2026-10-18 [I>V]
   pre:   the host is running [I>V]
-  trig:  the operator picks one of five personalities (game-show host, deadpan roaster, hype man, spooky narrator, chill friend) on the dashboard [I>V]
-  resp:  the personality changes how the talk model writes, the ring's resting colour and which voice speaks, from the next line on; it never changes a rule or a line the feature files assert; game-show host is the default [I>V]
+  trig:  the operator picks one of six personalities (friendly, sarcastic, energetic, calm, dramatic, grumpy) on the dashboard [I>V]
+  resp:  the personality changes how the talk model writes, the ring's resting colour and which voice speaks, from the next line on; it never changes a rule or a line the feature files assert; friendly is the default [I>V]
   sib:   none -- a pick from a fixed list has no failure case
   serves: N1 N3
   touches: D42 D74

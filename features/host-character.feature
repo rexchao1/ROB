@@ -1,7 +1,7 @@
 Feature: The host's character
   ROB sounds like a person running game night: every line a talk model writes
   passes the house rules or is replaced by a scripted one, and the operator
-  picks one of five personalities and five voices. The model only writes
+  picks one of six personalities and five voices. The model only writes
   words (D14, D42). Built in workstreams W and X without tests; binding this
   file needs a fake talk model in test mode, which does not exist yet.
   Serves N1.
@@ -40,9 +40,9 @@ Feature: The host's character
   @D75
   Scenario: Switching the personality applies to the next line and changes no ruled line
     Given a game of Mafia is in its night phase
-    When the operator picks the spooky narrator on the dashboard
-    Then the next line the model writes is asked for in the spooky narrator's style
-    And the ring rests in the spooky narrator's colour
+    When the operator picks the dramatic personality on the dashboard
+    Then the next line the model writes is asked for in the dramatic personality's style
+    And the ring rests in the dramatic personality's colour
     And the players still hear the host say "Everyone, heads down." word for word
 
   @D77

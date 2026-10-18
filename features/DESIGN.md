@@ -47,7 +47,7 @@ The orienting document for the agents that build the game master, with the human
 
 - The host is ROB and says so only when asked. [ruled: D76]
 - Every model line passes the house rules (two sentences, about fifteen words, no assistant phrases, no emoji, one exclamation mark, no seat named) or a scripted line is said instead; a slow answer is a scripted line. [ruled: D74]
-- Five personalities (game-show host, deadpan roaster, hype man, spooky narrator, chill friend) change the talk's style, the ring's colour and the voice, never a rule or a ruled line; five ElevenLabs voices; both kept across starts. [ruled: D75, D77]
+- Six personalities (friendly, sarcastic, energetic, calm, dramatic, grumpy) change the talk's style, the ring's colour and the voice, never a rule or a ruled line; five ElevenLabs voices; both kept across starts. [ruled: D75, D77]
 
 ## More games, for small tables
 

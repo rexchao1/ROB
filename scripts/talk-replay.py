@@ -7,8 +7,8 @@ feeds each line in and writes down what ROB says, the model's lines marked with 
 wait. --quips plays a Mafia game's quips through the same path as Host.quip.
 
     .venv/bin/python scripts/talk-replay.py                        # every conversation, the default personality
-    .venv/bin/python scripts/talk-replay.py --persona roaster --only teasing,joke
-    .venv/bin/python scripts/talk-replay.py --quips --persona spooky
+    .venv/bin/python scripts/talk-replay.py --persona sarcastic --only teasing,joke
+    .venv/bin/python scripts/talk-replay.py --quips --persona dramatic
     .venv/bin/python scripts/talk-replay.py --model claude-sonnet-5-5
 
 It makes real calls with the key in .env.local (or the file GM_ENV_FILE names); with no
