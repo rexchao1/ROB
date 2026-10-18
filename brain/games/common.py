@@ -166,16 +166,14 @@ def gather(
     """Agree on how many are playing (D5, D6) and start the game. A count said with the
     game's name ("imposter with six people") is taken at its word, with no sweep: the
     group knows who is there. With no number said, the host counts the table, says the
-    count and agrees on it with the group: a spoken count that disagrees stops the start,
-    the host says so, listens and counts again until the spoken number and its count
-    agree, a go-ahead ("okay") accepts the host's count, and after options.count_tries
-    disagreements it gives up. Returns the number of seats, with the game started in
+    count and listens once: a number said then wins over the sweep (the group knows who
+    is playing; the seats are spread evenly for it), silence or a go-ahead keeps the
+    host's count. Returns the number of seats, with the game started in
     `state`, or None when no game starts (why, in state.stalled).
 
     counted: the welcome already knows the count (D40), so there is no sweep and no count
     line. seen: that count came from a sweep, so a different number said with the game's
-    name still has to agree with it (D41); else the group's word, which a new number
-    replaces."""
+    name replaces it all the same; else the group's word, which a new number replaces."""
     state.game, state.phase, state.stalled = None, "count", None
     spoken = ears.count_said(heard)
     told = counted if not seen else None  # the group's word, from the welcome
@@ -202,28 +200,12 @@ def gather(
         state.report(table)
         if spoken is None:
             spoken = n
-    tries = 0
-    while True:
-        if spoken is None:
-            spoken = _spoken(hear(table, options.confirm_seconds))
-            if spoken is None:
-                break  # silence, or anything but a count: the host's count stands
-        if spoken == n:
-            break
-        tries += 1
-        if tries > options.count_tries:
-            table.say(lines.COUNT_GIVE_UP)
-            state.stalled = "no count"
-            return None
-        table.say(lines.only_see(n) if spoken > n else lines.see_more(n))
-        reply = hear(table, options.confirm_seconds)
-        said = _spoken(reply)
-        if said is not None:
-            spoken = said
-            continue
-        if ears.agrees(reply):
-            break
-        n = _count(table, state)  # somebody may have come out of hiding
+    if spoken is None:
+        spoken = _spoken(hear(table, options.confirm_seconds))  # silence, or anything but a count: the host's count stands
+    if spoken is not None and spoken != n:  # the group knows who is playing: their number wins over the sweep
+        table.seated(spoken)
+        n = state.seats = spoken
+        state.report(table)
     return _start(table, game, n, state)
 
 

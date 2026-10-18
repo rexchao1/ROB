@@ -940,3 +940,13 @@ D115 2026-10-18 [I]
   serves: N1
   touches: D7 D16 D17 D18 D19 D20 D21
 # Rex asked for reveal moments on ROB's screen (relayed, 2026-10-18). Proposed, unratified: the cards' words are the build's.
+
+D116 2026-10-18 [I] amends D6 D41 D59 D89 D90
+  pre:   the host has counted the table with its camera, in the welcome or at a game's start [I]
+  trig:  someone says a number of players that differs from the host's count, `there are six of us` or `we're four` [I]
+  resp:  the group's number wins: the host seats that many, spread evenly, and goes on (the game starts, or the welcome suggests a game for it) with no mismatch line and no second sweep [I]
+  sib:   none -- the group's word is final, so there is no disagreement left to fail
+  serves: N1
+  touches: D5 D6 D41 D59 D89 D90
+# Rex, 2026-10-18: "Head count can use camera sweep but also accepts a number given by somebody (that overrides stackchan's sweep)".
+

@@ -76,12 +76,12 @@ def test_seeing_nobody_never_loops_and_a_number_is_taken():
     assert choice == Choice("imposter", "sure", 4, False)
 
 
-def test_insisting_on_a_bigger_number_than_seen_wins_after_the_second_look():
-    table = FakeTable(counts=[3]).hear("count us", "five of us", "five of us", "five of us", "five of us", "sure")
+def test_a_number_said_after_the_sweep_wins_with_no_second_look():
+    table = FakeTable(counts=[3]).hear("count us", "five of us", "sure")
     w = _welcome(table)
     w.greet()
     choice = w.converse()
-    assert _kinds(table).count("count") == 2  # the sweep asked for, one second look
+    assert _kinds(table).count("count") == 1  # the sweep asked for, and no second look
     assert choice is not None and choice.counted == 5
 
 
