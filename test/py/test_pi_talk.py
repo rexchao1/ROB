@@ -53,7 +53,7 @@ class TalkStub:
         self.replies.append((situation, heard, facts, settings.snapshot()))
         return self.line
 
-    def quip(self, slot, context):
+    def quip(self, slot, context, recap=None):
         return self.line
 
 
