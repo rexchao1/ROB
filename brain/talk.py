@@ -565,7 +565,7 @@ class Talk:
             )
         if situation == "welcome.woke":
             return (
-                "Someone just tapped your head and woke you from a nap between games. "
+                "Someone just put a hand on your head and woke you from a nap between games. "
                 "Say you're up in your own style, then ask what they want to play. One or two short "
                 "sentences, under fifteen words, ending on the question. Output only the line."
             )
