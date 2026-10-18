@@ -874,7 +874,7 @@ D107 2026-10-18 [I] amends D33
 # AUDIT, rulings: a deferral whose condition is moot stood unrevised on the fence.
 
 D108 2026-10-18 [I] amends D44
-  resp: sound cues come into this build, reopening the sound half of D44: a short cue at the moments the script already marks (a game's start, the deal, night, morning, a death, a save, the vote, a tie, a reveal, a win, Hot Seat's go and out, Wordle's feedback, pause and resume), each under two seconds except three ambiences under three, never played under speech, made once from CC0 libraries or generated with the team's ElevenLabs key and cached beside the recorded lines, off with one flag; a cue decides nothing and a missing cue never stops a game; head pats, `louder` and `quieter`, mood, playing again with scores and players' names stay deferred [I]
+  resp: sound cues come into this build, reopening the sound half of D44: a short cue at the moments the script already marks (a game's start, the deal, night, morning, a death, a save, the vote, a tie, a reveal, a win, Hot Seat's go and out, Wordle's feedback, pause and resume), each under two seconds except three ambiences under three, never played under speech, made once from `CC0` libraries or generated with the team's ElevenLabs key and cached beside the recorded lines, off with one flag; a cue decides nothing and a missing cue never stops a game; head pats, `louder` and `quieter`, mood, playing again with scores and players' names stay deferred [I]
   -> fence-deferred welcome-extras
   serves: N1
   touches: D14 D30 D44 D73
