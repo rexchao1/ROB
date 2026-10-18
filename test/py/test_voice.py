@@ -1,6 +1,6 @@
 """brain/voice.py: test clips carry their line exactly; recorded lines are found by their
-key and converted to 16 kHz mono 16-bit whatever they were saved as; a miss goes to
-the fallback, and with none it says so."""
+key and converted to 16 kHz mono 16-bit whatever they were saved as, and play only in
+the voice picked; a miss goes to the fallback, and with none it says so."""
 
 import io
 import math
@@ -59,10 +59,23 @@ def test_line_key_collapses_whitespace():
     assert len(voice.line_key("x")) == 64
 
 
+def record(directory: Path, voice_id: str, line: str, wav: bytes) -> None:
+    (directory / voice_id).mkdir(exist_ok=True)
+    (directory / voice_id / f"{voice.line_key(line)}.wav").write_bytes(wav)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_settings(monkeypatch):
+    from brain import settings
+
+    monkeypatch.setattr(settings, "current", settings.Settings())
+    monkeypatch.setattr(settings, "file", None)
+
+
 @pytest.mark.parametrize(("rate", "channels", "width"), [(16000, 1, 2), (44100, 2, 2), (22050, 1, 1), (24000, 1, 3), (48000, 2, 4)])
 def test_a_recorded_line_plays_at_16k_mono(tmp_path, rate, channels, width):
     line = "Five of you."
-    (tmp_path / f"{voice.line_key(line)}.wav").write_bytes(tone(rate, 0.5, channels, width))
+    record(tmp_path, voice.ELEVEN_VOICE, line, tone(rate, 0.5, channels, width))
     v = CachedVoice(tmp_path)
     assert v.recorded(line)
     pcm = v.pcm(line)
@@ -80,8 +93,33 @@ def test_a_miss_goes_to_the_fallback_or_raises(tmp_path):
     assert voice.decode_test_pcm(v.pcm("Never recorded.")) == "Never recorded."
 
 
+def test_a_recording_plays_only_in_the_voice_picked(tmp_path):
+    from brain import personas, settings
+
+    chris, george = personas.VOICES["chris"].eleven_id, personas.VOICES["george"].eleven_id
+    line = "Night falls."
+    record(tmp_path, chris, line, voice.pcm_to_wav(b"\x01\x00" * 1600))
+    v = CachedVoice(tmp_path, fallback=TestVoice(), default_voice=chris)
+    settings.update(voice="eleven")
+    assert v.recorded(line) and v.pcm(line) == b"\x01\x00" * 1600
+    settings.update(eleven_voice="george")  # another voice picked: that voice says it live
+    assert not v.recorded(line) and voice.decode_test_pcm(v.pcm(line)) == line
+    record(tmp_path, george, line, voice.pcm_to_wav(b"\x02\x00" * 800))
+    assert v.pcm(line) == b"\x02\x00" * 800  # and its own recording once there is one
+    settings.update(eleven_voice=None, voice="piper")  # Piper picked: no ElevenLabs recording at all
+    assert not v.recorded(line) and voice.decode_test_pcm(v.pcm(line)) == line
+    alone = CachedVoice(tmp_path, default_voice=chris)  # no other voice: the default voice's recordings play anyway
+    assert alone.pcm(line) == b"\x01\x00" * 1600
+    flat = CachedVoice(tmp_path, default_voice=george)
+    (tmp_path / f"{voice.line_key('Old.')}.wav").write_bytes(voice.pcm_to_wav(b"\x03\x00" * 800))
+    with pytest.raises(VoiceError):
+        flat.pcm("Old.")  # a recording of no known voice never plays
+    with pytest.raises(VoiceError):
+        CachedVoice(tmp_path, default_voice="../elsewhere").pcm(line)
+
+
 def test_a_bad_wav_is_a_voice_error(tmp_path):
-    (tmp_path / f"{voice.line_key('x')}.wav").write_bytes(b"not a wav")
+    record(tmp_path, voice.ELEVEN_VOICE, "x", b"not a wav")
     with pytest.raises(VoiceError):
         CachedVoice(tmp_path).pcm("x")
 

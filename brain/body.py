@@ -41,6 +41,7 @@ PROTOCOL_VERSION = "2025-06-18"  # a handshake revision both mcp 1.x (the gatewa
 FACES = ("idle", "happy", "thinking", "sad", "surprised", "embarrassed", "off")
 SAMPLE_RATE = 16_000
 QUEUE_FULL = -32000
+PLAYED_AFTER = 0.2  # seconds past a line's length by which this Mac has played it: afplay starts in about 60 ms, the built-in speakers add 13 (measured 2026-10-18)
 
 
 class BodyError(Exception):
@@ -295,7 +296,11 @@ class Body:
             raise BodyError(f"POST /pcm: {e}") from None
 
     def _play_here(self, pcm: bytes) -> None:
-        """Play on this machine's audio output (afplay) while the robot moves its mouth."""
+        """Play on this machine's audio output (afplay) while the robot moves its mouth;
+        returns once the line has played. afplay lingers about 0.8 s after the sound
+        ends before it exits, so it is waited for only the line's length and
+        PLAYED_AFTER, then left to finish on its own; the WAV is deleted under it, which
+        it does not mind once it has opened it."""
         fd, path = tempfile.mkstemp(suffix=".wav", prefix="gm-line-")
         try:
             with os.fdopen(fd, "wb") as f, wave.open(f, "wb") as w:
@@ -303,6 +308,7 @@ class Body:
                 w.setsampwidth(2)
                 w.setframerate(SAMPLE_RATE)
                 w.writeframes(pcm)
+            played = time.monotonic() + len(pcm) / (SAMPLE_RATE * 2) + PLAYED_AFTER
             try:
                 player = subprocess.Popen(["afplay", path])
             except OSError as e:
@@ -311,8 +317,13 @@ class Body:
                 self.gateway.call("set_mouth_sequence", {"steps": mouth_steps(pcm)})
             except BodyError:
                 pass  # the line still plays; only the mouth stays still
-            if player.wait() != 0:
-                raise BodyError(f"afplay exited with {player.returncode}")
+            try:
+                code = player.wait(timeout=max(0.0, played - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                threading.Thread(target=player.wait, name="afplay", daemon=True).start()  # reaped when it exits
+                return
+            if code != 0:
+                raise BodyError(f"afplay exited with {code}")
         finally:
             try:
                 os.remove(path)
