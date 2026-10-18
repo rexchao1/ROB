@@ -2,10 +2,18 @@
 option, Ollama kept), behind Host.chat and Host.quip. Mac only; the referee never
 reaches the internet (it asks the Table, which calls this).
 
+ROB is a character (HOUSE_RULES): quick, warm, a bit cheeky, talking like a person out
+loud. In the lobby he answers what was actually said first (a hello, a question, a joke
+asked for), and only then, when it fits, nudges toward a game; the welcome hands him
+the last few lines of the talk (facts transcript) so he holds a conversation and does
+not repeat himself. The greeting and the wake-up line are written ahead on a thread
+(prepare()), so the first words of the night wait for nothing.
+
 The model writes words and nothing else (D14). The games decide every rule, count and
-winner; a spoken line that runs long, sounds like an assistant or names a seat is
-dropped by fit() and the game says a scripted line instead. Anything slow, missing or
-broken returns None for the same reason, so every game still plays offline.
+winner; fit() trims a spoken line that runs long to the sentences that fit, and drops
+one that sounds like an assistant, names a seat in its first sentence or runs long in
+it, and the game says a scripted line instead. Anything slow, missing or broken
+returns None for the same reason, so every game still plays offline.
 
 Which provider, which model, which effort and which personality are read from
 brain.settings at each call, so the dashboard can change them mid-game. MODELS lists the
@@ -20,7 +28,11 @@ message and status() keeps the last outcome for the page; test() makes one real 
 for the page's Test button.
 
 Situations (Host.chat(situation, heard, **facts)):
-  welcome          lobby small talk; facts players, answering, suggestion
+  welcome          lobby small talk; facts games, players, answering, suggestion and
+                   transcript [[who, line], ...], oldest first, who "ROB" or "them"
+  welcome.greeting the greeting at the start and on "reset": ROB says hello and asks
+                   what they want to play (written ahead; None when not ready)
+  welcome.woke     the line after a tap wakes ROB from a nap (written ahead)
   twenty.guesser   20 Questions, the robot guessing: the next yes/no question or a
                    guess "Is it a ...?"; facts history [[q, a], ...], number, left
   twenty.answer    20 Questions, the robot answering: exactly yes, no, sort of or
@@ -47,14 +59,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from brain import banter, personas, settings
+from brain import banter, lines, personas, settings
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env.local"
 
 TIMEOUT = 4.0  # seconds: the least any call waits; past its own wait the game says a scripted line
-MAX_WORDS = 20
-MAX_SENTENCES = 2
+MAX_WORDS = 35  # a spoken reply: about three short sentences
+MAX_SENTENCES = 3
+WELCOME_TOKENS = 150  # room for a lobby reply to finish its last sentence
+PREPARED = ("welcome.greeting", "welcome.woke")  # lines written ahead, so they are ready the moment they are needed
+READY_WAIT = 1.0  # seconds the welcome waits for a line still being written before it says a scripted one
 
 EFFORTS = settings.CHOICES["effort"]  # low, medium, high, max: how hard the model thinks
 
@@ -80,15 +95,25 @@ KEYS = {
 }
 
 HOUSE_RULES = (
-    "You are ROB, a small robot hosting game night for a group of friends, "
-    "talking out loud. Your name is ROB; say it only when someone asks who you are. House rules:\n"
-    "- One line, two at most, about fifteen words. It is spoken, so keep it natural.\n"
-    "- Every line moves the game on. Off-topic chat gets one quick joke, then back to the game.\n"
+    "You are ROB, a little robot who hosts game night for a group of friends. Everything you "
+    "write is said out loud.\n"
+    "Who you are: quick and witty, warm, a bit cheeky, with opinions of your own. You like "
+    "these people and you are having a good time. You talk like a real person at a party: "
+    "contractions, casual words, short sentences.\n"
+    "House rules:\n"
+    "- Answer what was actually said first, directly. Greeted, greet back. Asked something, "
+    "answer it. Asked for a joke, tell a short one. Then stop.\n"
+    "- Keep it short: usually one or two sentences, under twenty words. Three only to explain "
+    "a game or land a joke.\n"
+    "- Steer toward a game only when it fits, not on every line, and never list the games unless "
+    "asked. A little off-topic riffing is fine.\n"
+    "- Never repeat yourself: not a line, not a joke, not the way you opened your last line.\n"
     "- Sound like a funny friend, never an assistant: no 'great question', no 'I'd be happy to', "
-    "no 'certainly', no 'absolutely', never explain yourself or mention being an AI.\n"
+    "no 'certainly', no 'absolutely', no offers to help, never explain yourself or mention being an AI. "
+    "Don't keep saying your own name.\n"
     "- Tease the move, never the person: nothing about looks, bodies or identity.\n"
     "- Never decide a rule, a count, a score or a winner, and never hint at anyone's secret.\n"
-    "- No emoji, no stage directions, no quotation marks, at most one exclamation mark, no dashes."
+    "- No emoji, no stage directions, no quotation marks, no lists, at most one exclamation mark, no dashes."
 )
 
 BLOCKLIST = (
@@ -107,6 +132,8 @@ BLOCKLIST = (
     "delve",
     "how can i help",
     "how can i assist",
+    "here to help",
+    "anything else i can",
 )
 
 STRUCTURED = {
@@ -119,6 +146,7 @@ _SEAT_NAMED = re.compile(r"\b(?:player|seat)s?\s+(?:\d+|" + "|".join(_NUMBER_WOR
 _EMOJI = re.compile("[\U0001f000-\U0001faff☀-➿️‍]")
 _STAGE = re.compile(r"\*[^*]*\*|\([^)]*\)|\[[^\]]*\]")
 _SENTENCE = re.compile(r"[^.!?]+[.!?]*")
+_SPEAKER = re.compile(r"^(?:rob|robot|host)\s*:\s*", re.IGNORECASE)  # "ROB: ..." after a transcript in the prompt
 _CLAUDE = re.compile(r"claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?!\d)")  # family, major, minor (a date is not a minor)
 _KEYLIKE = re.compile(r"sk-ant-[\w-]+|AIza[\w-]{20,}")
 
@@ -170,14 +198,18 @@ def key_for(provider: str) -> str | None:
 
 
 def fit(line: Any, facts: dict[str, Any] | None = None) -> str | None:
-    """A model line fit to say out loud, or None: the first line only, stage directions,
-    quotes and emoji stripped, dashes turned into commas; at most two sentences and
-    about twenty words; no assistant phrases; no "player three" unless the facts allow
-    seats (allow_seats=True)."""
+    """A model line fit to say out loud, or None. Cleaned first: its lines run together,
+    a leading "ROB:" dropped, stage directions, quotes and emoji stripped, dashes turned
+    into commas. Then trimmed rather than thrown away: the leading sentences that fit in
+    MAX_SENTENCES and MAX_WORDS, leaving off a last sentence cut short and any sentence
+    from one that names a seat ("player three", unless the facts allow seats,
+    allow_seats=True). None when the first sentence alone does not fit, and for an
+    assistant phrase anywhere."""
     if not isinstance(line, str):
         return None
     facts = facts or {}
-    text = next((part.strip() for part in line.strip().splitlines() if part.strip()), "")
+    text = " ".join(part.strip() for part in line.strip().splitlines() if part.strip())
+    text = _SPEAKER.sub("", text)
     text = _STAGE.sub("", text)
     text = _EMOJI.sub("", text)
     text = re.sub(r"\s*[—–]\s*|\s+-{1,2}\s+", ", ", text)
@@ -188,13 +220,20 @@ def fit(line: Any, facts: dict[str, Any] | None = None) -> str | None:
     lower = text.lower()
     if any(phrase in lower for phrase in BLOCKLIST):
         return None
-    if not facts.get("allow_seats") and _SEAT_NAMED.search(text):
-        return None
-    if len(text.split()) > MAX_WORDS:
-        return None
     sentences = [s.strip() for s in _SENTENCE.findall(text) if s.strip()]
-    if len(sentences) > MAX_SENTENCES:
+    if len(sentences) > 1 and not sentences[-1].endswith((".", "!", "?")):
+        sentences.pop()  # cut off mid-sentence: the model ran out of room
+    kept: list[str] = []
+    words = 0
+    for sentence in sentences[:MAX_SENTENCES]:
+        n = len(sentence.split())
+        if words + n > MAX_WORDS or (not facts.get("allow_seats") and _SEAT_NAMED.search(sentence)):
+            break
+        kept.append(sentence)
+        words += n
+    if not kept:
         return None
+    text = " ".join(kept)
     text = re.sub(r"([!?])[!?]+", r"\1", text)  # "!!" and "?!" read as one mark
     if text.count("!") > 1:  # at most one exclamation mark: keep the last
         head, _, tail = text.rpartition("!")
@@ -367,18 +406,78 @@ class Talk:
         return provider == "ollama" or key_for(provider) is not None
 
     def reply(self, situation: str, heard: str, facts: dict[str, Any]) -> str | None:
+        """The line for a situation (the module's list), or None and the game says a
+        scripted one. The greeting and the wake-up line come from prepare()."""
         facts = dict(facts or {})
+        if situation in PREPARED:
+            return self._take_ready(situation)
         if situation in STRUCTURED:
             text = self._ask(_JUDGE, self._prompt(situation, heard, facts), max_tokens=8, temperature=0.0)
             return structured(situation, text)
-        text = self._ask(self._system(), self._prompt(situation, heard, facts), max_tokens=80, temperature=0.9)
+        tokens = WELCOME_TOKENS if situation == "welcome" else 80
+        text = self._ask(self._system(), self._prompt(situation, heard, facts), max_tokens=tokens, temperature=0.9)
+        if situation == "twenty.guesser" and isinstance(text, str):  # the question alone, not a second thought after it
+            text = next((part for part in text.splitlines() if part.strip()), "")
         line = fit(text, facts)
         if text and line is None:
-            self._log(f"talk: dropped a line ROB would not say (too long, a number, a seat): {text.strip()[:120]}")
+            self._log(f"talk: dropped a line ROB would not say (an assistant phrase, a seat, a first sentence too long): {text.strip()[:120]}")
         if situation == "twenty.guesser" and line is not None and not (
             line.rstrip().endswith("?") or re.match(r"(?i)^guess\s*:", line.strip())
         ):
             return None
+        return line
+
+    def prepare(self) -> None:
+        """Write the greeting and the wake-up line (PREPARED) ahead, each on a thread of
+        its own, so the welcome has them the moment it needs them. A line ready, or on
+        its way, for the model and personality now is kept. Nothing when no model is set
+        up."""
+        for situation in PREPARED:
+            self._prepare(situation)
+
+    _ready: dict[str, dict[str, Any]] | None = None  # PREPARED lines: {situation: {"key", "line", "done"}}
+
+    def _prepare(self, situation: str) -> dict[str, Any] | None:
+        """The slot for `situation`'s line written ahead: the one ready or on its way for
+        this model and personality, else a new one started on a thread. None when no
+        model is set up."""
+        if not self.active():
+            return None
+        key = (*self.choice(), settings.current.persona)
+        with self._lock:
+            if self._ready is None:
+                self._ready = {}
+            slot = self._ready.get(situation)
+            if slot is not None and slot["key"] == key and not (slot["done"].is_set() and slot["line"] is None):
+                return slot
+            slot = {"key": key, "line": None, "done": threading.Event()}
+            self._ready[situation] = slot
+        threading.Thread(target=self._write_ahead, args=(situation, slot), name=f"talk-{situation}", daemon=True).start()
+        return slot
+
+    def _write_ahead(self, situation: str, slot: dict[str, Any]) -> None:
+        try:
+            text = self._ask(self._system(), self._prompt(situation, "", {}), max_tokens=WELCOME_TOKENS, temperature=1.0)
+            slot["line"] = fit(text)
+        except Exception as e:  # a line written ahead is a nicety: the scripted one is there
+            self._log(f"talk: could not write the {situation} line ahead: {type(e).__name__}")
+        finally:
+            slot["done"].set()
+
+    def _take_ready(self, situation: str) -> str | None:
+        """The line written ahead for `situation`, waiting at most READY_WAIT for one on
+        its way, and the next one started for next time. None when none is ready."""
+        slot = self._prepare(situation)
+        if slot is None:
+            return None
+        slot["done"].wait(READY_WAIT)
+        with self._lock:
+            line = slot["line"] if slot["done"].is_set() else None
+            if line is not None and self._ready is not None and self._ready.get(situation) is slot:
+                del self._ready[situation]
+        if line is None:
+            self._log(f"talk: no {situation} line ready yet, a scripted one instead")
+        self._prepare(situation)
         return line
 
     def status(self) -> dict[str, Any]:
@@ -437,22 +536,39 @@ class Talk:
     def _prompt(self, situation: str, heard: str, facts: dict[str, Any]) -> str:
         said = heard.strip()
         if situation == "welcome":
-            ask = (
-                "They asked you something: answer it in a few words, then steer back to picking a game."
-                if facts.get("answering")
-                else "Reply in one short, playful line, then steer back to picking a game."
-            )
-            pick = f" You suggested {facts['suggestion']}." if facts.get("suggestion") else ""
-            games = (
-                f" The only games you can host are {facts['games']}: never name or offer any other game."
-                if facts.get("games") else ""
-            )
+            games = facts.get("games") or lines.game_names()
+            pick = f"You suggested {facts['suggestion']}, but they don't have to take it.\n" if facts.get("suggestion") else ""
+            transcript = _transcript(facts.get("transcript"))
+            so_far = f"The talk so far, oldest first:\n{transcript}\n" if transcript else ""
+            answering = " You had just asked them something, so this may be their answer." if facts.get("answering") else ""
             return (
-                "Game night is about to start and the group is picking a game."
-                f"{pick}{games} Someone just said: \"{said}\"\n{ask}\n"
-                "If they ask for something small, like a joke, give it in one sentence first. "
-                f"At most {MAX_SENTENCES} sentences and {MAX_WORDS} words in all. "
-                "Do not use any numbers and do not say 'player' or 'seat'. Output only the line."
+                "It's game night and the group is hanging out with you, picking a game. "
+                f"The only games you can host are {games}: never name or offer any other game. What they are:\n"
+                f"{lines.games_about()}\n{pick}{so_far}"
+                f"Just now someone said: \"{said}\"{answering}\n"
+                "Reply out loud, in character. Respond to what they actually said first: greet them back, "
+                "answer the question, play along, or tell the joke they asked for. If they ask what a game is, "
+                "explain it plainly in your own words, adding nothing to what's above. Then, only if it fits "
+                "and your last line didn't, steer toward picking a game; most of the time, don't. "
+                f"Aim for about fifteen words, one or two sentences, never more than {MAX_SENTENCES}. "
+                "Nothing you already said, and don't open with Ha, Oh or Ah. "
+                "Write numbers as words, don't say how many people are here, and never say player or seat. "
+                "Output only the line."
+            )
+        if situation == "welcome.greeting":
+            return (
+                "Game night is starting and this is the first thing you say tonight. "
+                f"The games you can host are {lines.game_names()}.\n"
+                "Say hi to the group in your own style and introduce yourself as ROB, then ask what they "
+                "want to play, or how many of them there are so you can pick. Two short sentences, "
+                "about twenty words, ending on the question. Name no other game and use no numbers. "
+                "Output only the line."
+            )
+        if situation == "welcome.woke":
+            return (
+                "Someone just tapped your head and woke you from a nap between games. "
+                "Say you're up in your own style, then ask what they want to play. One or two short "
+                "sentences, under fifteen words, ending on the question. Output only the line."
             )
         if situation == "twenty.guesser":
             history = facts.get("history") or []
@@ -616,3 +732,14 @@ _JUDGE = (
     "You are a quick, fair judge for a party game. Answer with only the word or words "
     "asked for, lower-case, nothing else."
 )
+
+
+def _transcript(said: Any) -> str:
+    """The welcome's talk so far ([[who, line], ...]) as lines for the prompt: "ROB: ..."
+    and "Them: ..."."""
+    out = []
+    for entry in said if isinstance(said, (list, tuple)) else ():
+        if isinstance(entry, (list, tuple)) and len(entry) == 2 and all(isinstance(x, str) for x in entry):
+            who, line = entry
+            out.append(f"{'ROB' if who == 'ROB' else 'Them'}: {line.strip()}")
+    return "\n".join(out)

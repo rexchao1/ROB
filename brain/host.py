@@ -148,6 +148,8 @@ class Host:
         if self.keep_photos is not None:
             self.keep_photos.mkdir(parents=True, exist_ok=True)
         self.talk = talk  # brain/talk.py: the lines of chat(); None says nothing extra
+        if talk is not None:
+            talk.prepare()  # the greeting and the wake-up line, written while the robot starts up
         self.welcome_at_start = welcome  # the loop starts with the welcome (D38)
         self.ring = MOOD_LEDS["idle"]
         self._listening = False  # the ring shows "listening" (D43)
