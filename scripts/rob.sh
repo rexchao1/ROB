@@ -163,7 +163,7 @@ start() {
   preflight
   if clear_ports; then
     say "this folder's ROB is already running (npm run restart starts it over)"
-    open "http://127.0.0.1:8080/dashboard"
+    open "http://127.0.0.1:8080/dash"
     return
   fi
   pick_network
@@ -218,15 +218,13 @@ start() {
   robot_joined && say "the robot is connected"
 
   dash=$(sed -n 's/^gamemaster: dashboard at //p' "$LOGS/brain.log" | tail -1)
-  screen=$(sed -n 's/^gamemaster: game screen at //p' "$LOGS/brain.log" | tail -1)
   echo
   say "ROB is running. Say \"let's play Mafia\" (or any game's name)."
-  say "  dashboard:   ${dash:-http://127.0.0.1:8080/dashboard}"
-  say "  game screen: ${screen:-http://127.0.0.1:8080/dash}"
+  say "  dashboard:   ${dash:-http://127.0.0.1:8080/dash}"
   say "  games run:   $([ "$REFEREE" = remote ] && echo "on the Pi" || echo "on this Mac")"
   say "  logs:        $LOGS/"
   say "  stop:        npm run stop    restart: npm run restart"
-  open "http://127.0.0.1:8080/dashboard"
+  open "http://127.0.0.1:8080/dash"
 }
 
 cmd=${1:-start}

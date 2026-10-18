@@ -147,7 +147,6 @@ def main(argv: list[str] | None = None) -> int:
     server = serve(host, args.host, args.port)
     print(f"gamemaster: listening on http://{args.host}:{server.server_address[1]} (gateway {args.gateway}, pcm {pcm})", flush=True)
     dashboard_url = _dashboard_url(args.host, server.server_address[1])
-    print(f"gamemaster: game screen at {dashboard_url.removesuffix('/dashboard')}/dash", flush=True)
     print(f"gamemaster: dashboard at {dashboard_url}"
           + ("" if args.host == "0.0.0.0" else " (this Mac only; --host 0.0.0.0 opens it to phones on the network)"), flush=True)
     if args.referee == "local":
@@ -282,7 +281,7 @@ def _dashboard_url(address: str, port: int) -> str:
                 address = s.getsockname()[0]
         except OSError:
             pass
-    return f"http://{address}:{port}/dashboard"
+    return f"http://{address}:{port}/dash"
 
 
 def _reachable(table: TableServer) -> str:
