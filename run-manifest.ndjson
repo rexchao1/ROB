@@ -7,16 +7,29 @@
 {"file":"features/host-character.feature","title":"Picking a voice turns the live voice on when a key is set","status":"unbound"}
 {"file":"features/host-character.feature","title":"Switching the personality applies to the next line and changes no ruled line","status":"unbound"}
 {"file":"features/host-character.feature","title":"Without a key the pick is kept and the local voice speaks","status":"unbound"}
+{"file":"features/hosting.feature","title":"A count below the host's gets a second sweep","status":"unbound"}
+{"file":"features/hosting.feature","title":"A disagreement without a number gets a second sweep","status":"unbound"}
 {"file":"features/hosting.feature","title":"A face up during heads down is warned by seat","status":"passed"}
 {"file":"features/hosting.feature","title":"A majority vote by voice eliminates a seat","status":"passed"}
 {"file":"features/hosting.feature","title":"A second face blanks the private screen","status":"passed"}
 {"file":"features/hosting.feature","title":"A second peek in the same night sits the player out for the round","status":"passed"}
 {"file":"features/hosting.feature","title":"A spoken count that disagrees with the host's count stops the start","status":"passed"}
 {"file":"features/hosting.feature","title":"A tied vote eliminates nobody","status":"passed"}
+{"file":"features/hosting.feature","title":"A top seat short of a majority eliminates nobody","status":"unbound"}
+{"file":"features/hosting.feature","title":"A vote that names two seats is asked for again","status":"unbound"}
+{"file":"features/hosting.feature","title":"After three disagreements the host gives up","status":"unbound"}
+{"file":"features/hosting.feature","title":"Each game has a smallest table [1]","status":"unbound"}
+{"file":"features/hosting.feature","title":"Each game has a smallest table [2]","status":"unbound"}
+{"file":"features/hosting.feature","title":"Each game has a smallest table [3]","status":"unbound"}
+{"file":"features/hosting.feature","title":"Each game has a smallest table [4]","status":"unbound"}
 {"file":"features/hosting.feature","title":"Every head down means no warning","status":"passed"}
 {"file":"features/hosting.feature","title":"Leaning in shows one player their private screen","status":"passed"}
-{"file":"features/hosting.feature","title":"The host counts the table and numbers the seats","status":"passed"}
+{"file":"features/hosting.feature","title":"Me too is not a vote","status":"unbound"}
+{"file":"features/hosting.feature","title":"Players sitting out do not count toward the majority","status":"unbound"}
+{"file":"features/hosting.feature","title":"The host counts the table and numbers the seats","status":"unbound"}
 {"file":"features/hosting.feature","title":"The private screen returns when the second face leaves","status":"passed"}
+{"file":"features/hot-seat.feature","title":"A hold word pauses the clock instead of counting","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"A model's no makes the host ask the table","status":"unbound"}
 {"file":"features/hot-seat.feature","title":"A repeat puts a player out","status":"unbound"}
 {"file":"features/hot-seat.feature","title":"An answer from another category's list is out offline","status":"unbound"}
 {"file":"features/hot-seat.feature","title":"An answer on no list counts offline","status":"unbound"}
@@ -28,17 +41,24 @@
 {"file":"features/hot-seat.feature","title":"The host names a category and turns to each player saying go","status":"unbound"}
 {"file":"features/hot-seat.feature","title":"The last player in wins","status":"unbound"}
 {"file":"features/hot-seat.feature","title":"Twelve rounds with two still in is a tie","status":"unbound"}
+{"file":"features/imposter.feature","title":"A tied vote lets the Imposter survive","status":"unbound"}
 {"file":"features/imposter.feature","title":"Each player gives one clue in seat order","status":"passed"}
 {"file":"features/imposter.feature","title":"Voting out anyone else lets the Imposter survive","status":"passed"}
 {"file":"features/imposter.feature","title":"Voting out the Imposter ends the round with a reveal","status":"passed"}
 {"file":"features/imposter.feature","title":"Words are dealt and one player sees IMPOSTER","status":"passed"}
+{"file":"features/mafia.feature","title":"A sentence about not being ready does not end the day","status":"unbound"}
+{"file":"features/mafia.feature","title":"A sentence that mentions starting over is talk, not a reset","status":"unbound"}
 {"file":"features/mafia.feature","title":"Discussion time runs by the clock [1]","status":"passed"}
 {"file":"features/mafia.feature","title":"Discussion time runs by the clock [2]","status":"passed"}
+{"file":"features/mafia.feature","title":"Restart the round starts the night again","status":"unbound"}
 {"file":"features/mafia.feature","title":"Roles are dealt one at a time through the private screen","status":"passed"}
+{"file":"features/mafia.feature","title":"Ten rounds without a win is a draw","status":"unbound"}
+{"file":"features/mafia.feature","title":"The Doctor is asked every night, dead or alive","status":"unbound"}
 {"file":"features/mafia.feature","title":"The Doctor saves the Mafia's target","status":"passed"}
 {"file":"features/mafia.feature","title":"The Mafia win when they equal the rest","status":"passed"}
 {"file":"features/mafia.feature","title":"The Mafia's target dies when the Doctor saves someone else","status":"passed"}
 {"file":"features/mafia.feature","title":"The eliminated player's role is revealed","status":"passed"}
+{"file":"features/mafia.feature","title":"The group may vote early by saying so","status":"unbound"}
 {"file":"features/mafia.feature","title":"The village wins when no Mafia is left","status":"passed"}
 {"file":"features/operator-dashboard.feature","title":"A button sends a phrase the robot understands","status":"unbound"}
 {"file":"features/operator-dashboard.feature","title":"A key entered on the page is never shown again","status":"unbound"}
@@ -48,10 +68,12 @@
 {"file":"features/operator-dashboard.feature","title":"The volume is set on the robot and never saved","status":"unbound"}
 {"file":"features/operator-dashboard.feature","title":"Typed hearing replaces the microphone at the next listen","status":"unbound"}
 {"file":"features/pausing.feature","title":"A tap on the head resumes","status":"unbound"}
+{"file":"features/pausing.feature","title":"Hold on and wait pause the game too","status":"unbound"}
 {"file":"features/pausing.feature","title":"Pause holds the game's clock","status":"unbound"}
 {"file":"features/pausing.feature","title":"Stop while paused stops the game","status":"unbound"}
 {"file":"features/pausing.feature","title":"The interrupted listen runs again","status":"unbound"}
 {"file":"features/pausing.feature","title":"The lobby listens in longer windows after thirty quiet seconds","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"A guess the table does not know is not decided by the model","status":"unbound"}
 {"file":"features/twenty-questions.feature","title":"A hint costs a question","status":"unbound"}
 {"file":"features/twenty-questions.feature","title":"A question about a trait the table knows is answered from the table","status":"unbound"}
 {"file":"features/twenty-questions.feature","title":"A question the host cannot answer does not count","status":"unbound"}
@@ -66,13 +88,19 @@
 {"file":"features/twenty-questions.feature","title":"The host wins on a right guess","status":"unbound"}
 {"file":"features/twenty-questions.feature","title":"Three minutes of silence ends the game","status":"unbound"}
 {"file":"features/twenty-questions.feature","title":"Twenty questions used up without a right guess is the player's win","status":"unbound"}
+{"file":"features/wavelength.feature","title":"A guess is read from a short answer [1]","status":"unbound"}
+{"file":"features/wavelength.feature","title":"A guess is read from a short answer [2]","status":"unbound"}
+{"file":"features/wavelength.feature","title":"A guess is read from a short answer [3]","status":"unbound"}
+{"file":"features/wavelength.feature","title":"A number inside a longer sentence is talk","status":"unbound"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [1]","status":"passed"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [2]","status":"passed"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [3]","status":"passed"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [4]","status":"passed"}
+{"file":"features/wavelength.feature","title":"No guess the host can read scores zero","status":"unbound"}
 {"file":"features/wavelength.feature","title":"The psychic alone sees the target","status":"passed"}
-{"file":"features/wavelength.feature","title":"The psychic rotates and the total is announced after three rounds","status":"passed"}
+{"file":"features/wavelength.feature","title":"The psychic rotates and the total is announced after three rounds","status":"unbound"}
 {"file":"features/welcome.feature","title":"A game named with a headcount that disagrees waits for the count to agree","status":"unbound"}
+{"file":"features/welcome.feature","title":"A game's name inside other talk does not start it","status":"unbound"}
 {"file":"features/welcome.feature","title":"A headcount above the host's gets a second look","status":"unbound"}
 {"file":"features/welcome.feature","title":"A headcount below the host's gets no second look","status":"unbound"}
 {"file":"features/welcome.feature","title":"A no gets the other games the count can play","status":"unbound"}

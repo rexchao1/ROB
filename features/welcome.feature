@@ -61,6 +61,14 @@ Feature: The welcome
     Then the players hear the host say "I only see five. Who's hiding?"
     And no game has started
 
+  @D94
+  Scenario: A game's name inside other talk does not start it
+    Given five friends are seated around a table with the host in the middle
+    And the welcome has suggested Mafia and asked
+    When someone says "that was a hot seat yesterday"
+    Then no game has started
+    And the players hear the host say "Hot Seat? Say yes to play it."
+
   @D51
   Scenario: A no gets the other games the count can play
     Given five friends are seated around a table with the host in the middle

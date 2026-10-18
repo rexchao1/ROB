@@ -6,10 +6,10 @@ Feature: Hosting the table
   Background:
     Given five friends are seated around a table with the host in the middle
 
-  @D5 @D1
+  @D96 @D5 @D1
   Scenario: The host counts the table and numbers the seats
     When someone says "let's play Mafia"
-    Then the players see the host turn a full circle
+    Then the players see the host sweep the whole table, far left to far right
     And the players hear the host say "Five of you. Player one is on my left, then two, three, four, five going clockwise."
 
   @D6
@@ -18,6 +18,41 @@ Feature: Hosting the table
     When someone says "there are six of us"
     Then the players hear the host say "I only see five. Who's hiding?"
     And no game has started
+
+  @D89 @D6
+  Scenario: A disagreement without a number gets a second sweep
+    Given the host has counted five faces
+    When someone says "there are six of us" and then "no, that's not right"
+    Then the players hear the host say "I only see five. Who's hiding?"
+    And the players see the host sweep the whole table again
+    And no game has started
+
+  @D89
+  Scenario: After three disagreements the host gives up
+    Given the host has counted five faces
+    When someone says "there are six of us" three times over
+    Then the players hear the host say "Let's try again when everyone's ready."
+    And no game has started
+
+  @D90
+  Scenario: A count below the host's gets a second sweep
+    Given the host has counted five faces
+    When someone says "we're four"
+    Then the players hear the host say "I see five. Is someone just watching?"
+    And the players see the host sweep the whole table again
+
+  @D98
+  Scenario Outline: Each game has a smallest table
+    Given <players> friends are seated around a table with the host in the middle
+    When someone says "let's play <game>"
+    Then the players hear the host say "<line>" and offer another game
+
+    Examples:
+      | players | game       | line                                      |
+      | three   | Mafia      | Mafia needs at least four players.        |
+      | two     | Imposter   | Imposter needs at least three players.    |
+      | one     | Wavelength | Wavelength needs at least two players.    |
+      | one     | Hot Seat   | Hot Seat needs at least two players.      |
 
   @D7
   Scenario: Leaning in shows one player their private screen
@@ -69,6 +104,34 @@ Feature: Hosting the table
     And Players one, two and three say "four" and Players four and five say "one"
     Then the players hear the host say "Three for Player four, two for Player one."
     And the players hear the host say "Player four, you're out."
+
+  @D91
+  Scenario: A vote that names two seats is asked for again
+    Given a day phase vote has begun with five living players
+    When the host asks "Player one, who?" and Player one says "players three and four"
+    Then the players hear the host say "Player one, I didn't catch that. Who?"
+
+  @D91
+  Scenario: Me too is not a vote
+    Given a day phase vote has begun with five living players
+    When the host asks "Player two, who?" and Player two says "me too"
+    Then the players hear the host say "Player two, I didn't catch that. Who?"
+
+  @D97
+  Scenario: A top seat short of a majority eliminates nobody
+    Given a day phase vote has begun with four living players
+    When the host turns to each living player in turn and asks "who?"
+    And Players one and two say "four", Player three says "one" and Player four says "two"
+    Then the players hear the host say "Two for Player four, one for Player one, one for Player two. Nobody has a majority. Nobody leaves."
+    And every living player is still in
+
+  @D97 @D11
+  Scenario: Players sitting out do not count toward the majority
+    Given a day phase vote has begun with five living players and Players four and five sitting out
+    When the host turns to each player who may vote in turn and asks "who?"
+    And Players one and two say "three" and Player three says "one"
+    Then the players hear the host say "Two for Player three, one for Player one."
+    And the players hear the host say "Player three, you're out."
 
   @D13
   Scenario: A tied vote eliminates nobody

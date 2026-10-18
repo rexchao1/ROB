@@ -18,6 +18,14 @@ Feature: Pausing a game
     Then the players hear the host say "Okay, back to it."
     And the players hear the host say "One minute left." thirty seconds later
 
+  @D93
+  Scenario: Hold on and wait pause the game too
+    Given a game of Mafia is in its day phase
+    When someone says "hold on"
+    Then the players hear the host say "Paused. Say resume or tap my head when you're ready."
+    When someone says "we're back"
+    Then the players hear the host say "Okay, back to it."
+
   @D72
   Scenario: A tap on the head resumes
     Given a game of Mafia is paused

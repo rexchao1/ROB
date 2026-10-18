@@ -29,3 +29,10 @@ Feature: Imposter
     Given clues have been given
     When a vote eliminates Player two
     Then the players hear the host say "The Imposter survives. It was Player three."
+
+  @D101 @D13
+  Scenario: A tied vote lets the Imposter survive
+    Given clues have been given
+    When a vote ties between Players two and four
+    Then the players hear the host say "Two for Player two, two for Player four. It's a tie. Nobody leaves."
+    And the players hear the host say "The Imposter survives. It was Player three."

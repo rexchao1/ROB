@@ -10,7 +10,7 @@ The fence for the game master, scoped 2026-10-18 in a deliberately short intervi
 
 ## Deferred — each with its reopening condition
 
-- **Wavelength, then the live banter model, then Imposter**, in that order, if the build runs short; Mafia with the private screen, heads-down catching and voice votes is never cut. Reopens phase by phase as time allows; anything unbuilt at the deadline is recorded here by the build. (D33, D32, 2026-10-18)
+- **Wavelength, then the live banter model, then Imposter**, in that order, if the build runs short; Mafia with the private screen, heads-down catching and voice votes is never cut. Nothing was cut: all three were built and bound before the deadline, so the review proposes closing this deferral and keeping D32's cut order for a future build. (D33, closed by D107 proposed, 2026-10-18)
 
 - **Head pats, "louder" and "quieter", sound and mood, playing again with scores, players' names.** Asked for after the welcome; seats keep their numbers meanwhile. Reopens when Rex picks one up after trying the welcome on the robot. (D44, 2026-10-18)
 
