@@ -37,12 +37,25 @@ def test_d6_a_spoken_count_that_disagrees_stops_the_start():
     assert t.said[-1] == lines.COUNT_GIVE_UP
 
 
-def test_d6_said_with_the_request_and_resolved_by_a_recount():
-    t = FakeTable(counts=[5, 6])
+def test_a_count_said_with_the_request_is_taken_at_its_word_with_no_sweep():
+    t = FakeTable(counts=[5])
     n = gather(t, "mafia", "let's play mafia, there are six of us", State(), Options())
     assert n == 6
-    assert t.said[:3] == [lines.count_line(5), lines.only_see(5), lines.count_line(6)]
+    assert "count" not in [kind for _, kind, _ in t.log]
+    assert ("seated", 6) in [(kind, v) for _, kind, v in t.log]
     assert t.state["game"] == "mafia" and t.state["seats"] == 6
+
+
+def test_a_number_said_with_the_request_replaces_the_groups_earlier_word():
+    t = FakeTable()
+    assert gather(t, "imposter", "imposter with six people", State(), Options(), counted=4, seen=False) == 6
+    assert t.said == []
+
+
+def test_after_a_sweep_a_count_said_with_the_request_still_has_to_agree():
+    t = FakeTable(counts=[6])
+    assert gather(t, "mafia", "mafia, there are six of us", State(), Options(), counted=5) == 6
+    assert t.said[:2] == [lines.only_see(5), lines.count_line(6)]
 
 
 def test_d6_the_group_can_accept_the_hosts_count():

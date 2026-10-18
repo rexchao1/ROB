@@ -97,6 +97,9 @@ class FakeTable:
         self._note("count", n)
         return n
 
+    def seated(self, n: int) -> None:
+        self._note("seated", n)
+
     def prepare(self, cards: list[Card]) -> None:
         assert 0 < len(cards) <= 5 and len(set(cards)) == len(cards), f"prepare({cards})"
         self.prepared = list(cards)

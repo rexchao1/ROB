@@ -69,7 +69,7 @@ PORT = 8090
 LEASE = 5.0  # real seconds without a request before the referee counts as gone
 HOLD = 15.0  # real seconds a /table/call waits for its answer before answering "pending"
 PATIENCE = 60.0  # real seconds RemoteTable keeps retrying an unreachable server
-METHODS = ("now", "wait", "say", "look", "count", "prepare", "show_private", "listen", "faces_up", "mood", "report", "quip", "chat", "sleep")
+METHODS = ("now", "wait", "say", "look", "count", "seated", "prepare", "show_private", "listen", "faces_up", "mood", "report", "quip", "chat", "sleep")
 
 
 class RemoteError(Exception):
@@ -470,6 +470,9 @@ class RemoteTable:
 
     def count(self) -> int:
         return int(self._call("count"))
+
+    def seated(self, n: int) -> None:
+        self._call("seated", n)
 
     def prepare(self, cards: list[Card]) -> None:
         self._call("prepare", list(cards))

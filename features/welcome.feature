@@ -1,9 +1,11 @@
 Feature: The welcome
   At its start, and whenever someone says "reset", the host greets the table
-  as ROB, counts, says hello to each seat by number and suggests a game for the
-  headcount, then talks with the group until they pick one (D38 to D43). Built
-  in workstream W without tests; this file describes what was built and binds
-  nothing yet. Serves N1.
+  as ROB and asks what they want to play or how many they are, listening
+  straight away; it sweeps and says hello to each seat only when asked ("count
+  us"), and suggests a game for a headcount it heard or saw, then talks with the
+  group until they pick one (D38 to D43, revised 2026-10-18: no sweep on its
+  own). Built in workstream W without tests; the scenarios below still describe
+  the first build and bind nothing yet. Serves N1.
 
   Background:
     Given no talk model answers the host

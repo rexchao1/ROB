@@ -123,8 +123,10 @@ def game_named(text: str) -> str | None:
 
 def count_said(text: str) -> int | None:
     """A head count said out loud: "there are six of us", "six of us", "we're six",
-    "we are six", "6 players", "six people", "we have six". A stray number is not a
-    count ("player four", "let's play mafia", "there are two mafia")."""
+    "we are six", "6 players", "six people", "we have six", "just me". A stray number is
+    not a count ("player four", "let's play mafia", "there are two mafia")."""
+    if _has(text, _JUST_ME):
+        return 1
     tokens = _tokens(text)
     for i, t in enumerate(tokens):
         n = _strict(t)
@@ -331,6 +333,17 @@ def asks_rules(text: str) -> str | None:
     if game is None or _has(text, ("how about", "what about")):
         return None
     return game if _has(text, _ASK_RULES) else None
+
+
+_JUST_ME = ("just me", "only me", "just myself", "by myself", "on my own")
+_COUNT_US = ("count us", "count everyone", "count the room", "count the table", "count heads", "count people",
+             "look around", "look at us", "check the room", "how many do you see", "how many of us do you see",
+             "who's here", "whos here", "see who's here", "see whos here")
+
+
+def wants_count(text: str) -> bool:
+    """"Count us", "look around": the host should sweep the table and count it."""
+    return _has(text, _COUNT_US)
 
 
 def asks_games(text: str) -> bool:

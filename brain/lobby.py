@@ -28,6 +28,7 @@ from collections.abc import Callable
 from typing import Any
 
 from brain import ears, games, lines
+from brain.games.common import State
 from brain.games.welcome import RESTART, Choice, Welcome
 from brain.table import Table
 
@@ -60,6 +61,7 @@ class Lobby:
         self.stopped = stopped
         self.pause = pause
         self.playing: str | None = None  # the game being played
+        self.seats = 0  # the count the last game settled on
         self._log = log
         self._failing = False
         self._heard_at: float | None = None  # the last time the lobby heard anything
@@ -119,13 +121,13 @@ class Lobby:
     def _welcome(self, woke: str | None = None, too_few: str | None = None) -> str:
         """The welcome and its conversation, then the game picked; or, `woke` (by a tap,
         or a typed line it answers first), the short wake-up and the same talk; or, after
-        `too_few` (a game named outside the talk that this count cannot play), a look and
-        a game it can. The next step: "welcome" when someone said "reset" (in it, or in
+        `too_few` (a game named outside the talk that this count cannot play), a game it
+        can. The next step: "welcome" when someone said "reset" (in it, or in
         the game), else a nap."""
         self._log("welcome" if woke is None and too_few is None else "awake")
         w = Welcome(self.table, self.rng, self.options, self.listen_window)
         if too_few is not None:
-            w.instead_of(too_few)
+            w.instead_of(too_few, self.seats)
         elif woke is None:
             w.greet()
         else:
@@ -139,10 +141,10 @@ class Lobby:
                 return "welcome"
             if not isinstance(choice, Choice):
                 return "sleep"
-            outcome = self.play(choice.game, choice.heard, choice.counted)
+            outcome = self.play(choice.game, choice.heard, choice.counted, choice.seen)
             if outcome != "too few":
                 return self._after(outcome, choice.game)
-            w.too_few(choice.game)
+            w.too_few(choice.game, self.seats)
         return "sleep"
 
     def _after(self, outcome: str, game: str) -> str:
@@ -161,15 +163,16 @@ class Lobby:
                 self._log(f"could not say the nap line: {e}")
         return "sleep"
 
-    def play(self, name: str, heard: str, counted: int | None = None) -> str:
+    def play(self, name: str, heard: str, counted: int | None = None, seen: bool = True) -> str:
         """One game, the recovery line if it fails, then the idle look; how it went
-        (brain/games/__init__.py), or "failed"."""
+        (brain/games/__init__.py), or "failed". self.seats: the count it settled on."""
         rig = self.rigs(name)
         self._log(f"game: {name}" + (f" (rigged: {rig})" if rig else "") + (f" on the welcome's count of {counted}" if counted else ""))
         self.playing = name
-        more = {} if counted is None else {"counted": counted}
+        more = {} if counted is None else {"counted": counted, "seen": seen}
+        state = State()
         try:
-            outcome = games.play(name, self.table, self.rng, heard=heard, rig=rig, options=self.options, **more) or "played"
+            outcome = games.play(name, self.table, self.rng, heard=heard, rig=rig, options=self.options, state=state, **more) or "played"
         except Exception:
             self._log("the game failed:\n" + traceback.format_exc())
             outcome = "failed"
@@ -177,6 +180,7 @@ class Lobby:
                 self.table.say(self.recovery)
             except Exception:
                 pass
+        self.seats = state.seats
         self.playing = None
         self._heard_at = None  # a game just ended: listen closely again
         self.idle()

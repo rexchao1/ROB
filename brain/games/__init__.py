@@ -70,17 +70,21 @@ def play(
     rig: dict[str, Any] | None = None,
     options: Options | None = None,
     counted: int | None = None,
+    seen: bool = True,
+    state: State | None = None,
 ) -> str:
     """Run one whole game of `name` (one of GAMES) and say how it went (above). `heard`
     is what started it ("let's play mafia, there are six of us"), for a count said along
-    with it; `counted`, the welcome's count when it has just counted the table."""
+    with it; `counted`, the count the welcome already has, `seen` when it came from a
+    sweep rather than the group's word; `state`, filled in for a caller that wants the
+    seats afterwards."""
     if name not in GAMES:
         raise ValueError(f"no game named {name!r}; the games are {GAMES}")
     options = options or Options()
-    state = State()
+    state = state if state is not None else State()
     outcome = "played"
     try:
-        seats = gather(table, name, heard, state, options, counted)
+        seats = gather(table, name, heard, state, options, counted, seen)
         if seats is None:
             outcome = state.stalled or "no count"
         else:

@@ -342,12 +342,18 @@ def flavor(moment: str, rng: random.Random) -> str:
 # --- the welcome (D38 to D43) ------------------------------------------------------------
 
 GREETINGS = (
-    "Hey, what's up, everyone? I'm ROB. Let me see who we've got.",
-    "Hey hey, it's game night! ROB here. Hold still, I'm counting heads.",
-    "Hey, everybody! I'm ROB, your host. Give me a sec to see who's here.",
-    "Hey, what's going on? ROB here. Let me get a look at you all.",
-    "Hey there, I'm ROB! Okay, let's see who showed up.",
+    "Hey, what's up, everyone? I'm ROB. What are we playing? Name a game, or tell me how many of you there are and I'll pick.",
+    "Hey hey, it's game night! ROB here. How many of you are playing? Or just name a game.",
+    "Hey, everybody! I'm ROB, your host. What do you feel like playing? Tell me how many you are and I'll pick one.",
+    "Hey, what's going on? ROB here. Name a game, or tell me how many of you there are.",
+    "Hey there, I'm ROB! What are we playing tonight? Say a game, or how many of you there are.",
 )
+LOOKING = (
+    "Okay, let me get a look at you all.",
+    "Sure, hold still a sec.",
+    "On it. Let me see who's here.",
+)
+HOW_MANY = "How many of you are playing?"
 
 
 def greeting(rng: random.Random) -> str:
@@ -475,6 +481,11 @@ def fits(seats: int) -> list[str]:
     return [g for g in _registered() if seats >= max(MINIMUM[g], 1)]
 
 
+def games_any() -> str:
+    """Asked what the host has before anyone said how many: every game built."""
+    return f"I've got {game_names()}. Which one sounds good?"
+
+
 def games_list(seats: int) -> str:
     """Asked what the host has: every game built, and the pick for the count."""
     have = f"I've got {_join(_registered(), 'and')}."
@@ -513,8 +524,8 @@ LATER = (
 )
 NAP = "I'll take a nap. Tap my head when you want me."  # the host stops listening until a tap wakes it
 WOKE = (
-    "I'm up! Let me see who's here.",
-    "Hey, I'm awake. Let me see who's here.",
+    "I'm up! What are we playing?",
+    "Hey, I'm awake. What do you want to play?",
 )
 
 
@@ -522,8 +533,13 @@ def later(rng: random.Random) -> str:
     return rng.choice(LATER)
 
 
+def looking(rng: random.Random) -> str:
+    """Asked to count ("count us", "look around"): said before the sweep."""
+    return rng.choice(LOOKING)
+
+
 def woke(rng: random.Random) -> str:
-    """A tap on the head woke the host: said before it counts the table."""
+    """A tap on the head woke the host: "I'm up", and a question."""
     return rng.choice(WOKE)
 
 
@@ -610,7 +626,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
         WAVELENGTH_TALK, WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
-        NAP, *WOKE,
+        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(),
     ]
     out += [mafia_intro(1), mafia_intro(2)]
     out += [too_few(g, m) for g, m in MINIMUM.items()]

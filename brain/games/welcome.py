@@ -1,18 +1,26 @@
 """The welcome (D38 to D43): when the host starts, and whenever someone says "reset",
-"start over" or "restart", it greets the table, counts it with the full sweep, turns
-to each seat in order and says hello by number, suggests a game for the headcount
-(two Wavelength, three or four Imposter, five or more Mafia, D38; one player Twenty
-Questions or Wordle) and talks with the group until they pick one. The suggestion and
-the list of games read lines.MINIMUM, so a game shows up here once it is built.
+"start over" or "restart", it greets the table and asks what they want to play or how
+many they are, and starts listening right away. It does not sweep the table on its
+own: a headcount said out loud is taken at its word and gets a suggestion for it (two
+Wavelength, three or four Imposter, five or more Mafia, D38; one player Twenty
+Questions or Wordle), and "count us" or "look around" gets the full sweep, a hello to
+each seat by number and the suggestion. The talk goes on until they pick a game. The
+suggestion and the list of games read lines.MINIMUM, so a game shows up here once it
+is built.
 
 What the group says is read in this order (brain/ears.py):
 
   reset                         the welcome again
   a question about a game       its rules, from the script, and "Want to play it?"
-  a game's name                 that game, on this count (a count said with it still
-                                has to agree: "imposter with six people", D39)
+  a game's name                 that game, on the count so far (none yet: the game
+                                asks for one; a count said with it: that count, or,
+                                after a sweep, it has to agree: "imposter with six
+                                people", D39)
   "not now", "stop"             a line, then the host naps until a tap on its head
-  a headcount                   "I only see five. Who's hiding?", a pause, a second look
+  "count us", "look around"     the sweep, a hello to each seat, the suggestion
+  a headcount                   taken at its word, and the suggestion for it; after a
+                                sweep that saw fewer, "I only see five. Who's hiding?",
+                                a pause, a second look
   "what games?", "you pick"     the games, or the suggestion again
   "nah", "something else"       the other games the count can play
   "sure", "yeah"                the suggestion, right after the host asked (D39)
@@ -21,8 +29,8 @@ What the group says is read in this order (brain/ears.py):
   anything else                 noise: nothing (D39)
 
 Silence gets at most two nudges; then the host says it is taking a nap and stops
-listening until a tap on its head wakes it (D39). Woken, it says it is up, counts and
-suggests a game (wake(): no hello to each seat), and the talk goes on as before. The rules, the count and the suggestion are code
+listening until a tap on its head wakes it (D39). Woken, it says it is up and asks
+what they want to play, and the talk goes on as before. The rules, the count and the suggestion are code
 (D14, D42): the talk model only writes the small-talk lines, and a line it writes that
 does not fit is replaced by a scripted one.
 """
@@ -49,6 +57,7 @@ class Choice:
     game: str
     heard: str
     counted: int | None
+    seen: bool = True  # the count came from a sweep, not the group's word
 
 
 class Welcome:
@@ -57,7 +66,11 @@ class Welcome:
         self.rng = rng
         self.options = options
         self.listen_window = listen_window
-        self.seats = 0
+        self.seats = 0  # 0: nobody has said, and no sweep has run
+        self.seen = False  # self.seats came from a sweep
+        self.counted_at = float("-inf")
+        self.quiet_since = self.asked_at = float("-inf")
+        self.later: list[str] = []
         self.suggestion: str | None = None
         self.nudged = 0
         self.chats = 0
@@ -67,33 +80,52 @@ class Welcome:
     # --- the greeting -------------------------------------------------------------
 
     def greet(self) -> None:
-        """Hello, the count, a hello to each seat, the suggestion."""
-        t = self.table
-        t.mood("idle")
-        self._say(lines.greeting(self.rng))
-        self._count()
-        self._hellos()
-        self._suggest()
+        """Hello, and what are we playing? No sweep: the host listens straight away."""
+        self.table.mood("idle")
+        State(phase="welcome", seats=0).report(self.table)
+        self._ask(lines.greeting(self.rng))
+        self.later = lines.nudges(None, self.rng)
 
     def wake(self) -> None:
-        """A tap woke the host: "I'm up", the count, the suggestion; no hello to each seat."""
+        """A tap woke the host: "I'm up! What are we playing?\""""
         self.table.mood("idle")
-        self._say(lines.woke(self.rng))
-        self._count()
-        self._suggest()
+        State(phase="welcome", seats=0).report(self.table)
+        self._ask(lines.woke(self.rng))
+        self.later = lines.nudges(None, self.rng)
 
-    def instead_of(self, game: str) -> None:
-        """After "Mafia needs at least four players." outside the talk: a look, then a
-        game this count can play."""
+    def instead_of(self, game: str, seats: int) -> None:
+        """After "Mafia needs at least four players." outside the talk: a game the
+        `seats` that game found can play."""
         self.table.mood("idle")
-        self._count()
+        self._settled(seats)
         self.later = lines.nudges(lines.suggested(self.seats), self.rng)
         self.too_few(game)
 
     def _count(self) -> None:
         self.seats = self.table.count()
+        self.seen = True
         self.counted_at = self.table.now()
         State(phase="welcome", seats=self.seats).report(self.table)
+
+    def _told(self, n: int) -> None:
+        """The group said how many they are: taken at its word, and a game for it."""
+        self._settled(n)
+        self.table.seated(n)
+        self._suggest()
+
+    def _settled(self, n: int) -> None:
+        """The count is `n` and the host's seating already matches it (said, or settled
+        by a game that just ran), so a new number said replaces it."""
+        self.seats = n
+        self.seen = False
+        self.counted_at = self.table.now()
+        State(phase="welcome", seats=n).report(self.table)
+
+    def _counted(self, now: float) -> int | None:
+        """The count a game picked now starts on: the group's word, or a fresh sweep."""
+        if self.seats < 1 or (self.seen and now - self.counted_at > self.options.count_fresh_seconds):
+            return None
+        return self.seats
 
     def _hellos(self) -> None:
         for seat in range(1, self.seats + 1):
@@ -148,30 +180,41 @@ class Welcome:
             return None
         game = ears.game_named(heard)
         if game is not None:
-            fresh = self.seats > 0 and now - self.counted_at <= self.options.count_fresh_seconds
-            return Choice(game, heard, self.seats if fresh else None)
+            return Choice(game, heard, self._counted(now), self.seen)
         if ears.wants_later(heard) or ears.wants_to_stop(heard) or ears.wants_pause(heard):
             self._say(lines.later(self.rng))  # "shut up", "not now": a line, then a nap
             return ""
+        if ears.wants_count(heard):
+            self._say(lines.looking(self.rng))
+            self._count()
+            self._hellos()
+            self._suggest()
+            return None
         answering = now - self.asked_at <= self.options.answer_seconds
         spoken = ears.count_said(heard) or (ears.bare_number(heard) if answering else None)
         if spoken is not None:
-            self._spoken(spoken)
+            if self.seen:
+                self._spoken(spoken)
+            else:
+                self._told(spoken)
             return None
         if ears.asks_games(heard):
-            self._ask(lines.games_list(self.seats))
+            self._ask(lines.games_list(self.seats) if self.seats > 0 else lines.games_any())
             return None
-        if ears.asks_pick(heard) and self.suggestion is not None:
-            self._ask(lines.suggestion(self.seats, self.rng))
-            return None
-        if answering and ears.says_no(heard) and len(heard.split()) <= 6:
+        if ears.asks_pick(heard):
+            if self.suggestion is not None:
+                self._ask(lines.suggestion(self.seats, self.rng))
+                return None
+            if self.seats < 1:
+                self._ask(lines.HOW_MANY)
+                return None
+        if answering and self.seats > 0 and ears.says_no(heard) and len(heard.split()) <= 6:
             self._ask(lines.declined(self.seats, self.suggestion, self.rng))
             if lines.fits(self.seats) != [self.suggestion]:
                 self.suggestion = None  # a "yes" now would be to nothing in particular
             return None
         if answering and self.suggestion is not None and ears.says_yes(heard):
-            fresh = now - self.counted_at <= self.options.count_fresh_seconds
-            return Choice(self.suggestion, heard, self.seats if fresh else None)
+            return Choice(self.suggestion, heard, self._counted(now), self.seen)
         if ears.meaningful(heard, answering):
             self.quiet_since = now
             self._chat(heard, answering, now)
@@ -199,7 +242,9 @@ class Welcome:
         """Small talk: a short reply, rate-limited and capped (D39, D42)."""
         if self.chats >= self.options.max_chats or now - self.replied_at < self.options.reply_gap_seconds:
             return
-        facts: dict[str, Any] = {"players": self.seats, "answering": answering, "games": lines.game_names()}
+        facts: dict[str, Any] = {"answering": answering, "games": lines.game_names()}
+        if self.seats > 0:
+            facts["players"] = self.seats
         if self.suggestion is not None:
             facts["suggestion"] = lines.game_name(self.suggestion)
         line = _fit(self.table.chat("welcome", heard, **facts))
@@ -211,8 +256,11 @@ class Welcome:
             self._say(line)
         self.replied_at = self.table.now()
 
-    def too_few(self, game: str) -> None:
-        """After "Mafia needs at least four players.": the game this count can play."""
+    def too_few(self, game: str, seats: int | None = None) -> None:
+        """After "Mafia needs at least four players.": the game this count can play;
+        `seats`, the count the game settled on."""
+        if seats is not None and seats != self.seats:
+            self._settled(seats)
         pick = lines.suggested(self.seats)
         if pick is not None and pick != game:
             self.suggestion = pick

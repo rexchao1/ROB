@@ -17,11 +17,12 @@ def _lobby(table, *, naps=1):
     )
 
 
-def _played(monkeypatch, outcome="played"):
+def _played(monkeypatch, outcome="played", seats=0):
     played = []
 
     def play(name, table, rng, **kw):
         played.append(name)
+        kw["state"].seats = seats
         return outcome
 
     monkeypatch.setattr(games, "play", play)
@@ -41,16 +42,14 @@ def test_after_a_game_the_host_says_it_naps_and_stops_listening(monkeypatch):
     assert _kinds(table)[-1] == "sleep"
 
 
-def test_a_tap_wakes_it_to_say_it_is_up_count_and_suggest(monkeypatch):
+def test_a_tap_wakes_it_to_say_it_is_up_and_ask_with_no_sweep(monkeypatch):
     _played(monkeypatch)
     table = FakeTable().hear("let's play imposter")
     table.wakes.extend(["", None])
     _lobby(table, naps=2).run()
     woke = table.said.index(next(line for line in table.said if line in lines.WOKE))
     assert table.said[woke - 1] == lines.NAP
-    after = _kinds(table)[_kinds(table).index("sleep"):]
-    assert "count" in after
-    assert any("Mafia" in line for line in table.said[woke + 1:])  # five seats: the suggestion
+    assert "count" not in _kinds(table)
 
 
 def test_a_nap_call_that_runs_out_naps_again_without_a_word(monkeypatch):
@@ -87,7 +86,7 @@ def test_shut_up_in_the_talk_gets_a_line_and_a_nap():
 
 
 def test_too_few_for_a_game_named_outside_the_talk_offers_one_that_fits(monkeypatch):
-    _played(monkeypatch, outcome="too few")
+    _played(monkeypatch, outcome="too few", seats=3)
     table = FakeTable(seats=3).hear("let's play mafia")
     _lobby(table).run()
     assert lines.NAP not in table.said[:1]

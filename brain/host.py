@@ -64,6 +64,7 @@ MAX_LISTEN = 30.0  # the gateway's longest listen
 TURN_RATE = 240.0  # degrees per second at speed "high"
 TURN_SETTLE = 0.15  # seconds after the head arrives before a photo is trusted
 SWEEP_SPEED = 24  # degrees per second asked of each step of the counting sweep: the firmware eases a 12-degree step over about a third of a second, so the head glides from photo to photo
+SEATED_SPREAD = 60  # degrees either side of the middle that seats taken on the group's word are spread across
 RETURN_SPEED = 60  # degrees per second back to the middle after the count: about a second, not a snap
 PHOTO_TRIES = 3  # a photo that fails (the robot dropped off Wi-Fi for a moment) is tried this often
 PHOTO_RETRY_WAIT = 3.0  # seconds between those tries; the robot reconnects on its own
@@ -478,6 +479,16 @@ class Host:
         self._turn(0.0, RETURN_SPEED)
         self.body.leds([self.ring])
         return len(found)
+
+    def seated(self, n: int) -> None:
+        """The group said how many they are (no sweep): seats spread evenly across
+        SEATED_SPREAD, left to right; the faces of an earlier count are dropped."""
+        found = [0.0] if n == 1 else [round(-SEATED_SPREAD + i * 2 * SEATED_SPREAD / (n - 1), 1) for i in range(n)]
+        with self._lock:
+            self.seat_bearings = found if n > 0 else []
+        if self.dash is not None:
+            self.dash.clear_seats()
+        self._log(f"seated: {n} by their word, at {self.seat_bearings}")
 
     def _sweep(self) -> list[float]:
         pans = vision.sweep_pans(self.hfov)

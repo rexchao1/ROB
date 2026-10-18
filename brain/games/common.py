@@ -138,19 +138,32 @@ def _spoken(heard: str) -> int | None:
     return ears.count_said(heard) or ears.bare_number(heard)
 
 
-def gather(table: Table, game: str, heard: str, state: State, options: Options, counted: int | None = None) -> int | None:
-    """Count the table, say the count, and agree on it with the group (D5, D6). A spoken
-    count that disagrees stops the start: the host says so, listens and counts again
-    until the spoken number and its count agree, a go-ahead ("okay") accepts the host's
-    count, and after options.count_tries disagreements it gives up. Returns the number
-    of seats, with the game started in `state`, or None when no game starts (why, in
-    state.stalled).
+def gather(
+    table: Table, game: str, heard: str, state: State, options: Options, counted: int | None = None, seen: bool = True
+) -> int | None:
+    """Agree on how many are playing (D5, D6) and start the game. A count said with the
+    game's name ("imposter with six people") is taken at its word, with no sweep: the
+    group knows who is there. With no number said, the host counts the table, says the
+    count and agrees on it with the group: a spoken count that disagrees stops the start,
+    the host says so, listens and counts again until the spoken number and its count
+    agree, a go-ahead ("okay") accepts the host's count, and after options.count_tries
+    disagreements it gives up. Returns the number of seats, with the game started in
+    `state`, or None when no game starts (why, in state.stalled).
 
-    counted: the welcome has just counted the table (D40), so there is no second sweep
-    and no count line; a count said with the game's name ("imposter with six people")
-    still has to agree with it (D41)."""
+    counted: the welcome already knows the count (D40), so there is no sweep and no count
+    line. seen: that count came from a sweep, so a different number said with the game's
+    name still has to agree with it (D41); else the group's word, which a new number
+    replaces."""
     state.game, state.phase, state.stalled = None, "count", None
     spoken = ears.count_said(heard)
+    told = counted if not seen else None  # the group's word, from the welcome
+    if told is not None or (counted is None and spoken is not None):
+        n = spoken if spoken is not None else told
+        assert n is not None
+        table.seated(n)
+        state.seats = n
+        state.report(table)
+        return _start(table, game, n, state)
     if counted is None:
         n = _count(table, state)
     else:
@@ -180,9 +193,15 @@ def gather(table: Table, game: str, heard: str, state: State, options: Options, 
         if ears.agrees(reply):
             break
         n = _count(table, state)  # somebody may have come out of hiding
+    return _start(table, game, n, state)
+
+
+def _start(table: Table, game: str, n: int, state: State) -> int | None:
+    """The count is settled: the game starts, or "Mafia needs at least four players.\""""
     minimum = lines.MINIMUM[game]
     if n < minimum:
         table.say(lines.too_few(game, minimum))
+        state.seats = n
         state.stalled = "too few"
         return None
     state.game = game

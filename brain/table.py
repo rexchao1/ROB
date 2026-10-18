@@ -51,6 +51,12 @@ class Table(Protocol):
         from left to right (replacing any earlier seating) and return N. Says nothing."""
         ...
 
+    def seated(self, n: int) -> None:
+        """Take the group's word that `n` players are at the table, with no sweep: number
+        the seats 1..n spread evenly from the host's left to its right (replacing any
+        earlier seating), so look(seat) has somewhere to turn. Says nothing."""
+        ...
+
     def prepare(self, cards: list[Card]) -> None:
         """The cards this game will show (at most five, all distinct), so the host can
         put them on its screen ahead of time; may take a while on the real body. Call it
