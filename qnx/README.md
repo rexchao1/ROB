@@ -51,11 +51,13 @@ referee with `qnx/ap.sh referee-restart` to load the new code and key.
 
 The Pi hosts the game's Wi-Fi network itself and stays on QNX; the robot, the Mac and the Pi all join it. `qnx/ap/net.conf` holds the numbers: `gamemaster`, 2.4 GHz channel 6, WPA2 (CCMP), the Pi at 10.77.0.1, the Mac at 10.77.0.2 (set by hand: its Wi-Fi uses a private MAC per network), the robot and anything else from 10.77.0.100-199. No router and no DNS are handed out, so the Mac keeps its internet on the iPhone's USB link. The subnet is not the hotspot's 172.20.10.0/28: the iPhone gives the Mac that same subnet over USB, and the same subnet on two interfaces would send the Pi's traffic to the phone. The password is `GM_WIFI_PASSWORD` in `.env.local` (gitignored; `qnx/ap.sh install` makes one if it is missing).
 
-How QNX does it: the image has no hostapd and no DHCP server, but its wpa_supplicant 2.11 is built with AP support and the Wi-Fi driver (QWDI, Cypress DHD over SDIO) reports it (`DRIVER_FLAGS`: `AP`; `GET_CAPABILITY modes`: `AP`; `key_mgmt` `WPA-PSK`; `pairwise` `CCMP`). So the access point is a `mode=2` network for the same wpa_supplicant that `start_net.sh` starts at boot on bcm0, and `qnx/ap/dhcpd.py` (standard library, root for port 67) is the DHCP server. It answers only requests that arrive on bcm0, so an Ethernet cable into another network never hears from it.
+How QNX does it: the image has no hostapd and no DHCP server, but its wpa_supplicant 2.11 is built with AP support and the Wi-Fi driver (QWDI, Cypress DHD over SDIO) reports it (`DRIVER_FLAGS`: `AP`; `GET_CAPABILITY modes`: `AP`; `key_mgmt` `WPA-PSK`; `pairwise` `CCMP`). So the access point is a `mode=2` network for the same wpa_supplicant that `start_net.sh` starts at boot on bcm0, and `qnx/ap/dhcpd.py` (standard library, root for port 67) is the DHCP server. It answers only requests that arrive on the access point's interface (bcm0, or bcm1 with the uplink below), so the hotspot or an Ethernet cable into another network never hears from it.
 
     qnx/ap.sh install            # copy qnx/ap and the access point's setup to ~/gmnet on the Pi; nothing else changes
     qnx/ap.sh trial [SECONDS] [bcm1]   # the access point now, by hand; back to the hotspot by itself after SECONDS (300)
     qnx/ap.sh persist            # back up the two boot files, then make the access point the boot setup, on probation
+    qnx/ap.sh uplink trial [SECONDS]   # the access point on bcm1 beside the hotspot link, so the Pi keeps its internet ("The uplink")
+    qnx/ap.sh uplink persist     # make that the boot setup, on probation
     qnx/ap.sh reboot
     qnx/ap.sh confirm            # from the new network: keep it (a trial: keep it until reboot)
     qnx/ap.sh revert             # back to the hotspot: end a trial, or put the backups back and reboot
@@ -77,6 +79,29 @@ Once, from the phone hotspot to the Pi's network. The Mac's Wi-Fi changes in ste
 5. The Mac: `scripts/wifi.sh game`, then `qnx/ap.sh confirm`.
 6. The robot: its setup page (README, "Setting up the robot"): Wi-Fi `gamemaster` and the password, OTA `http://10.77.0.2:8768/ota/`, gateway `ws://10.77.0.2:8765/`. From the Mac that means `scripts/wifi.sh back`, the robot's "Xiaozhi..." network, then `scripts/wifi.sh game` again.
 7. The gateway: restart it with `VISION_HOST=10.77.0.2` (`scripts/game.sh` starts it so, and refuses one running with the old address). Then README, "Running a game".
+
+### The uplink: internet on the Pi during a game
+
+In the setup above bcm0 is the access point, so the Pi has no internet during a game. The uplink keeps bcm0 on the iPhone's hotspot as a station, with the phone's address, default route and DNS, and runs `gamemaster` on bcm1 beside it: the same 10.77.0.1, dhcpd and referee, on the hotspot's channel (the driver runs the two on one channel only). dhcpd answers only on bcm1 and still hands out no router, so the Mac reaches the Pi at 10.77.0.1 over `gamemaster`, the Pi's own internet goes out bcm0, and nothing for 10.77.0.0/24 goes to the phone. The Mac keeps its internet on USB.
+
+bcm0 joins with the boot setup's hotspot config (`/data/var/etc/settings/wpa_supplicant.conf`, which `qnx/ap.sh revert` puts back from `~/gmnet/backup/`). `uplink persist` changes only `post_startup.sh`: one line that runs `gm-net.sh uplink boot`, backed up first to `~/gmnet/backup/uplink/`. At boot that waits up to 60 s (`UPLINK_WAIT` in `net.conf`) for the hotspot. With no hotspot, a 5 GHz one, or a bcm1 that will not run the access point, it falls back to the setup above, `gamemaster` alone on bcm0 on channel 6 without internet, so the game network always comes up; the next boot tries again. `qnx/ap.sh status` says which one this boot got, whether the uplink is up, the default route, which interface reaches the Mac, and whether the Pi reaches `https://api.anthropic.com`, which makes it a few seconds slower.
+
+The iPhone: Settings, Personal Hotspot, turn on Allow Others to Join and Maximize Compatibility. Maximize Compatibility puts the hotspot on 2.4 GHz. Without it the hotspot is on 5 GHz, `gamemaster` would have to follow it there, and the robot (an ESP32, 2.4 GHz only) could not join, so the Pi falls back instead. Keep that screen open while the Pi boots: an iPhone can stop showing its hotspot when nothing has used it for a while. On 2.4 GHz the robot can see the hotspot too, so the robot must not have it saved (README, "Setting up the robot").
+
+The channel is set at boot. If the hotspot goes away during a game, `gamemaster` stays up and the Pi's internet goes with the hotspot; it may come back if the phone returns on the same channel, otherwise after a reboot.
+
+None of this has run on the Pi yet. With the Pi on:
+
+1. The iPhone: Personal Hotspot and Maximize Compatibility on, that screen open.
+2. If the Pi boots into `gamemaster` today: from `gamemaster`, `qnx/ap.sh revert`; the Pi reboots onto the hotspot. Put the Mac on the hotspot too (`scripts/wifi.sh back`, then the iPhone's network from the Wi-Fi menu). `qnx/ap.sh status` says `boot setup: the hotspot client`.
+3. `qnx/ap.sh install`.
+4. `qnx/ap.sh uplink trial 300`. Half a minute later `qnx/ap.sh status` shows `bcm1: 10.77.0.1 AP COMPLETED gamemaster` on the hotspot's 24xx MHz, `uplink: up`, `default route: 172.20.10.1 on bcm0`, `to the Mac (10.77.0.2): bcm1` and `internet: yes`. Join `gamemaster` from a phone: status lists it and its 10.77.0.1xx lease. The trial ends by itself after 5 minutes, or with `qnx/ap.sh revert`. If the access point does not come up (`~/gmnet/log/trial.log` on the Pi), stop here: every boot would fall back. `internet: partly ... certificate` means the network works but Python on the Pi has no CA certificates, which the referee's API calls will need; `internet: no ... no DNS from the phone` means dhcpcd did not pass the phone's DNS on.
+5. `qnx/ap.sh uplink persist`, then `qnx/ap.sh reboot`.
+6. A minute later, with the iPhone on the Mac's USB: `scripts/wifi.sh game`, then `qnx/ap.sh status` shows `boot setup: the uplink ... (on probation)`, `this boot: the uplink: ...` and `internet: yes`.
+7. `qnx/ap.sh confirm` within 15 minutes. Without it the Pi takes its line out again and reboots onto the hotspot by itself.
+8. The fallback, once: hotspot off, `qnx/ap.sh reboot`, two minutes, `scripts/wifi.sh game`; `qnx/ap.sh status` shows `this boot: the fallback: gamemaster alone on bcm0`. Hotspot on and `qnx/ap.sh reboot` to get the uplink back.
+
+To undo it: `qnx/ap.sh revert` from `gamemaster` takes the line out of `post_startup.sh` and reboots the Pi onto the hotspot as a plain client, with no `gamemaster`. For the setup above from there, "The changeover", step 4. One boot setup at a time: `trial` and `persist` refuse while the uplink is the boot setup, and the uplink commands refuse while the setup above is.
 
 ## The status light
 
