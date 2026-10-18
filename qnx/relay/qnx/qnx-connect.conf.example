@@ -1,0 +1,7 @@
+# Copy to /boot/qnx-connect.conf and replace these values.
+# This file contains no private keys.
+DEVICE_NAME=qnxpi
+RELAY_URL=wss://YOUR_RELAY_HOSTNAME
+REMOTE_PORT=2222
+# CTI images may bake the scripts into /usr/lib/qnx-headless-connect; the
+# launcher detects that location automatically.

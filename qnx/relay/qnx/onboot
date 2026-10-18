@@ -1,0 +1,17 @@
+#!/proc/boot/ksh
+
+# QNX calls this before /dev/pipe exists. Use the native detached-process
+# launcher so normal boot can continue immediately.
+BOOT_LOG=/boot/qnx-onboot.log
+if [ -f "$BOOT_LOG" ]; then
+    BOOT_LOG_SIZE="$(wc -c < "$BOOT_LOG" 2>/dev/null)"
+    case "$BOOT_LOG_SIZE" in ''|*[!0-9]*) BOOT_LOG_SIZE=0 ;; esac
+    if [ "$BOOT_LOG_SIZE" -gt 1048576 ]; then
+        mv -f "$BOOT_LOG" "$BOOT_LOG.previous"
+    fi
+fi
+exec >>"$BOOT_LOG" 2>&1
+echo "QNX relay autostart invoked"
+/proc/boot/on -d /proc/boot/ksh /boot/qnx-connect-supervisor.sh
+echo "QNX relay supervisor detached (rc=$?)"
+exit 0

@@ -103,6 +103,15 @@ None of this has run on the Pi yet. With the Pi on:
 
 To undo it: `qnx/ap.sh revert` from `gamemaster` takes the line out of `post_startup.sh` and reboots the Pi onto the hotspot as a plain client, with no `gamemaster`. For the setup above from there, "The changeover", step 4. One boot setup at a time: `trial` and `persist` refuse while the uplink is the boot setup, and the uplink commands refuse while the setup above is.
 
+## ssh from anywhere: the relay
+
+The Pi keeps an outbound connection to a relay on the AWS VM (`wss://qnx.3-23-80-81.sslip.io`, port 443 only), so the Mac can ssh to it from any network while the Pi has internet (the hotspot, or the uplink beside `gamemaster`; with `gamemaster` alone on bcm0 it has none and the tunnel waits). `qnx/relay/` is [qnx-pi-headless-relay](https://github.com/lancestreuber/qnx-pi-headless-relay) at 3fedf7b.
+
+    qnx/relay.sh ssh [CMD]   # ssh to the Pi through the relay
+    qnx/relay.sh status      # the relay container on the VM, and whether the Pi answers through it
+
+Set up once, already done: `setup` made the keys in `.qnx-connect/qnxpi` (gitignored; keep a copy, the relay and the Pi trust exactly these), `server` runs the relay in Docker on the VM behind the VM's Caddy, which also serves Tooey (one extra site at the end of `/etc/caddy/Caddyfile`; run `server` again if a Tooey deploy rewrites that file), and `install` copied the Pi's side to its boot partition, where the image's `/boot/onboot` starts it at every boot. Logs on the Pi: `/boot/qnx-onboot.log`, `qnx-supervisor.log`, `qnx-tunnel.log`.
+
 ## The status light
 
 A red-yellow-green LED on the Pi's header shows how far the box has come up, each colour adding to the ones before: red once the Pi is on, yellow too once its Wi-Fi has an address (the hotspot or `gamemaster`), green too once the robot is on the same Wi-Fi. Green means the robot's MAC (`ROBOT_MAC` in `qnx/ap/net.conf`) answers a ping, not that the gateway on the Mac has it. A new robot needs its MAC there: it is the `device_id` in the gateway's `curl -s 127.0.0.1:8767/status`.
