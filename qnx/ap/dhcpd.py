@@ -1,6 +1,7 @@
 """The DHCP server for the Pi's own Wi-Fi network: it hands out addresses and the
-netmask, and nothing else. No router and no DNS: the network has no internet, and a
-Mac on it keeps its internet on another interface (qnx/README.md).
+netmask, and nothing else. No router and no DNS: the network gives its clients no
+internet, and a Mac on it keeps its internet on another interface (qnx/README.md). The
+Pi's own internet, with the uplink, goes out the hotspot link, never through here.
 
 QNX 8 has no DHCP server, and the robot's Wi-Fi needs one. Standard library only
 (Python 3.11 to 3.14). Port 67 needs root.
@@ -8,12 +9,14 @@ QNX 8 has no DHCP server, and the robot's Wi-Fi needs one. Standard library only
   sudo python3 dhcpd.py --iface bcm0 --server 10.77.0.1 --netmask 255.255.255.0 \\
       --pool 10.77.0.100-10.77.0.199 --leases leases.json [--ignore MAC]...
 
-Only requests that arrive on --iface are answered (IP_RECVIF, which QNX's io-sock and
-macOS both have), so an Ethernet cable into some other network never gets an answer
-from here. A client keeps its address across restarts of either side: the leases are
-kept in a file, by MAC address. Replies go to the subnet's broadcast address (the
-Pi has no default route, so 255.255.255.255 has nowhere to go) or straight to a
-client that already has its address.
+Only requests that arrive on --iface, the access point's interface (bcm0, or bcm1
+beside the hotspot link), are answered (IP_RECVIF, which QNX's io-sock and macOS both
+have), so the hotspot or an Ethernet cable into some other network never gets an
+answer from here. A client keeps its address across restarts of either side: the
+leases are kept in a file, by MAC address. Replies go to the subnet's broadcast
+address, which leaves on the access point's interface, or straight to a client that
+already has its address; never to 255.255.255.255, which would follow the default
+route (none without the uplink, the hotspot link with it).
 """
 
 from __future__ import annotations
@@ -318,7 +321,7 @@ def pool_range(spec: str) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="dhcpd.py", description="DHCP for the Pi's own Wi-Fi network: addresses only, no router, no DNS.")
-    p.add_argument("--iface", default=None, help="answer only requests that arrive on this interface (bcm0 on the Pi)")
+    p.add_argument("--iface", default=None, help="answer only requests that arrive on this interface (the access point's on the Pi: bcm0, or bcm1 beside the hotspot link)")
     p.add_argument("--server", required=True, help="this machine's address on that network")
     p.add_argument("--netmask", required=True)
     p.add_argument("--pool", required=True, help="FIRST-LAST, inside the network")
