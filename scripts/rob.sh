@@ -8,9 +8,10 @@
 #   scripts/rob.sh restart [-y] [brain flags...] npm run restart
 #   scripts/rob.sh status                        npm run status
 #
-# -y answers yes to every question (stop another copy). The games run on
-# the Pi's referee when the Pi answers at PI_ADDR, else here on the Mac. Logs and the
-# process IDs go to .cache/game/. The Wi-Fi is left as it is by stop; scripts/wifi.sh back.
+# -y answers yes to every question (stop another copy). Start and restart first catch
+# this folder up with GitHub (sync_check). The games run on the Pi's referee when the Pi
+# answers at PI_ADDR, else here on the Mac. Logs and the process IDs go to .cache/game/.
+# The Wi-Fi is left as it is by stop; scripts/wifi.sh back.
 set -eu
 cd "$(dirname "$0")/.."
 ROOT=$(pwd -P)
@@ -119,6 +120,36 @@ stop() {
   if [ -n "$(wifi_addr)" ] && [ "$(wifi_addr)" = "$MAC_ADDR" ]; then
     say "the Mac is still on $SSID; scripts/wifi.sh back gives it your usual Wi-Fi"
   fi
+}
+
+# This folder against GitHub, since ROB runs whatever is on disk: a folder that fell
+# behind once served a dashboard from hours before. Behind with nothing local, it
+# catches up and starts again from the new rob.sh; anything else is only said. Off the
+# internet (gamemaster has none) the fetch gives up after 10 s and the start goes on.
+sync_check() {
+  [ "${GM_NO_SYNC:-}" = 1 ] && return 0
+  git rev-parse --git-dir > /dev/null 2>&1 || return 0
+  up=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null) || return 0
+  GIT_TERMINAL_PROMPT=0 git fetch -q 2>/dev/null &
+  f=$!
+  n=0
+  while kill -0 "$f" 2>/dev/null; do
+    n=$((n + 1))
+    if [ "$n" -ge 20 ]; then kill "$f" 2>/dev/null; say "could not reach GitHub; not checked whether this folder is up to date"; return 0; fi
+    sleep 0.5
+  done
+  wait "$f" || { say "could not reach GitHub; not checked whether this folder is up to date"; return 0; }
+  behind=$(git rev-list --count "HEAD..$up")
+  ahead=$(git rev-list --count "$up..HEAD")
+  [ "$behind" = 0 ] && { [ "$ahead" = 0 ] || say "this folder has $ahead commit(s) not on $up yet; git push"; return 0; }
+  if [ "$ahead" = 0 ] && [ -z "$(git status --porcelain --untracked-files=no)" ]; then
+    say "this folder was $behind commit(s) behind $up; catching up"
+    git merge -q --ff-only "$up"
+    GM_NO_SYNC=1 exec sh "$0" "$@"
+  fi
+  say "WARNING: this folder is $behind commit(s) behind $up and has local changes or commits, so ROB runs old code."
+  say "  git status, then git pull --rebase (or commit and push first)"
+  ask "Start the old code anyway?" || exit 1
 }
 
 preflight() {
@@ -246,9 +277,9 @@ cmd=${1:-start}
 [ $# -gt 0 ] && shift
 if [ "${1:-}" = "-y" ]; then YES=1; shift; fi
 case "$cmd" in
-start) start "$@" ;;
+start) sync_check start ${YES:+-y} "$@"; start "$@" ;;
 stop) stop ;;
-restart) stop; start "$@" ;;
+restart) sync_check restart ${YES:+-y} "$@"; stop; start "$@" ;;
 status) status ;;
 *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
