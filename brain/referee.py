@@ -1,7 +1,7 @@
 """`python3 -m brain.referee --table http://MAC:8090`: the game master's rules on the
 QNX Pi, playing through the Table the brain on the Mac serves (brain/remote.py).
 
-  python3 -m brain.referee --table URL [--token T] [--seed N]
+  python3 -m brain.referee --table URL [--token T | --token-file F] [--seed N]
 
 The same loop as the Host's own (brain/lobby.py, shared with brain/host.py): listen
 for a game's name, play it (brain/games/), go back to idle; a game that fails says the
@@ -135,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python3 -m brain.referee")
     p.add_argument("--table", required=True, help="the brain's Table for the referee, http://HOST:PORT (its port 8090 by default)")
     p.add_argument("--token", default=os.environ.get("GM_TABLE_TOKEN") or None, help="the table's token (default $GM_TABLE_TOKEN)")
+    p.add_argument("--token-file", default=os.environ.get("GM_TABLE_TOKEN_FILE", "~/.gm-table-token"),
+                   help="read the token from this file when --token is not given (default ~/.gm-table-token, put there by qnx/deploy.sh)")
     p.add_argument("--seed", type=int, default=None, help="the rng's seed (default: the brain's, else random)")
     p.add_argument("--facts-file", default=os.environ.get("GM_FACTS_FILE", "~/gm-memory/facts.json"),
                    help="lasting group facts outside deployed code (default ~/gm-memory/facts.json)")
@@ -143,8 +145,14 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     # Talk reads this file but never writes it. Deploy copies it only with --with-key.
     os.environ.setdefault("GM_ENV_FILE", str(Path(args.key_file).expanduser()))
+    token = args.token
+    if not token:
+        try:
+            token = Path(args.token_file).expanduser().read_text().strip() or None
+        except OSError:
+            token = None  # no file: a table without a token
     try:
-        table = PiTable(RemoteTable(args.table, token=args.token))
+        table = PiTable(RemoteTable(args.table, token=token))
     except ValueError as e:
         print(f"python3 -m brain.referee: {e}", file=sys.stderr)
         return 2

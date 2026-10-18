@@ -4,7 +4,8 @@
 #
 #   qnx/referee.sh http://<mac>:8090 [user@host]     the Pi as in qnx/deploy.sh
 #
-# $GM_TABLE_TOKEN, when set, is passed on (the brain's --table-token). Extra ssh
+# $GM_TABLE_TOKEN, when set, is passed on (the brain's --table-token); otherwise the
+# referee reads ~/.gm-table-token on the Pi, put there by qnx/deploy.sh. Extra ssh
 # options go in $GM_SSH_OPTS. On the Pi's own network a referee already runs from
 # boot; this one takes the table from it, and `qnx/ap.sh referee-restart` gives it back.
 set -eu
