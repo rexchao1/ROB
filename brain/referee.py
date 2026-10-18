@@ -28,10 +28,13 @@ import random
 import sys
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from brain import games
+from brain.facts import Facts
 from brain.lobby import Lobby
+from brain.pi_talk import PiTable
 from brain.remote import RemoteTable, TableRefused, TableReset, TableUnreachable
 
 RETRY = 2.0  # seconds between attempts to reach the table
@@ -40,8 +43,9 @@ LISTEN_WINDOW = 4.0
 
 
 class Referee:
-    def __init__(self, table: Any, seed: int | None = None, log: Callable[[str], None] | None = None, retry: float = RETRY) -> None:
+    def __init__(self, table: Any, seed: int | None = None, log: Callable[[str], None] | None = None, retry: float = RETRY, remembered: Facts | None = None) -> None:
         self.table = table
+        self.facts = remembered if remembered is not None else Facts()
         self.seed = seed
         self.rng = random.Random(seed)
         self.options = games.Options()
@@ -109,7 +113,7 @@ class Referee:
         naps (brain/lobby.py), until stop()."""
         self._lobby = Lobby(
             self.table, self.rng, options=self.options, listen_window=self.listen_window, recovery=self.recovery,
-            rigs=self.table.rig, stopped=self.stopped.is_set, log=lambda msg: self._log(f"referee: {msg}"),
+            remembered=self.facts, rigs=self.table.rig, stopped=self.stopped.is_set, log=lambda msg: self._log(f"referee: {msg}"),
         )
         self._lobby.run(welcome, nap=nap)
 
@@ -132,15 +136,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--table", required=True, help="the brain's Table for the referee, http://HOST:PORT (its port 8090 by default)")
     p.add_argument("--token", default=os.environ.get("GM_TABLE_TOKEN") or None, help="the table's token (default $GM_TABLE_TOKEN)")
     p.add_argument("--seed", type=int, default=None, help="the rng's seed (default: the brain's, else random)")
+    p.add_argument("--facts-file", default=os.environ.get("GM_FACTS_FILE", "~/gm-memory/facts.json"),
+                   help="lasting group facts outside deployed code (default ~/gm-memory/facts.json)")
+    p.add_argument("--key-file", default=os.environ.get("GM_PI_KEY_FILE", "~/gm-memory/talk.env"),
+                   help="opt-in Pi talk key file (default ~/gm-memory/talk.env)")
     args = p.parse_args(argv)
+    # Talk reads this file but never writes it. Deploy copies it only with --with-key.
+    os.environ.setdefault("GM_ENV_FILE", str(Path(args.key_file).expanduser()))
     try:
-        table = RemoteTable(args.table, token=args.token)
+        table = PiTable(RemoteTable(args.table, token=args.token))
     except ValueError as e:
         print(f"python3 -m brain.referee: {e}", file=sys.stderr)
         return 2
     print(f"referee: playing on the table at {table.url}", flush=True)
     try:
-        Referee(table, seed=args.seed).run()
+        Referee(table, seed=args.seed, remembered=Facts(Path(args.facts_file).expanduser())).run()
     except KeyboardInterrupt:
         return 0
     except TableRefused as e:

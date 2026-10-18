@@ -101,6 +101,10 @@ class Table(Protocol):
         Never names a player and never changes anything."""
         ...
 
+    def talk_settings(self) -> dict[str, Any]:
+        """Current provider, model, effort and personality, without keys."""
+        ...
+
     def chat(self, situation: str, heard: str = "", **facts: Any) -> str | None:
         """A line of talk for a moment the script leaves open (D42): the welcome's reply
         to small talk ("welcome", what was heard, and facts such as the player count and

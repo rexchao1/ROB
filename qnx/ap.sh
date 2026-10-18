@@ -1,6 +1,7 @@
 #!/bin/sh
 # The Pi's own Wi-Fi network (qnx/ap/net.conf), from the Mac. qnx/README.md has the
-# order to do this in; nothing but `persist` writes a file outside ~/gmnet on the Pi.
+# order to do this in; nothing but `persist` and `uplink persist` write a file outside
+# ~/gmnet on the Pi.
 #
 #   qnx/ap.sh install            copy qnx/ap and the access point's setup (with the password
 #                                from .env.local, made there if missing) to ~/gmnet on the Pi
@@ -10,10 +11,16 @@
 #                                the hotspot link, so this ssh session survives
 #   qnx/ap.sh persist            back up the two boot files and make the access point the boot
 #                                setup, on probation (15 min after each boot until confirmed)
+#   qnx/ap.sh uplink trial [SECONDS]
+#                                the access point on bcm1 beside the hotspot link, so the Pi keeps
+#                                its internet; ends like a trial (the iPhone hotspot on 2.4 GHz)
+#   qnx/ap.sh uplink persist     make that the boot setup, on probation; with no hotspot at boot
+#                                the access point runs alone on bcm0 as persist has it
 #   qnx/ap.sh reboot             reboot the Pi
 #   qnx/ap.sh confirm            over the new network: keep it (or keep a trial until reboot)
 #   qnx/ap.sh revert             back to the hotspot: end a trial, or restore the files and reboot
-#   qnx/ap.sh status             what runs on the Pi: the boot setup, the access point, its clients
+#   qnx/ap.sh status             what runs on the Pi: the boot setup, the access point, its clients,
+#                                the uplink and whether the Pi reaches the internet
 #   qnx/ap.sh referee-restart    start the Pi's boot referee again (after qnx/deploy.sh)
 #
 # The Pi: $GM_PI, else qnxuser@PI_ADDR when this Mac is on the gamemaster network, else
@@ -83,12 +90,19 @@ trial|persist|confirm|revert|status|referee-restart)
     echo "ap: reboot the Pi to start it (qnx/ap.sh reboot); then within $PROBATION s, from the gamemaster network: qnx/ap.sh confirm"
   fi
   ;;
+uplink)
+  pi "sudo -n $DEST/gm-net.sh uplink $*"
+  case "${1:-}" in
+  trial) echo "ap: $SSID comes up on bcm1 and the hotspot link stays, so does this ssh session; qnx/ap.sh status in half a minute" ;;
+  persist) echo "ap: reboot the Pi to start it (qnx/ap.sh reboot); then within $PROBATION s, from the gamemaster network: qnx/ap.sh confirm" ;;
+  esac
+  ;;
 reboot)
   pi 'sudo -n shutdown -S reboot' || true
   echo "ap: the Pi is rebooting (about a minute)"
   ;;
 *)
-  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
   ;;
 esac

@@ -549,6 +549,11 @@ class Dash:
             del data["values"]["sweep_step"]
         if self._content_edited:
             data["content"] = self.content()
+        try:
+            if json.loads(self.settings_path.read_text()) == data:
+                return
+        except (OSError, ValueError):
+            pass
         tmp = self.settings_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2) + "\n")
         tmp.replace(self.settings_path)

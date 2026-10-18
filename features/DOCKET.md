@@ -306,7 +306,7 @@ D41 2026-10-18 [V] amends D30
   touches: D30 D40
 
 D42 2026-10-18 [V] amends D14
-  resp: every host line carries flavor from a scripted set with variations, and a model may add a quip or a line of small talk; a model only writes words, and nothing the host says changes the rules, the count or the state of a game, which are fixed in code; the host sounds like a person running game night, not an assistant: one or two short spoken sentences, casual and playful, never revealing a secret role or word, never inventing a rule, always in character as the robot host [V]
+  resp: every host line carries flavor from a scripted set with variations, and a model may add a quip or a line of small talk; a model only writes words, and nothing the host says changes the rules, the count or the state of a game, which are fixed in code; the host sounds like a person running game night, not an assistant: one to three short spoken sentences, casual and playful, answering what was said before steering back to a game, never revealing a secret role or word, never inventing a rule, always in character as the robot host [V]
   -> structural
   serves: N1
   touches: D14 D40
@@ -410,7 +410,7 @@ D53 2026-10-18 [I]
 
 D54 2026-10-18 [I] !
   pre:   the welcome is listening [I]
-  trig:  the microphone hears room noise: fewer than three real words with no question pending, or one of the transcriber's phantoms such as `thank you` or `you` [I]
+  trig:  the microphone hears room noise: fewer than three real words with no question pending, unless it is a greeting, a short question to the host or its name (`hi`, `what's up`, `how are you`, `hey rob`); or one of the transcriber's phantoms such as `thank you` or `you`; or transcription junk, one short phrase over and over or a run-on past forty words [I]
   resp:  nothing of the reply kind: the host says nothing and keeps listening [I]
   serves: N1
   touches: D39
@@ -419,8 +419,8 @@ D54 2026-10-18 [I] !
 D55 2026-10-18 [I]
   pre:   the welcome is listening and no talk model answers [I>V]
   trig:  someone says something to the host that is neither a game, a count, a yes, a no nor a question about the games [I>V]
-  resp:  the host gives one short playful reply that steers back to picking a game, from the script when no model answers; at most one reply every eight seconds and six in one welcome [I>V]
-  why:   the gap and the cap are the build's numbers (brain/games/common.py Options), not Rex's [I]
+  resp:  the host answers what was said (a hello, a question, a joke asked for) and steers back to picking a game when it fits, from the script when no model answers; at most one reply a second, with no cap, since the nap after two unanswered nudges ends idle talk [I>V]
+  why:   the gap is the build's number (brain/games/common.py Options), not Rex's [I]
   sib:   D54
   serves: N1
   touches: D39 D40 D42

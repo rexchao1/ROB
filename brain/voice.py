@@ -24,7 +24,6 @@ import struct
 import sys
 import time
 import urllib.error
-import urllib.request
 import wave
 from collections.abc import Callable
 from collections import OrderedDict
@@ -257,6 +256,7 @@ ELEVEN_VOICE = "iP95p4xoKVk53GoZ742B"  # "Chris", a stock premade voice: natural
 ELEVEN_TIMEOUT = 5.0
 ELEVEN_CACHE = ROOT / ".cache" / "eleven"  # .cache/ is gitignored
 ELEVEN_REST = 30.0  # after a failure, Piper alone for this long, so a dead network does not stall every line
+ELEVEN_WARM = "https://api.elevenlabs.io/v1/models"  # a free GET that opens the connection (ElevenVoice.warm)
 
 
 def env(name: str) -> str | None:
@@ -335,7 +335,11 @@ class ElevenVoice:
         hit = self._memo.get(key)
         if hit is not None:
             return hit
-        path = self.cache_dir / f"{key}.pcm" if self.cache_dir is not None else None
+        from brain.voice_cache import fixed_keys
+
+        # One-off speech stays in the bounded RAM memo, even if an old disk file exists.
+        scripted = line_key(text) in fixed_keys()
+        path = self.cache_dir / f"{key}.pcm" if self.cache_dir is not None and scripted else None
         if path is not None and path.is_file():
             pcm = path.read_bytes()
             self._memo.put(key, pcm)
@@ -359,22 +363,36 @@ class ElevenVoice:
         self._memo.put(key, pcm)
         return pcm
 
+    def warm(self) -> int | None:
+        """Open the ElevenLabs connection before a line needs it, or freshen one that has
+        sat idle a while (brain.net.warm): the ms it took, 0 when it was warm already,
+        None while the settings want another voice or it is unreachable."""
+        from brain import net
+
+        if self._wanted() is None:
+            return None
+        return net.warm(ELEVEN_WARM, {"xi-api-key": self._key})
+
     def _fetch(self, text: str, voice_id: str) -> bytes:
+        """The line's audio, over the kept connection (brain/net.py); its time goes to the log."""
+        from brain import net
+
         body = {
             "text": text,
             "model_id": self.model,
             "voice_settings": {"stability": 0.4, "similarity_boost": 0.8, "style": 0.35, "use_speaker_boost": True},
         }
-        req = urllib.request.Request(
+        start = time.monotonic()
+        pcm = net.request(
+            "POST",
             f"{ELEVEN_API}/{voice_id}?output_format=pcm_16000",
-            data=json.dumps(body).encode("utf-8"),
-            method="POST",
-            headers={"xi-api-key": self._key, "Content-Type": "application/json", "Accept": "audio/pcm"},
+            json.dumps(body).encode("utf-8"),
+            {"xi-api-key": self._key, "Content-Type": "application/json", "Accept": "audio/pcm"},
+            self.timeout,
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as res:
-            pcm = res.read()
         if not pcm:
             raise VoiceError("ElevenLabs sent no audio")
+        self.log(f"voice: ElevenLabs {int((time.monotonic() - start) * 1000)} ms for {seconds(pcm):.1f} s of audio")
         return pcm + b"\x00" * (len(pcm) % 2)  # whole 16-bit samples
 
 

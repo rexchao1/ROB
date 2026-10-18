@@ -48,8 +48,8 @@ class Options:
     answer_seconds: float = 20.0  # a short answer ("sure", "nah") counts this long after the host asks something
     nudge_seconds: float = 25.0  # this long with nothing said to the host gets a nudge
     nudges: int = 2  # nudges before the host waits quietly
-    reply_gap_seconds: float = 8.0  # at most one small-talk reply this often
-    max_chats: int = 6  # small-talk replies in one welcome
+    reply_gap_seconds: float = 1.0  # at most one small-talk reply this often
+    max_chats: int = 100  # small-talk replies in one welcome; the nap after two unanswered nudges ends idle talk
     count_fresh_seconds: float = 120.0  # a game named this soon after the welcome's count starts on it
 
 

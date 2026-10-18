@@ -1,5 +1,5 @@
 #!/bin/sh
-# The Pi's status light (qnx/led/status-led.py), from the Mac: red once the Pi is on,
+# The Pi's status light (qnx/led/status-led.py), from the Mac; the colours add up: red once the Pi is on,
 # yellow once its Wi-Fi is up, green once the robot (ROBOT_MAC in qnx/ap/net.conf) is
 # on the same Wi-Fi. The wiring is in qnx/README.md, "The status light".
 #
