@@ -725,7 +725,7 @@ D90 2026-10-18 [I]
 D91 2026-10-18 [I]
   pre:   a day phase vote has begun and the host has asked `Player one, who?` [I]
   trig:  the answer names two seats, negates one, or corrects itself, `players three and four`, `anyone but four`, `player four, no wait, two` [I]
-  resp:  the vote is asked for once more; a vote names exactly one living seat; a soundalike (`for`, `too`, `won`) counts only right after `player`, `number` or `seat`; `me too` is not a vote [I]
+  resp:  a vote that names two seats or negates one is asked for once more; a correction takes the later seat (`player four, no wait, two` is two); a vote names exactly one living seat; a soundalike (`for`, `too`, `won`) counts only right after `player`, `number` or `seat`; `me too` is not a vote [I]
   sib:   none -- the re-ask is the failure handling and is in resp
   serves: N1
   touches: D12 D26
