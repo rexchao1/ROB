@@ -1,4 +1,12 @@
 {"run-manifest":1}
+{"file":"features/host-character.feature","title":"A model line that breaks the house rules is replaced by a scripted one [1]","status":"unbound"}
+{"file":"features/host-character.feature","title":"A model line that breaks the house rules is replaced by a scripted one [2]","status":"unbound"}
+{"file":"features/host-character.feature","title":"A model line that breaks the house rules is replaced by a scripted one [3]","status":"unbound"}
+{"file":"features/host-character.feature","title":"A model line that fits is said","status":"unbound"}
+{"file":"features/host-character.feature","title":"A slow model answer gets a scripted line","status":"unbound"}
+{"file":"features/host-character.feature","title":"Picking a voice turns the live voice on when a key is set","status":"unbound"}
+{"file":"features/host-character.feature","title":"Switching the personality applies to the next line and changes no ruled line","status":"unbound"}
+{"file":"features/host-character.feature","title":"Without a key the pick is kept and the local voice speaks","status":"unbound"}
 {"file":"features/hosting.feature","title":"A face up during heads down is warned by seat","status":"passed"}
 {"file":"features/hosting.feature","title":"A majority vote by voice eliminates a seat","status":"passed"}
 {"file":"features/hosting.feature","title":"A second face blanks the private screen","status":"passed"}
@@ -9,6 +17,17 @@
 {"file":"features/hosting.feature","title":"Leaning in shows one player their private screen","status":"passed"}
 {"file":"features/hosting.feature","title":"The host counts the table and numbers the seats","status":"passed"}
 {"file":"features/hosting.feature","title":"The private screen returns when the second face leaves","status":"passed"}
+{"file":"features/hot-seat.feature","title":"A repeat puts a player out","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"An answer from another category's list is out offline","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"An answer on no list counts offline","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"Silence puts a player out","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"The clock tightens each round [1]","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"The clock tightens each round [2]","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"The clock tightens each round [3]","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"The clock tightens each round [4]","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"The host names a category and turns to each player saying go","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"The last player in wins","status":"unbound"}
+{"file":"features/hot-seat.feature","title":"Twelve rounds with two still in is a tie","status":"unbound"}
 {"file":"features/imposter.feature","title":"Each player gives one clue in seat order","status":"passed"}
 {"file":"features/imposter.feature","title":"Voting out anyone else lets the Imposter survive","status":"passed"}
 {"file":"features/imposter.feature","title":"Voting out the Imposter ends the round with a reveal","status":"passed"}
@@ -21,9 +40,68 @@
 {"file":"features/mafia.feature","title":"The Mafia's target dies when the Doctor saves someone else","status":"passed"}
 {"file":"features/mafia.feature","title":"The eliminated player's role is revealed","status":"passed"}
 {"file":"features/mafia.feature","title":"The village wins when no Mafia is left","status":"passed"}
+{"file":"features/operator-dashboard.feature","title":"A button sends a phrase the robot understands","status":"unbound"}
+{"file":"features/operator-dashboard.feature","title":"A key entered on the page is never shown again","status":"unbound"}
+{"file":"features/operator-dashboard.feature","title":"A key request from another site's page is refused","status":"unbound"}
+{"file":"features/operator-dashboard.feature","title":"A tuning change applies live and is saved","status":"unbound"}
+{"file":"features/operator-dashboard.feature","title":"The page shows the game as it happens","status":"unbound"}
+{"file":"features/operator-dashboard.feature","title":"The volume is set on the robot and never saved","status":"unbound"}
+{"file":"features/operator-dashboard.feature","title":"Typed hearing replaces the microphone at the next listen","status":"unbound"}
+{"file":"features/pausing.feature","title":"A tap on the head resumes","status":"unbound"}
+{"file":"features/pausing.feature","title":"Pause holds the game's clock","status":"unbound"}
+{"file":"features/pausing.feature","title":"Stop while paused stops the game","status":"unbound"}
+{"file":"features/pausing.feature","title":"The interrupted listen runs again","status":"unbound"}
+{"file":"features/pausing.feature","title":"The lobby listens in longer windows after thirty quiet seconds","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"A hint costs a question","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"A question about a trait the table knows is answered from the table","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"A question the host cannot answer does not count","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"A right guess wins","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"Giving up reveals the secret","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"Left to the host, it picks a way round and says which","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"Silence gets a nudge, then take your time, then quiet","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"The host asks which way round","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"The host counts out loud only at the moments that matter [1]","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"The host counts out loud only at the moments that matter [2]","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"The host counts out loud only at the moments that matter [3]","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"The host wins on a right guess","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"Three minutes of silence ends the game","status":"unbound"}
+{"file":"features/twenty-questions.feature","title":"Twenty questions used up without a right guess is the player's win","status":"unbound"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [1]","status":"passed"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [2]","status":"passed"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [3]","status":"passed"}
 {"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [4]","status":"passed"}
 {"file":"features/wavelength.feature","title":"The psychic alone sees the target","status":"passed"}
 {"file":"features/wavelength.feature","title":"The psychic rotates and the total is announced after three rounds","status":"passed"}
+{"file":"features/welcome.feature","title":"A game named with a headcount that disagrees waits for the count to agree","status":"unbound"}
+{"file":"features/welcome.feature","title":"A headcount above the host's gets a second look","status":"unbound"}
+{"file":"features/welcome.feature","title":"A headcount below the host's gets no second look","status":"unbound"}
+{"file":"features/welcome.feature","title":"A no gets the other games the count can play","status":"unbound"}
+{"file":"features/welcome.feature","title":"A yes within twenty seconds starts the suggested game on the welcome's count","status":"unbound"}
+{"file":"features/welcome.feature","title":"Asking how a game goes gets its rules from the script","status":"unbound"}
+{"file":"features/welcome.feature","title":"Asking what games there are lists the games built","status":"unbound"}
+{"file":"features/welcome.feature","title":"Naming a game starts it at any time","status":"unbound"}
+{"file":"features/welcome.feature","title":"Nobody seen is asked to sit where the host can see them","status":"unbound"}
+{"file":"features/welcome.feature","title":"Not now gets a line and the host waits quietly","status":"unbound"}
+{"file":"features/welcome.feature","title":"Reset in the middle of a game ends it and the welcome comes again","status":"unbound"}
+{"file":"features/welcome.feature","title":"Room noise gets nothing","status":"unbound"}
+{"file":"features/welcome.feature","title":"Silence gets two nudges, then quiet","status":"unbound"}
+{"file":"features/welcome.feature","title":"Small talk gets one short reply that steers back to the game","status":"unbound"}
+{"file":"features/welcome.feature","title":"The ring shows the listening colour while the host listens","status":"unbound"}
+{"file":"features/welcome.feature","title":"The suggestion follows the headcount [1]","status":"unbound"}
+{"file":"features/welcome.feature","title":"The suggestion follows the headcount [2]","status":"unbound"}
+{"file":"features/welcome.feature","title":"The suggestion follows the headcount [3]","status":"unbound"}
+{"file":"features/welcome.feature","title":"The suggestion follows the headcount [4]","status":"unbound"}
+{"file":"features/welcome.feature","title":"The suggestion follows the headcount [5]","status":"unbound"}
+{"file":"features/welcome.feature","title":"The suggestion follows the headcount [6]","status":"unbound"}
+{"file":"features/welcome.feature","title":"The welcome greets the table as ROB, counts, says hello to each seat and suggests Mafia","status":"unbound"}
+{"file":"features/wordle.feature","title":"A mishearing is undone with no","status":"unbound"}
+{"file":"features/wordle.feature","title":"A repeated word uses no guess","status":"unbound"}
+{"file":"features/wordle.feature","title":"A spelled guess is read letter by letter","status":"unbound"}
+{"file":"features/wordle.feature","title":"A spoken guess is scored and the feedback names the letters","status":"unbound"}
+{"file":"features/wordle.feature","title":"A word the host does not know uses no guess","status":"unbound"}
+{"file":"features/wordle.feature","title":"Guessing the word wins","status":"unbound"}
+{"file":"features/wordle.feature","title":"I give up reveals the word","status":"unbound"}
+{"file":"features/wordle.feature","title":"Something that is not five letters uses no guess","status":"unbound"}
+{"file":"features/wordle.feature","title":"The last guess is confirmed before it counts","status":"unbound"}
+{"file":"features/wordle.feature","title":"Three players take turns","status":"unbound"}
+{"file":"features/wordle.feature","title":"What do we know gets a recap","status":"unbound"}
