@@ -281,5 +281,5 @@ start) sync_check start ${YES:+-y} "$@"; start "$@" ;;
 stop) stop ;;
 restart) sync_check restart ${YES:+-y} "$@"; stop; start "$@" ;;
 status) status ;;
-*) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
