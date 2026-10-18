@@ -17,8 +17,8 @@ def run(levels, **kw):
 
 
 def test_ends_after_speech_then_silence():
-    levels = [QUIET] * 8 + [LOUD] * 10 + [QUIET] * 20
-    assert run(levels) == 8 + 10 + 12 - 1  # 12 quiet frames of 60 ms after the last word
+    levels = [QUIET] * 14 + [LOUD] * 10 + [QUIET] * 20
+    assert run(levels) == 14 + 10 + 12 - 1  # 12 quiet frames of 60 ms after the last word
 
 
 def test_silence_alone_never_ends():
@@ -26,7 +26,7 @@ def test_silence_alone_never_ends():
 
 
 def test_the_opening_chime_is_not_speech():
-    assert run([LOUD] * 4 + [QUIET] * 50) is None
+    assert run([QUIET] * 3 + [LOUD] * 5 + [QUIET] * 50) is None  # as logged: loud in frames 3 to 7
 
 
 def test_a_click_is_not_speech():

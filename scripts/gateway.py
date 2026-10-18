@@ -13,6 +13,14 @@ Run it with the gateway's own Python, with the gateway's arguments:
 
 Tuning (environment): GM_END_SILENCE_MS (default 700), GM_SPEECH_RMS (the quietest
 frame that can count as speech, default 400 on a 0 to 32767 scale).
+
+It also swaps the speech-to-text: the gateway's faster-whisper "base" with beam 1 heard
+"tell me about Wordle" as "tell me about where it all", and turned the robot's own
+listening chime (the first ~0.5 s of every window) into "You" or "Oh". Here the chime
+is cut off before transcribing, and the words go to Whisper large-v3-turbo on the Mac's
+GPU through mlx-whisper (about 0.2 s an utterance on an M5), prompted with the game
+names. Without mlx-whisper it falls back to faster-whisper small.en, beam 5, with VAD.
+GM_STT_MODEL picks the mlx model (default mlx-community/whisper-large-v3-turbo).
 """
 
 from __future__ import annotations
@@ -28,7 +36,7 @@ from types import SimpleNamespace
 FRAME_MS = 60
 END_SILENCE_MS = int(os.environ.get("GM_END_SILENCE_MS", "700"))
 SPEECH_RMS = float(os.environ.get("GM_SPEECH_RMS", "400"))
-SKIP_MS = 240  # the robot's own "listening" chime at the start of a window
+SKIP_MS = 600  # the robot's own "listening" chime: loud in frames 3 to 7 of every window
 CALIBRATE = 3  # frames after the chime that measure the room, never counted as speech
 SPEECH_FRAMES = 3  # loud frames out of the last four before it counts as speech
 FLOOR_RATIO = 3.0  # speech is this many times louder than the room
@@ -132,6 +140,54 @@ def install() -> None:
     orchestrator.asyncio.sleep = sleep
 
 
+STT_MODEL = os.environ.get("GM_STT_MODEL", "mlx-community/whisper-large-v3-turbo")
+HEARD_RMS = 300.0  # a window with no frame this loud is silence (the room sits near 150 to 200)
+PROMPT = "ROB, let's play Mafia, Imposter, Wavelength, Wordle, Hot Seat or Twenty Questions."
+
+
+def install_stt() -> None:
+    """Replace faster-whisper's transcribe with one that drops the chime and uses a
+    better model."""
+    import numpy as np
+    from stackchan_mcp.stt import faster_whisper as engine_module
+
+    chime = 16000 * 2 * SKIP_MS // 1000  # bytes of 16 kHz 16-bit mono
+    try:
+        import mlx_whisper
+    except ImportError:
+        mlx_whisper = None
+        log.warning("mlx-whisper not installed; using faster-whisper small.en")
+    fallback = SimpleNamespace(model=None)
+
+    def run(audio: np.ndarray) -> str:
+        if mlx_whisper is not None:
+            out = mlx_whisper.transcribe(audio, path_or_hf_repo=STT_MODEL, language="en", initial_prompt=PROMPT,
+                                         condition_on_previous_text=False)
+            return str(out["text"]).strip()
+        if fallback.model is None:
+            from faster_whisper import WhisperModel
+
+            fallback.model = WhisperModel("small.en", device="cpu", compute_type="int8")
+        segments, _ = fallback.model.transcribe(audio, language="en", beam_size=5, vad_filter=True, initial_prompt=PROMPT)
+        return "".join(seg.text for seg in segments).strip()
+
+    async def transcribe(self, pcm: bytes, **opts):
+        audio = np.frombuffer(pcm[chime:] if len(pcm) > chime else b"", dtype=np.int16).astype(np.float32) / 32768.0
+        started = time.monotonic()
+        frames = audio[: audio.size // 960 * 960].reshape(-1, 960) * 32768.0
+        loudest = float(np.sqrt((frames * frames).mean(axis=1)).max()) if frames.size else 0.0
+        # nobody spoke: Whisper would make words up out of the room noise or the prompt
+        text = await asyncio.to_thread(run, audio) if loudest >= HEARD_RMS else ""
+        if text.rstrip(".") and text.rstrip(".") in PROMPT:
+            text = ""
+        log.info("heard %r (%.2f s, %.1f s of audio)", text, time.monotonic() - started, audio.size / 16000)
+        return {"text": text, "language": "en", "language_probability": 1.0}
+
+    engine_module.FasterWhisperEngine.transcribe = transcribe
+    if mlx_whisper is not None:  # load the model now, not on the first thing someone says
+        run(np.zeros(16000, dtype=np.float32))
+
+
 def find_opus() -> None:
     """opuslib looks for libopus with ctypes, which on a Mac does not search Homebrew's
     folder; add it so the gateway can decode the robot's audio."""
@@ -146,6 +202,7 @@ def main() -> int:
     from stackchan_mcp.cli import main as gateway_main
 
     install()
+    install_stt()
     logging.getLogger("gamemaster.endpoint").setLevel(logging.INFO)
     sys.argv[0] = "stackchan-mcp"
     return gateway_main()

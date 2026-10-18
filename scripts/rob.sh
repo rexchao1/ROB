@@ -113,6 +113,12 @@ preflight() {
     say "no AI key in .env.local: ROB uses its scripted lines (the dashboard's Keys tab can add one)"
   fi
   command -v stackchan-mcp > /dev/null || { say "stackchan-mcp is not installed (uv tool install stackchan-mcp)" >&2; exit 1; }
+  # the gateway's ears: Whisper large-v3-turbo on the Mac's GPU (scripts/gateway.py)
+  gp="$(uv tool dir)/stackchan-mcp/bin/python"
+  if [ "$(uname -m)" = arm64 ] && ! "$gp" -c "import mlx_whisper" 2> /dev/null; then
+    say "installing mlx-whisper into the gateway (better speech recognition)"
+    uv pip install -q --python "$gp" mlx-whisper
+  fi
 }
 
 # Stops whatever holds ROB's ports from another folder, after asking; 0 when this
