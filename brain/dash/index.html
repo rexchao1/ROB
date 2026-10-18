@@ -96,43 +96,30 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 }
 .stop.arm { background: var(--red); color: var(--ink); border-color: var(--red); }
 
-/* ---------- lobby ---------- */
-.lobby {
-  min-height: calc(100dvh - 56px); display: flex; flex-direction: column; justify-content: center; gap: 32px;
-  padding: 32px; max-width: 1200px; margin: 0 auto;
-}
-.lobby h1 { font-size: clamp(40px, 6vw, 72px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin: 0; }
-.lobby .hint { font-size: 17px; color: var(--text-2); margin-top: 12px; }
-.lobby .hint q { color: var(--text); font-weight: 600; quotes: '"' '"'; }
-.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.gcard {
-  position: relative; overflow: hidden; padding: 0; text-align: left;
-  aspect-ratio: 16 / 10; border-radius: var(--r); color: var(--text); background: #111;
-  border: 1px solid var(--line-2); transition: border-color .15s;
-}
-.gcard .art { position: absolute; inset: 0; }
-.gcard::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(0,0,0,.88) 100%); }
-.gcard:hover { border-color: var(--text); }
-.gcard:active { transform: scale(.99); }
-.gcard.starting { outline: 2px solid var(--text); outline-offset: 3px; }
-.gcard .txt { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px; z-index: 1; }
-.gcard .gn { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; display: block; }
-.gcard .gd { font-size: 15px; color: var(--text-2); margin-top: 4px; display: block; }
-.gcard.starting .gd { color: var(--text); font-weight: 600; }
-.checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line-2); }
-.check { padding: 12px 16px 0 0; }
-.check + .check { padding-left: 16px; border-left: 1px solid var(--line); }
-.check .k { display: block; font-size: 13px; color: var(--text-2); }
-.check .v { display: block; font-size: 15px; font-weight: 600; }
-.check.warn .v { color: var(--amber); }
-.check.bad .v { color: var(--red); }
-.check.idle .v { color: var(--text-2); }
-
-/* ---------- in game ---------- */
+/* ---------- the stage: idle and in game ---------- */
 .game {
   height: calc(100dvh - 56px); min-height: 600px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 16px 32px max(24px, env(safe-area-inset-bottom)); max-width: 1200px; margin: 0 auto;
 }
+/* idle: the welcome centred over the robot, which is the biggest thing on the page */
+body[data-screen="idle"] .game > div:first-child { text-align: center; }
+body[data-screen="idle"] .phase { font-size: clamp(36px, 5.2vw, 64px); letter-spacing: -0.03em; line-height: 1.05; margin-top: 8px; }
+body[data-screen="idle"] .meta, body[data-screen="idle"] .steps, body[data-screen="idle"] .ring-empty { display: none; }
+body[data-screen="idle"] .ring .bot { width: clamp(200px, 26vw, 340px); }
+body:not([data-screen="idle"]) .idlebar { display: none; }
+body.is-paused .actions, body.is-paused .fold, body.is-paused .idlebar { visibility: hidden; }
+.idlebar { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+.idlebar .games { gap: 8px; }
+.idlebar .games button { height: 44px; padding: 0 18px; font-size: 15px; border-radius: 22px; }
+.idlebar .games button.starting { background: var(--text); color: var(--ink); border-color: var(--text); }
+.custbtn { height: 44px; padding: 0 18px; border-radius: 22px; font-size: 15px; font-weight: 600; background: var(--over); color: var(--text); border: 1px solid var(--line-2); display: inline-flex; align-items: center; gap: 8px; max-width: 100%; white-space: nowrap; }
+.custbtn:hover { border-color: var(--text-2); }
+.custbtn span { font-weight: 400; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.custbtn span:not(:empty)::before { content: "\00b7"; margin-right: 8px; }
+.status { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; font-size: 13px; color: var(--text-2); }
+.check .k { color: var(--text-3); margin-right: 6px; }
+.check .v { font-weight: 600; color: var(--text); }
+.check.warn .v { color: var(--amber); } .check.bad .v { color: var(--red); } .check.idle .v { color: var(--text-2); }
 .meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 14px; color: var(--text-2); }
 .meta b, .meta .chip { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .meta b { color: var(--ink); background: var(--text); }
@@ -186,8 +173,37 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .bot[data-face="card"] .f-card { display: inline; }
 .bot[data-face="off"] .f-face { display: none; }
 .bot[data-face="off"] .f-bg { fill: #000; }
-.ring .bot { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: clamp(140px, 19vw, 256px); z-index: 1; }
-.lobby-head { display: flex; align-items: center; gap: 32px; }
+.ring .bot { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%) rotate(var(--turn, 0deg)); transform-origin: 50% 90%; width: clamp(140px, 19vw, 256px); z-index: 1; transition: transform .5s cubic-bezier(.2,.8,.2,1), width .3s; }
+#botGame { cursor: pointer; }
+/* the robot's life: a breath while it waits, a bob while it talks, a pulse while it listens */
+@media (prefers-reduced-motion: no-preference) {
+  .bot-shell { animation: breathe 4.2s ease-in-out infinite; }
+  .bot.talking .bot-shell { animation: talkbob .28s ease-in-out infinite alternate; }
+  .bot[data-mood="listening"] .bot-led { animation: listen 1.6s ease-in-out infinite; }
+  .bot.poke .bot-shell { animation: poke .5s ease-out; }
+  .bot.asleep { animation: nod 5s ease-in-out infinite; }
+  .bot .zz span { animation: zz 2.4s ease-out infinite; }
+  .bot .zz span:nth-child(2) { animation-delay: .8s; } .bot .zz span:nth-child(3) { animation-delay: 1.6s; }
+}
+@keyframes breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-1.5%) scale(1.012); } }
+@keyframes talkbob { from { transform: translateY(0) rotate(-.6deg); } to { transform: translateY(-2%) rotate(.6deg); } }
+@keyframes listen { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes poke { 0% { transform: scale(1); } 30% { transform: scale(.94) rotate(-3deg); } 60% { transform: scale(1.03) rotate(2deg); } 100% { transform: scale(1); } }
+@keyframes nod { 0%, 100% { transform: translateX(-50%) rotate(-7deg) translateY(2%); } 50% { transform: translateX(-50%) rotate(-9deg) translateY(3%); } }
+@keyframes zz { 0% { opacity: 0; transform: translate(0, 0) scale(.7); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(28px, -60px) scale(1.2); } }
+.bot .zz { display: none; position: absolute; right: -6%; top: -4%; font-weight: 800; color: var(--text); font-size: clamp(14px, 1.6vw, 22px); pointer-events: none; }
+.bot .zz span { position: absolute; left: 0; top: 0; opacity: 0; }
+.bot.asleep .zz { display: block; }
+.bot.asleep, .bot.paused { --led: var(--line); --led-glow: transparent; }
+.bot.asleep .eo, .bot.asleep .eh { display: none; }
+.bot.asleep .ec { display: inline; }
+.bot.asleep .mh, .bot.asleep .mo, .bot.asleep .me, .bot.asleep .mu { display: none; }
+.bot.asleep .mc { display: inline; }
+.bot.paused .eo { display: none; } .bot.paused .eh { display: inline; }
+.bot.asleep .bot-shell, .bot.paused .bot-shell { animation: none; filter: brightness(.8); }
+.bot.asleep { transform: translateX(-50%) rotate(-7deg) translateY(2%); }
+.robnote { text-align: center; font-size: 15px; color: var(--text-2); min-height: 1.4em; }
+.robnote b { color: var(--text); font-weight: 600; }
 
 .seat { z-index: 2; }
 .seat .av { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
@@ -462,34 +478,11 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
 .kclear.arm { color: var(--ink); background: var(--red); }
 
 /* ---------- ROB: name and the customize button ---------- */
-.rob { flex: none; display: grid; justify-items: center; gap: 8px; }
-.rob .bot { width: 128px; }
-.robname { font-size: 15px; font-weight: 800; letter-spacing: .2em; padding-left: .2em; }
-.custbtn {
-  margin-top: 16px; height: 44px; padding: 0 18px; border-radius: 22px; font-size: 15px; font-weight: 600;
-  background: var(--text); color: var(--ink); border: 0; display: inline-flex; align-items: center; gap: 8px;
-}
-.custbtn { max-width: 100%; white-space: nowrap; }
-.custbtn span { font-weight: 400; color: rgba(0,0,0,.55); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.custbtn span:not(:empty)::before { content: "\00b7"; margin-right: 8px; }
-.custbtn:active { transform: scale(.97); }
-
-/* ---------- paused ---------- */
 .pausebtn {
   height: 40px; padding: 0 16px; border-radius: var(--r); font-weight: 600; font-size: 15px;
   background: var(--over); color: var(--text); border: 1px solid var(--line-2);
 }
 .pausebtn:hover { border-color: var(--text-2); }
-.paused {
-  position: fixed; inset: 0; z-index: 4; display: grid; place-items: center; padding: 96px 16px 32px;
-  background: rgba(0,0,0,.8); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); animation: fade .2s ease-out;
-}
-.paused .box { text-align: center; width: min(560px, 100%); }
-.paused .w { font-size: clamp(56px, 10vw, 112px); font-weight: 800; letter-spacing: -0.035em; line-height: 1; }
-.paused .d { color: var(--text-2); font-size: 17px; margin-top: 12px; }
-.paused .big { margin-top: 32px; min-width: 240px; height: 64px; font-size: 20px; }
-body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
-
 .toast {
   position: fixed; left: 50%; top: max(72px, calc(env(safe-area-inset-top) + 64px)); transform: translate(-50%, -8px); opacity: 0;
   background: var(--text); color: var(--ink); padding: 12px 16px; border-radius: var(--r);
@@ -499,19 +492,8 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
 .toast.err { background: var(--red); }
 
 /* ---------- responsive ---------- */
-@media (max-width: 900px) {
-  .cards { grid-template-columns: 1fr; gap: 8px; }
-  .gcard { aspect-ratio: auto; height: 112px; }
-  .gcard .txt { padding: 16px; top: 0; display: flex; flex-direction: column; justify-content: flex-end; }
-  .gcard::after { background: linear-gradient(90deg, rgba(0,0,0,.88) 0%, rgba(0,0,0,.55) 60%, rgba(0,0,0,.15) 100%); }
-  .lobby { gap: 24px; justify-content: flex-start; }
-}
 @media (max-width: 640px) {
   .top { padding: max(12px, env(safe-area-inset-top)) 16px 0; gap: 8px; }
-  .lobby { padding: 24px 16px; }
-  .lobby .hint { font-size: 15px; }
-  .check { padding-right: 8px; }
-  .check + .check { padding-left: 12px; }
   .game { padding: 8px 16px max(16px, env(safe-area-inset-bottom)); height: auto; min-height: calc(100dvh - 56px); grid-template-rows: auto 1fr auto; }
   .meta { font-size: 15px; gap: 8px; }
   .phase { font-size: 64px; }
@@ -522,9 +504,6 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   .seat.tap { width: 64px; height: 64px; outline-offset: 3px; }
   .seat.tap .sn { font-size: 28px; }
   .ring .bot { width: 104px; }
-  .lobby-head { gap: 16px; }
-  .rob .bot { width: 72px; }
-  .robname { font-size: 13px; }
   .seat.has-av .sn { width: 22px; height: 22px; font-size: 12px; right: -3px; bottom: -3px; }
   .seat.tap.has-av .sn { width: 24px; height: 24px; font-size: 13px; }
   .bottom { padding-top: 32px; }
@@ -548,7 +527,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   .pback svg { width: 16px; height: 16px; }
   .chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pausebtn, .stop { padding: 0 12px; white-space: nowrap; }
-  body[data-screen="game"] .brand { display: none; }
+  body:not([data-screen="idle"]) .brand { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -575,42 +554,8 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   </button>
 </header>
 
-<!-- Lobby -->
-<main class="lobby" id="lobby">
-  <div class="lobby-head">
-    <div class="rob">
-      <div class="bot" aria-hidden="true"><div class="bot-shell"></div><div class="bot-led"></div></div>
-      <div class="robname">ROB</div>
-    </div>
-    <div>
-      <h1>What are we playing?</h1>
-      <div class="hint">Say <q>let's play Mafia</q> or tap a game.</div>
-      <button class="custbtn" id="custBtn" aria-controls="drawer">Customize ROB<span id="custNow"></span></button>
-    </div>
-  </div>
-  <div class="cards">
-    <button class="gcard" data-g="mafia"><span class="art" data-scene="mafia-night"></span>
-      <span class="txt"><span class="gn">Mafia</span><span class="gd" data-d="One Mafia, one Doctor, everyone else votes.">One Mafia, one Doctor, everyone else votes.</span></span></button>
-    <button class="gcard" data-g="imposter"><span class="art" data-scene="imposter"></span>
-      <span class="txt"><span class="gn">Imposter</span><span class="gd" data-d="Everyone gets the word but one player.">Everyone gets the word but one player.</span></span></button>
-    <button class="gcard" data-g="wavelength"><span class="art" data-scene="wavelength"></span>
-      <span class="txt"><span class="gn">Wavelength</span><span class="gd" data-d="Guess where the clue lands, 1 to 10.">Guess where the clue lands, 1 to 10.</span></span></button>
-    <button class="gcard" data-g="twenty"><span class="art" data-scene="twenty"></span>
-      <span class="txt"><span class="gn">20 Questions</span><span class="gd" data-d="Yes or no questions until someone gets it.">Yes or no questions until someone gets it.</span></span></button>
-    <button class="gcard" data-g="hotseat"><span class="art" data-scene="hotseat"></span>
-      <span class="txt"><span class="gn">Hot Seat</span><span class="gd" data-d="Name one in the category before time runs out.">Name one in the category before time runs out.</span></span></button>
-    <button class="gcard" data-g="wordle"><span class="art" data-scene="wordle"></span>
-      <span class="txt"><span class="gn">Wordle</span><span class="gd" data-d="Say or spell five-letter words.">Say or spell five-letter words.</span></span></button>
-  </div>
-  <div class="checks" id="checks">
-    <div class="check" id="ckRobot"><span class="k">Robot</span><span class="v">Checking</span></div>
-    <div class="check" id="ckCam"><span class="k">Camera</span><span class="v">Checking</span></div>
-    <div class="check" id="ckVoice"><span class="k">Voice</span><span class="v">Checking</span></div>
-  </div>
-</main>
-
-<!-- In game -->
-<main class="game" id="game" hidden>
+<!-- The stage: the robot in the middle of the table, idle or in a game -->
+<main class="game" id="game">
   <div>
     <div class="meta"><b id="gName">Mafia</b><span id="meta"></span></div>
     <h1 class="phase" id="phase">Night</h1>
@@ -620,7 +565,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   <div class="ring" id="ring">
     <svg id="rays" aria-hidden="true"></svg>
     <div id="seatLayer"></div>
-    <div class="bot" id="botGame" aria-hidden="true"><div class="bot-shell"></div><div class="bot-led"></div></div>
+    <div class="bot" id="botGame" role="button" tabindex="0" aria-label="Tap ROB's head"><div class="bot-shell"></div><div class="bot-led"></div><div class="zz" aria-hidden="true"><span>z</span><span>z</span><span>z</span></div></div>
     <div class="ring-empty" id="ringEmpty">Counting the table</div>
   </div>
 
@@ -630,11 +575,25 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
       <div class="d" id="bannerD"></div>
       <div class="arow"><button class="big" id="againBtn">Play again</button><button class="big ghost" id="lobbyBtn">Pick another game</button></div>
     </div>
+    <div class="robnote" id="robNote" role="status"></div>
     <div class="subtitle" aria-live="polite">
       <div class="heard" id="heardLine"></div>
       <div class="line" id="subLine"></div>
     </div>
     <div class="actions" id="actions"></div>
+    <div class="idlebar" id="idlebar">
+      <div class="ahint">Say <q>let's play Mafia</q> or tap a game.</div>
+      <div class="arow games" id="games">
+        <button class="big ghost" data-game="mafia">Mafia</button><button class="big ghost" data-game="imposter">Imposter</button><button class="big ghost" data-game="wavelength">Wavelength</button>
+        <button class="big ghost" data-game="twenty">20 Questions</button><button class="big ghost" data-game="hotseat">Hot Seat</button><button class="big ghost" data-game="wordle">Wordle</button>
+      </div>
+      <button class="custbtn" id="custBtn" aria-controls="drawer">Customize ROB<span id="custNow"></span></button>
+      <div class="status" id="checks">
+        <span class="check" id="ckRobot"><span class="k">Robot</span><span class="v">Checking</span></span>
+        <span class="check" id="ckCam"><span class="k">Camera</span><span class="v">Checking</span></span>
+        <span class="check" id="ckVoice"><span class="k">Voice</span><span class="v">Checking</span></span>
+      </div>
+    </div>
     <div class="fold" id="foldWrap">
       <button class="foldbtn" id="foldBtn" aria-expanded="false">Say it for them</button>
       <form class="sayfor" id="sayFor" autocomplete="off" hidden>
@@ -644,15 +603,6 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
     </div>
   </div>
 </main>
-
-<!-- Paused (lobby or game) -->
-<div class="paused" id="paused" hidden role="status">
-  <div class="box">
-    <div class="w" id="pausedWord">Paused</div>
-    <div class="d" id="pausedHint">Say "resume" or tap the robot's head.</div>
-    <button class="big" id="resumeBtn">Resume</button>
-  </div>
-</div>
 
 <!-- Settings drawer -->
 <div class="dscrim" id="dscrim"></div>
@@ -894,20 +844,19 @@ function render() {
   const g = gameOf(s);
   const inGame = !!g && !(g.over && dismissed === keyOf(g));
   const name = (g && g.game) || lastGameName || starting;
-  document.body.dataset.screen = inGame ? "game" : "lobby";
-  $("lobby").hidden = inGame; $("game").hidden = !inGame;
+  document.body.dataset.screen = inGame ? "game" : "idle";
   const paused = s.paused === true, asleep = !paused && s.asleep === true;
   $("stopBtn").hidden = !inGame || !!(g && g.over);
   $("pauseBtn").hidden = $("stopBtn").hidden || paused;
-  $("paused").hidden = !paused && !asleep;
-  $("pausedWord").textContent = asleep ? "Napping" : "Paused";
-  $("pausedHint").textContent = asleep ? "ROB isn't listening. Tap the robot's head to wake it." : 'Say "resume" or tap the robot\'s head.';
-  $("resumeBtn").textContent = asleep ? "Wake ROB" : "Resume";
+  // napping and pausing are things the robot does, not a screen over it
+  robotState = asleep ? "asleep" : paused ? "paused" : "";
+  document.querySelectorAll(".bot").forEach((b) => { b.classList.toggle("asleep", asleep); b.classList.toggle("paused", paused); });
+  $("robNote").innerHTML = asleep ? "ROB is napping. <b>Tap its head</b> to wake it." : paused ? 'Paused. Say <b>"resume"</b> or <b>tap its head</b>.' : "";
   document.body.classList.toggle("is-paused", paused || asleep);
   const tone = inGame && !g.over ? (TONE[g.phase] || "idle") : "idle";
   if (document.body.dataset.tone !== tone) document.body.dataset.tone = tone;
   setScene(inGame ? sceneFor(name, g.phase) : "lobby");
-  if (inGame) { starting = null; renderGame(s, g, name); } else renderLobby(s);
+  if (inGame) { starting = null; renderGame(s, g, name); } else renderIdle(s);
   renderRobot(s);
   renderDrawer(s);
 }
@@ -934,7 +883,7 @@ function faceSVG(fs) {
 }
 const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const face = { eyes: "open", mouth: "closed" };
-let faceKey = "", speaking = false, talkT;
+let faceKey = "", speaking = false, talkT, robotState = "";
 function paintFace() { document.querySelectorAll(".bot").forEach((b) => { b.dataset.eyes = face.eyes; b.dataset.mouth = face.mouth; }); }
 function talk() {
   clearTimeout(talkT);
@@ -964,6 +913,8 @@ function renderRobot(s) {
   const mx = led ? Math.max(...led) : 0, hue = mx >= 8 ? led.map((v) => Math.round(v * 255 / mx)).join(",") : null;
   document.querySelectorAll(".bot").forEach((b) => {
     b.dataset.face = r.face || "idle";
+    b.dataset.mood = r.mood || "idle";
+    b.classList.toggle("talking", !!r.speaking && !robotState);
     b.style.setProperty("--led", hue ? "rgb(" + hue + ")" : "");
     b.style.setProperty("--led-glow", hue ? "rgba(" + hue + "," + (0.2 + 0.5 * mx / 255).toFixed(2) + ")" : "");
   });
@@ -972,14 +923,17 @@ function renderRobot(s) {
   renderVolume(r.volume);
 }
 
-// ---------- lobby ----------
-function renderLobby(s) {
+// ---------- idle: the welcome over the robot ----------
+const IDLE_WORDS = "What are we playing?";
+function renderIdle(s) {
   if (starting && Date.now() - startingT > 15000) starting = null;
-  document.querySelectorAll(".gcard").forEach((c) => {
-    const on = c.dataset.g === starting, d = c.querySelector(".gd");
-    c.classList.toggle("starting", on);
-    d.textContent = on ? "Starting" : d.dataset.d;
-  });
+  const ph = $("phase");
+  if (ph.textContent !== IDLE_WORDS) { ph.textContent = IDLE_WORDS; ph.classList.remove("swap"); void ph.offsetWidth; ph.classList.add("swap"); }
+  $("gName").hidden = true; $("meta").innerHTML = ""; $("steps").innerHTML = ""; stepsKey = "";
+  $("banner").hidden = true; $("foldWrap").hidden = false;
+  $("games").querySelectorAll("[data-game]").forEach((b) => b.classList.toggle("starting", b.dataset.game === starting));
+  renderSeats(s, {});
+  renderActions(s, { phase: "idle" });
   const now = Date.now() / 1000;
   const p = s.photo;
   const robotRecent = (p && now - p.t < 60) || (lastEventT && now - lastEventT < 60);
@@ -993,17 +947,27 @@ function renderLobby(s) {
 }
 function setCheck(id, cls, text) { const el = $(id); el.className = "check " + cls; el.lastElementChild.textContent = text; }
 function fmtAge(a) { a = Math.max(0, Math.round(a)); return a < 60 ? a + " s" : a < 3600 ? Math.floor(a / 60) + " min" : Math.floor(a / 3600) + " h"; }
-document.querySelectorAll(".gcard").forEach((c) => c.addEventListener("click", async () => {
-  starting = c.dataset.g; startingT = Date.now();
-  if (state) renderLobby(state);
-  const d = await act("game", { name: c.dataset.g });
-  if (!d) { starting = null; if (state) renderLobby(state); }
-}));
+$("games").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-game]"); if (!b) return;
+  starting = b.dataset.game; startingT = Date.now();
+  if (state) renderIdle(state);
+  const d = await act("game", { name: starting });
+  if (!d) { starting = null; if (state) renderIdle(state); }
+});
+// a tap on ROB's head: wakes or resumes it, shows the card during a deal, and otherwise just makes it wobble
+$("botGame").addEventListener("click", () => {
+  const b = $("botGame");
+  if (robotState) { hear("resume"); return; }
+  const g = gameOf(state);
+  if (g && g.phase === "deal" && !g.over) hear("show me");
+  b.classList.remove("poke"); void b.offsetWidth; b.classList.add("poke");
+});
+$("botGame").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("botGame").click(); } });
 
 // ---------- in game ----------
 let lastPhaseKey = "", actionsKey = "", countN = null;
 function renderGame(s, g, name) {
-  $("gName").textContent = GAME_NAMES[name] || ""; $("gName").hidden = !GAME_NAMES[name];
+  $("gName").hidden = true; // the backdrop and the phase say which game this is
   const ph = $("phase"), label = PHASES[g.phase] || g.phase || "Starting";
   if (ph.textContent !== label) { ph.textContent = label; ph.classList.remove("swap"); void ph.offsetWidth; ph.classList.add("swap"); }
   // only what the seat ring cannot show
@@ -1151,6 +1115,7 @@ function renderSeats(s, g) {
   // the pointer comes out of the robot's face
   const oy = cy - bot.offsetHeight * 0.55;
   const yaw = Math.max(-90, Math.min(90, s.yaw || 0));
+  bot.style.setProperty("--turn", (yaw * 0.12).toFixed(1) + "deg"); // the shell leans the way the head turns
   const [bx, by] = pos(yaw, 0.74), [ax, ay] = pos(-90, 1), [ex, ey] = pos(90, 1);
   $("rays").innerHTML =
     '<path d="M' + ax + " " + ay + " A " + rx + " " + ry + " 0 0 1 " + ex + " " + ey + '" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>' +
@@ -1170,6 +1135,7 @@ $("againBtn").onclick = () => {
   act("game", { name }, "Starting " + GAME_NAMES[name]);
 };
 $("lobbyBtn").onclick = () => { const g = gameOf(state); if (g) setDismissed(keyOf(g)); render(); };
+$("lobbyBtn").textContent = "Back to ROB";
 
 let stopT;
 $("stopBtn").onclick = () => {
@@ -1183,7 +1149,6 @@ $("stopBtn").onclick = () => {
   act("game", { name: "stop" }, "Stopping the game");
 };
 $("pauseBtn").onclick = () => hear("pause");
-$("resumeBtn").onclick = () => hear("resume");
 
 $("foldBtn").onclick = () => {
   const f = $("sayFor"), open = f.hidden;
