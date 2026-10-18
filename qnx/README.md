@@ -45,7 +45,7 @@ Once, from the phone hotspot to the Pi's network. The Mac's Wi-Fi changes in ste
 
 ## The status light
 
-A red-yellow-green LED on the Pi's header shows how far the box has come up: red once the Pi is on, yellow once its Wi-Fi has an address (the hotspot or `gamemaster`), green once the robot is on the same Wi-Fi. Green means the robot's MAC (`ROBOT_MAC` in `qnx/ap/net.conf`) answers a ping, not that the gateway on the Mac has it. A new robot needs its MAC there: it is the `device_id` in the gateway's `curl -s 127.0.0.1:8767/status`.
+A red-yellow-green LED on the Pi's header shows how far the box has come up, each colour adding to the ones before: red once the Pi is on, yellow too once its Wi-Fi has an address (the hotspot or `gamemaster`), green too once the robot is on the same Wi-Fi. Green means the robot's MAC (`ROBOT_MAC` in `qnx/ap/net.conf`) answers a ping, not that the gateway on the Mac has it. A new robot needs its MAC there: it is the `device_id` in the gateway's `curl -s 127.0.0.1:8767/status`.
 
 Wiring, with a 220-330 ohm resistor on each colour leg: red to pin 11 (GPIO17), yellow to pin 13 (GPIO27), green to pin 15 (GPIO22), the common (longest) leg to pin 9 (ground). Pin 1 is the square pad at the header's end away from the USB ports, in the row nearer the middle of the board.
 
