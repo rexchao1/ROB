@@ -31,6 +31,13 @@ Against the robot: run the gateway (`stackchan-mcp serve --transport streamable-
 
 ## Running a game
 
+    npm start          # or double-click "Start ROB.command"
+    npm run restart    # stop everything and start again
+    npm run stop
+    npm run status     # what is running, from which folder, and whether the robot is connected
+
+`npm start` (`scripts/rob.sh`) sets up what is missing (the venv, the Piper voice), offers to stop a ROB running from another folder, uses the Pi's referee when the Pi answers (and offers to join `gamemaster` when it is in range), otherwise runs the games on this Mac over its current Wi-Fi, then starts the gateway, the OTA stub and the brain in the background, waits for the robot and opens the dashboard. Brain flags go after `--` (`npm start -- --speaker mac --host 0.0.0.0`); `-y` first answers yes to its questions. Logs go to `.cache/game/`. The steps below are what it does, by hand.
+
 Three boxes on the Pi's own Wi-Fi network, `gamemaster` (2.4 GHz, WPA2, no internet; the password is `GM_WIFI_PASSWORD` in `.env.local`): the QNX Pi at 10.77.0.1 runs the network and the referee, the Mac at 10.77.0.2 runs the gateway, the ears, the voice, vision and the brain, and the robot gets its address from the Pi. The Mac keeps its internet over the iPhone's USB cable. Moving over from the phone hotspot is done once (`qnx/README.md`, "The changeover").
 
 1. Power the Pi from its 27 W supply (a laptop's USB port browns it out). About a minute later its network is up and its referee is waiting for the Mac.

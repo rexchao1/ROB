@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "sh scripts/rob.sh start",
+    "stop": "sh scripts/rob.sh stop",
+    "restart": "sh scripts/rob.sh restart",
+    "status": "sh scripts/rob.sh status",
     "test": "node scripts/lane.mjs full",
     "test:fast": "node scripts/lane.mjs fast",
     "typecheck": "tsc -p tsconfig.json --noEmit --incremental",
