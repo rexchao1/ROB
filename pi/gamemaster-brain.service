@@ -1,0 +1,19 @@
+# The game master's brain: one Python process driving the robot through the gateway.
+# install.sh fills in @USER@ and @REPO@ (the repository root) and installs this to
+# /etc/systemd/system/. Extra flags go in GM_BRAIN_ARGS in the EnvironmentFile.
+[Unit]
+Description=Game master brain
+Wants=stackchan-gateway.service
+After=stackchan-gateway.service
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+EnvironmentFile=/etc/gamemaster/gamemaster.env
+ExecStart=@REPO@/.venv/bin/python -m brain --gateway http://127.0.0.1:8767/mcp --pcm http://127.0.0.1:8766/pcm --voice-dir @REPO@/voice --piper-model @REPO@/voice/piper/en_US-lessac-medium.onnx $GM_BRAIN_ARGS
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+[project]
+name = "gamemaster"
+version = "0.0.0"
+description = "The game master's brain: one Python process on the Raspberry Pi driving the StackChan body through the stackchan-mcp gateway."
+requires-python = ">=3.11"
+# numpy and OpenCV: the camera's JPEGs, YuNet face detection (cv2.FaceDetectorYN, the
+# model in brain/models/), the synthetic table fixtures. OpenCV stays on 4.x: 5.0 drops
+# APIs and its new graph engine is untested on the Pi. Pillow renders the role cards.
+dependencies = ["numpy", "opencv-python-headless>=4.10,<5", "pillow>=10.1"]
+
+[project.optional-dependencies]
+# mcp: the fake gateway the tests drive (test/fake_gateway.py). The brain itself speaks
+# the gateway's JSON-RPC directly and does not need it.
+dev = ["pytest", "mcp>=2.3,<3"]
+# Piper: the local voice for composed lines (brain/voice.py); optional.
+voice = ["piper-tts"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["brain"]
+
+[tool.pytest.ini_options]
+# Python unit tests; run by both lanes (`npm run pytest`). conftest.py there
+# refuses any socket that is not loopback.
+testpaths = ["test/py"]
+pythonpath = [".", "test", "test/fixtures"]
+addopts = "-p no:cacheprovider"

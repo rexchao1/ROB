@@ -1,0 +1,29 @@
+{"run-manifest":1}
+{"file":"features/hosting.feature","title":"A face up during heads down is warned by seat","status":"passed"}
+{"file":"features/hosting.feature","title":"A majority vote by voice eliminates a seat","status":"passed"}
+{"file":"features/hosting.feature","title":"A second face blanks the private screen","status":"passed"}
+{"file":"features/hosting.feature","title":"A second peek in the same night sits the player out for the round","status":"passed"}
+{"file":"features/hosting.feature","title":"A spoken count that disagrees with the host's count stops the start","status":"passed"}
+{"file":"features/hosting.feature","title":"A tied vote eliminates nobody","status":"passed"}
+{"file":"features/hosting.feature","title":"Every head down means no warning","status":"passed"}
+{"file":"features/hosting.feature","title":"Leaning in shows one player their private screen","status":"passed"}
+{"file":"features/hosting.feature","title":"The host counts the table and numbers the seats","status":"passed"}
+{"file":"features/hosting.feature","title":"The private screen returns when the second face leaves","status":"passed"}
+{"file":"features/imposter.feature","title":"Each player gives one clue in seat order","status":"passed"}
+{"file":"features/imposter.feature","title":"Voting out anyone else lets the Imposter survive","status":"passed"}
+{"file":"features/imposter.feature","title":"Voting out the Imposter ends the round with a reveal","status":"passed"}
+{"file":"features/imposter.feature","title":"Words are dealt and one player sees IMPOSTER","status":"passed"}
+{"file":"features/mafia.feature","title":"Discussion time runs by the clock [1]","status":"passed"}
+{"file":"features/mafia.feature","title":"Discussion time runs by the clock [2]","status":"passed"}
+{"file":"features/mafia.feature","title":"Roles are dealt one at a time through the private screen","status":"passed"}
+{"file":"features/mafia.feature","title":"The Doctor saves the Mafia's target","status":"passed"}
+{"file":"features/mafia.feature","title":"The Mafia win when they equal the rest","status":"passed"}
+{"file":"features/mafia.feature","title":"The Mafia's target dies when the Doctor saves someone else","status":"passed"}
+{"file":"features/mafia.feature","title":"The eliminated player's role is revealed","status":"passed"}
+{"file":"features/mafia.feature","title":"The village wins when no Mafia is left","status":"passed"}
+{"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [1]","status":"passed"}
+{"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [2]","status":"passed"}
+{"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [3]","status":"passed"}
+{"file":"features/wavelength.feature","title":"A spoken guess scores by distance from the target [4]","status":"passed"}
+{"file":"features/wavelength.feature","title":"The psychic alone sees the target","status":"passed"}
+{"file":"features/wavelength.feature","title":"The psychic rotates and the total is announced after three rounds","status":"passed"}

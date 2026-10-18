@@ -1,0 +1,26 @@
+{
+  // The one typecheck for the TypeScript side (step bindings, harness, config).
+  // Both lanes run it exactly once via `npm run typecheck`. Vitest strips types.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".cache/tsc.tsbuildinfo"
+  },
+  "include": ["test", "vitest.config.ts"]
+}

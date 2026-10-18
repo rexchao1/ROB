@@ -1,0 +1,330 @@
+"""The host (brain/host.py) on the fake gateway and a virtual clock: what the rules ask
+of the Table reaches the robot as it should, read back from the fake's record (the far
+side). The camera is the synthetic table (test/fixtures/table.py), so vision runs for
+real; the only thing set by hand is the seats, where a test starts mid-game."""
+
+import random
+import threading
+
+import pytest
+
+import table
+from brain import cards, games, lines, vision
+from brain.banter import NoBanter
+from brain.clock import VirtualClock
+from brain.body import BodyError
+from brain.lobby import PAUSE
+from brain.host import (
+    GIVE_UP,
+    MOOD_LEDS,
+    PHOTO_TRIES,
+    RECOVERY,
+    REPROMPT,
+    RETURN_SPEED,
+    SCAN_SEEN,
+    SWEEP_SPEED,
+    TURN_SETTLE,
+    Host,
+    HostError,
+    glide_seconds,
+)
+from brain.table import Card
+from brain.voice import TestVoice
+
+SEATS = [-60.0, -30.0, 0.0, 30.0, 60.0]
+CLOSE = [table.Face(0, close=True)]
+TWO_CLOSE = [table.Face(-15, close=True), table.Face(15, close=True)]
+
+
+class Worker:
+    """fn(*args) on its own thread registered on the clock, as the host's loop is; the
+    test moves the clock and reads .result once .done."""
+
+    def __init__(self, clock, fn, *args):
+        self.done = False
+        self.result = None
+        self.error = None
+        ready = threading.Event()
+
+        def work():
+            clock.register()
+            ready.set()
+            try:
+                self.result = fn(*args)
+            except BaseException as e:  # noqa: BLE001 - handed to the test
+                self.error = e
+            finally:
+                self.done = True
+                clock.unregister()
+
+        threading.Thread(target=work, daemon=True).start()
+        ready.wait(5)
+        clock.settle()
+
+
+@pytest.fixture
+def clock():
+    return VirtualClock()
+
+
+@pytest.fixture
+def host(body, clock, tmp_path):
+    return Host(body, clock, TestVoice(), NoBanter(), sets_dir=tmp_path, rng=random.Random(0), log=lambda _: None)
+
+
+def _calls(fake, tool):
+    return [c for c in fake.device.calls if c["tool"] == tool]
+
+
+def _said(fake):
+    return [c["line"] for c in _calls(fake, "pcm")]
+
+
+def _faces(fake):
+    return [c["args"]["face"] for c in _calls(fake, "set_avatar")]
+
+
+def _show(fake, faces):
+    """What the camera sees wherever the head points."""
+    fake.device.push_frame(table.png(0, faces), None)
+
+
+def _scene(fake, faces, pans):
+    """What the camera sees at each of these pans."""
+    for pan in pans:
+        fake.device.push_frame(table.png(pan, faces), pan)
+
+
+def _dealing(host, fake, clock, seat=3, card=Card("DOCTOR")):
+    """show_private(seat, card) mid-game, run until the head has turned, the host has
+    asked for the lean-in, and the first photo (nobody close) is taken: t = 0.2."""
+    host.seat_bearings = list(SEATS)
+    host.prepare([Card("MAFIA"), card])
+    _show(fake, [])
+    w = Worker(clock, host.show_private, seat, card)
+    clock.advance(0.2)
+    return w
+
+
+def test_count_sweeps_left_to_right_finds_the_seats_and_comes_back(host, fake, clock):
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
+    w = Worker(clock, host.count)
+    clock.advance(30)
+    assert w.done and w.result == 5
+    assert [c["args"]["yaw"] for c in _calls(fake, "move_head")] == [round(p) for p in vision.sweep_pans()] + [0]
+    assert len(_calls(fake, "take_photo")) == len(vision.sweep_pans())
+    assert host.seat_bearings == pytest.approx(SEATS, abs=3)
+
+
+def test_count_turns_quickly_to_the_start_then_glides_and_fills_the_ring(host, fake, clock):
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
+    w = Worker(clock, host.count)
+    clock.advance(30)
+    assert w.done and w.result == 5
+    speeds = [c["args"]["speed"] for c in _calls(fake, "move_head")]
+    assert speeds == ["high"] + [SWEEP_SPEED] * (len(vision.sweep_pans()) - 1) + [RETURN_SPEED]
+    rings = [c["args"]["colors"] for c in _calls(fake, "set_leds")]
+    assert len(rings) == len(vision.sweep_pans())
+    assert [sum(rgb != [0, 0, 0] for rgb in ring) for ring in rings] == sorted(sum(rgb != [0, 0, 0] for rgb in ring) for ring in rings)
+    assert all(rgb != [0, 0, 0] for rgb in rings[-1]), "the ring is full when the sweep ends"
+    assert len({i for i, rgb in enumerate(rings[-1]) if rgb == list(SCAN_SEEN)}) >= 5, "a green light where each player was seen"
+    assert _calls(fake, "set_all_leds")[-1]["args"] == dict(zip("rgb", MOOD_LEDS["idle"])), "the ring goes back to the mood"
+
+
+def test_a_sweep_step_waits_until_the_head_has_settled():
+    assert glide_seconds(0, SWEEP_SPEED) == TURN_SETTLE
+    assert 0.28 <= glide_seconds(vision.SWEEP_DEFAULT_DEG, SWEEP_SPEED) <= 0.36  # 0.3 s measured sharp on the robot
+    assert glide_seconds(90, RETURN_SPEED) > glide_seconds(12, RETURN_SPEED)
+
+
+def test_a_photo_that_fails_is_tried_again_after_a_pause(host, fake, clock):
+    w = Worker(clock, host.count)  # nothing pushed to the camera yet: take_photo is refused
+    clock.advance(1)
+    assert len(_calls(fake, "take_photo")) == 1 and not w.done
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
+    clock.advance(30)
+    assert w.done and w.error is None and w.result == 5
+    assert len(_calls(fake, "take_photo")) == len(vision.sweep_pans()) + 1
+
+
+def test_a_photo_that_keeps_failing_ends_the_count(host, fake, clock):
+    w = Worker(clock, host.count)
+    clock.advance(30)
+    assert w.done and isinstance(w.error, BodyError)
+    assert len(_calls(fake, "take_photo")) == PHOTO_TRIES
+
+
+def test_keep_photos_saves_each_photo_with_its_faces(body, fake, clock, tmp_path):
+    host = Host(body, clock, TestVoice(), NoBanter(), sets_dir=tmp_path / "sets", keep_photos=tmp_path / "photos", log=lambda _: None)
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
+    w = Worker(clock, host.count)
+    clock.advance(30)
+    assert w.done and w.result == 5
+    kept = sorted(p.name for p in (tmp_path / "photos").iterdir())
+    assert len(kept) == len(vision.sweep_pans())
+    assert all("-count-yaw" in name and name.endswith("faces.jpg") for name in kept)
+    assert any("-count-yaw-090-" in name for name in kept) and any("-count-yaw+090-" in name for name in kept)
+
+
+def test_the_card_shows_only_while_one_face_is_close_and_the_deal_ends_when_they_lean_back(host, fake, clock):
+    w = _dealing(host, fake, clock)
+    assert fake.device.yaw == 0 and _said(fake) == ["Player three, lean in."]
+    assert fake.device.screen()["showing"] is None
+    _show(fake, CLOSE)
+    clock.advance(0.3)  # the next photo
+    assert fake.device.screen()["showing"] == {"text": "DOCTOR", "sub": None}
+    assert fake.device.blink is False  # a blink would swap the card for an eye frame
+    clock.advance(2)
+    _show(fake, [])
+    clock.advance(0.3)
+    assert fake.device.screen()["showing"] is None and not w.done
+    clock.advance(1)
+    assert w.done and w.result is True
+    screen = fake.device.screen()
+    assert (screen["face"], screen["blink"], screen["showing"]) == ("idle", True, None)
+
+
+def test_a_second_face_blanks_the_card_at_the_next_photo_and_it_comes_back_after(host, fake, clock):
+    """D8: blank within one second, "One at a time." once, the card back once alone."""
+    w = _dealing(host, fake, clock)
+    _show(fake, CLOSE)
+    clock.advance(0.3)
+    assert fake.device.screen()["showing"] is not None
+    _show(fake, TWO_CLOSE)
+    clock.advance(0.3)  # the next photo, well inside a second
+    assert fake.device.screen()["showing"] is None
+    clock.advance(2)  # several more photos with both still close
+    assert fake.device.screen()["showing"] is None
+    assert _said(fake).count(lines.ONE_AT_A_TIME) == 1
+    _show(fake, CLOSE)
+    clock.advance(0.3)
+    assert fake.device.screen()["showing"] == {"text": "DOCTOR", "sub": None}
+    clock.advance(2)
+    _show(fake, [])
+    clock.advance(2)
+    assert w.done and w.result is True
+    assert _said(fake).count(lines.ONE_AT_A_TIME) == 1
+
+
+def test_nobody_leaning_in_is_asked_again_every_ten_seconds_and_given_up_on_at_thirty(host, fake, clock):
+    w = _dealing(host, fake, clock)
+    clock.advance(REPROMPT + 0.5)
+    assert _said(fake) == ["Player three, lean in."] * 2
+    clock.advance(GIVE_UP - REPROMPT - 0.8)  # t = 29.9
+    assert not w.done and _said(fake) == ["Player three, lean in."] * 3
+    clock.advance(1)
+    assert w.done and w.result is False
+    assert _faces(fake) == ["idle"]  # the card's slot was never set
+
+
+def test_two_faces_that_never_part_end_the_wait(host, fake, clock):
+    w = _dealing(host, fake, clock)
+    _show(fake, TWO_CLOSE)
+    clock.advance(GIVE_UP + 2)
+    assert w.done and w.result is False and _said(fake).count(lines.ONE_AT_A_TIME) == 1
+
+
+def test_show_private_before_prepare_and_a_seat_not_counted_are_refused(host, clock):
+    w = Worker(clock, host.show_private, 1, Card("MAFIA"))
+    assert w.done and isinstance(w.error, HostError)
+    host.seat_bearings = [0.0]
+    w = Worker(clock, host.look, 2)
+    assert w.done and isinstance(w.error, HostError)
+
+
+def test_the_same_cards_load_once(host, fake, clock):
+    deck = [Card("MAFIA"), Card("CIVILIAN")]
+    for cards_ in (deck, list(deck), [Card("WORD", "beach")]):
+        Worker(clock, host.prepare, cards_)
+    loads = _calls(fake, "load_avatar_set")
+    assert len(loads) == 2
+    assert fake.device.manifest == cards.read_manifest(loads[-1]["args"]["archive_path"])
+
+
+def test_faces_up_names_the_seats_looking_up(host, fake, clock):
+    host.seat_bearings = list(SEATS)
+    fake.device.set_table([{"bearing": b, "pose": "frontal" if i == 1 else "down"} for i, b in enumerate(SEATS)])
+    w = Worker(clock, host.faces_up)
+    clock.advance(10)
+    assert w.done and w.result == [2]
+
+
+def test_listening_takes_its_window_on_the_clock_in_pieces_the_gateway_allows(host, fake, clock):
+    fake.device.heard.append("Player Four")
+    w = Worker(clock, host.listen, 45)
+    clock.advance(44)
+    assert not w.done
+    clock.advance(2)
+    assert w.done and w.result == "player four"
+    assert [c["args"]["duration_ms"] for c in _calls(fake, "listen")] == [30000, 15000]
+
+
+def test_mood_keeps_the_hosts_face_and_colours_the_ring(host, fake, clock):
+    Worker(clock, host.mood, "night")
+    assert fake.device.face == "idle"
+    assert fake.device.leds == [[0, 0, 36]] * 12
+
+
+def test_the_loop_starts_the_named_game(host, fake, clock):
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
+    host.start()
+    try:
+        clock.settle()
+        fake.device.heard.append("let's play mafia")
+        clock.advance(host.listen_window + 30)
+        assert host.state["game"] == "mafia" and host.state["seats"] == 5
+        assert lines.count_line(5) in _said(fake) and "Player one, lean in." in _said(fake)
+    finally:
+        host.stop()
+
+
+def test_a_game_that_fails_says_so_and_the_host_listens_again(host, fake, clock, monkeypatch):
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("a bug in the rules")
+
+    monkeypatch.setattr(games, "play", broken)
+    host.start()
+    try:
+        clock.settle()
+        fake.device.heard.append("let's play imposter")
+        clock.advance(host.listen_window + 0.5)  # the first listen ends at 4.15, after the setup's turn
+        assert _said(fake) == [RECOVERY]
+        listens = len(_calls(fake, "listen"))
+        clock.advance(host.listen_window)
+        assert len(_calls(fake, "listen")) == listens + 1
+    finally:
+        host.stop()
+
+
+def test_the_robot_dropping_off_wifi_between_games_does_not_end_the_loop(host, fake, clock, monkeypatch):
+    listen = host.body.listen
+    drops = [BodyError("listen: nothing answered")] * 2
+
+    def flaky(seconds):
+        if drops:
+            raise drops.pop()
+        return listen(seconds)
+
+    monkeypatch.setattr(host.body, "listen", flaky)
+    _scene(fake, [table.Face(b) for b in SEATS], vision.sweep_pans())
+    host.start()
+    try:
+        clock.settle()
+        clock.advance(2 * (host.listen_window + PAUSE) + 1)  # each failed listen takes its window, then the pause
+        assert not drops and _said(fake) == []
+        fake.device.heard.append("let's play mafia")
+        clock.advance(host.listen_window + 30)
+        assert host.state["game"] == "mafia" and lines.count_line(5) in _said(fake)
+    finally:
+        host.stop()
+
+
+def test_stop_ends_a_game_wherever_it_is_without_a_word(host, fake, clock, monkeypatch):
+    monkeypatch.setattr(games, "play", lambda name, table_, *a, **k: table_.wait(1000))
+    host.start()
+    clock.settle()
+    fake.device.heard.append("wavelength")
+    clock.advance(host.listen_window + 10)
+    host.stop()
+    assert _said(fake) == []
+    assert clock.reset() == 0  # refused if the loop were still asleep on the clock

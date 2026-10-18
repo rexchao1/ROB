@@ -1,0 +1,16 @@
+node_modules/
+.venv/
+.cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+
+# The Piper voice model (61 MB); pi/install.sh and voice/README.md say how to fetch it.
+voice/piper/
+
+# Alternate backdrops the page does not use (brain/dash/art/CREDITS.md lists them).
+brain/dash/art/alt/
+.DS_Store

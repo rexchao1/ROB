@@ -1,0 +1,99 @@
+"""What a game asks of the host: the one contract between the rules (brain/games/,
+pure code that decides everything, D14) and the host's body (brain/host.py: the head,
+the camera, the screen, the voice, the ears and the clock).
+
+Seats are numbered 1..N from the host's left to its right, in the order the last
+count() found them (D5). Every method blocks until it is done. Time is the table's
+clock (virtual in test mode, so nothing waits real time in a test), never the wall.
+
+A game never touches the body, the camera or the clock directly, and the host never
+decides a rule. Tests for the rules drive a fake Table; tests for the host drive the
+real one against the fake gateway.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+MOODS = ("idle", "listening", "night", "day", "tense", "win")
+
+
+@dataclass(frozen=True)
+class Card:
+    """Something private for one player's eyes on the host's screen (D7): a role, a
+    word, a target number."""
+
+    text: str  # the big line: "MAFIA", "beach", "7"
+    sub: str | None = None  # an optional small line under it: "cold - hot"
+
+
+class Table(Protocol):
+    def now(self) -> float:
+        """Seconds on the table's clock."""
+        ...
+
+    def wait(self, seconds: float) -> None:
+        """Let `seconds` pass on the table's clock, saying and hearing nothing."""
+        ...
+
+    def say(self, line: str) -> None:
+        """Speak one line, exactly as written (the feature files assert the text).
+        Returns once it has been said."""
+        ...
+
+    def look(self, seat: int | None) -> None:
+        """Turn the head to a seat; None faces straight ahead."""
+        ...
+
+    def count(self) -> int:
+        """Sweep the head across its whole range, find the faces, number the seats 1..N
+        from left to right (replacing any earlier seating) and return N. Says nothing."""
+        ...
+
+    def prepare(self, cards: list[Card]) -> None:
+        """The cards this game will show (at most five, all distinct), so the host can
+        put them on its screen ahead of time; may take a while on the real body. Call it
+        once per game, before the first show_private(). Replaces the previous cards."""
+        ...
+
+    def show_private(self, seat: int, card: Card) -> bool:
+        """D7 and D8, start to finish. Turn to the seat, say "Player N, lean in.", then
+        show the card only while exactly one close face is in view and facing the host:
+        when a second close face appears the screen goes blank within one second and the
+        host says "One at a time."; the card returns when only one is left. Returns True
+        once the player has seen it and leaned back (the screen blank again), or False
+        when nobody leaned in within the host's time limit (the screen blank). `card` must
+        be one of the prepared cards."""
+        ...
+
+    def listen(self, seconds: float) -> str:
+        """Everything heard over the next `seconds`, lower-cased, '' for silence."""
+        ...
+
+    def faces_up(self) -> list[int]:
+        """One heads-down sweep across the seats (D9, D10): the seats where a face is up
+        and facing the host, ascending; [] when every head is down. Says nothing."""
+        ...
+
+    def mood(self, name: str) -> None:
+        """The host's look for a phase, one of MOODS (face and lights). Cosmetic only."""
+        ...
+
+    def report(self, state: dict[str, Any]) -> None:
+        """Publish the game's state (what GET /test/state serves, see brain/games/
+        __init__.py for the keys). Call it after every change the feature files name."""
+        ...
+
+    def quip(self, slot: str, **context: Any) -> None:
+        """Banter at a slot the script marks (D14): may say one extra line or nothing.
+        Never names a player and never changes anything."""
+        ...
+
+    def chat(self, situation: str, heard: str = "", **facts: Any) -> str | None:
+        """A line of talk for a moment the script leaves open (D42): the welcome's reply
+        to small talk ("welcome", what was heard, and facts such as the player count and
+        the suggested game). Written by the host's talk model, or None (no model, no
+        internet, a slow answer, or a line that would not do); the caller then says a
+        scripted line. Says nothing itself, and decides nothing (D14)."""
+        ...

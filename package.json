@@ -1,0 +1,36 @@
+{
+  "name": "gamemaster",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/lane.mjs full",
+    "test:fast": "node scripts/lane.mjs fast",
+    "typecheck": "tsc -p tsconfig.json --noEmit --incremental",
+    "lint": "oxlint --deny-warnings",
+    "lint:features": "node scripts/lint-features.mjs",
+    "pytest": "node scripts/py.mjs -m pytest -q",
+    "validate": "node ~/Documents/RefLib/scope-tools/scope-validate.cjs features/*.feature",
+    "docket": "docketry lint features/DOCKET.md --corpus features",
+    "docket:strict": "docketry lint features/DOCKET.md --corpus features --strict",
+    "manifest": "GM_MANIFEST=1 vitest run --project features && git add run-manifest.ndjson",
+    "brain": "node scripts/py.mjs -m brain",
+    "fake:gateway": "node scripts/py.mjs test/fake_gateway.py",
+    "fixtures": "node scripts/py.mjs test/fixtures/table.py",
+    "setup:py": "uv venv --python 3.11 .venv && uv pip install --python .venv/bin/python -r pyproject.toml --extra dev",
+    "build:avatars": "esbuild scripts/avatars.mjs --bundle --format=esm --minify --legal-comments=none --banner:js=\"/* DiceBear @dicebear/core and @dicebear/lorelei (code MIT, Florian Koerner; Lorelei artwork CC0 1.0, Lisa Wischofsky). Built by npm run build:avatars; see LICENSES.md. */\" --outfile=brain/dash/vendor/dicebear.js"
+  },
+  "devDependencies": {
+    "@bingh/docketry": "0.1.0",
+    "@dicebear/core": "9.4.3",
+    "@dicebear/lorelei": "9.4.2",
+    "@types/node": "^24.19.2",
+    "esbuild": "0.28.2",
+    "gherkin-node-test": "0.11.0",
+    "oxlint": "^1.88.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

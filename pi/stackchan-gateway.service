@@ -1,0 +1,20 @@
+# The StackChan's gateway (stackchan-mcp 0.18.0) as a daemon: MCP at 127.0.0.1:8767/mcp,
+# the robot's WebSocket on :8765, photos, avatar sets and /pcm audio on :8766.
+# install.sh fills in @USER@ and @HOME@ and installs this to /etc/systemd/system/.
+# The environment comes from the EnvironmentFile: the gateway's own .env lookup starts
+# in its site-packages folder, not the working directory, so a .env file is not read.
+[Unit]
+Description=StackChan gateway (stackchan-mcp) for the game master
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+EnvironmentFile=/etc/gamemaster/gamemaster.env
+ExecStart=@HOME@/.local/bin/stackchan-mcp serve --transport streamable-http
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
