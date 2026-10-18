@@ -33,6 +33,7 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import ThreadingHTTPServer
@@ -49,7 +50,7 @@ from brain.remote import PORT as TABLE_PORT
 from brain.remote import TableServer
 from brain.server import FakeControl, serve
 from brain.talk import DEFAULT_MODELS, Talk
-from brain.voice import ELEVEN_MODEL, ELEVEN_VOICE, TestVoice, VoiceError, env, make_voice
+from brain.voice import ELEVEN_MODEL, ELEVEN_VOICE, ElevenVoice, TestVoice, VoiceError, env, make_voice
 
 
 
@@ -123,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.talk or args.talk_model:  # a model given alone keeps the provider; a provider alone takes its default model
         settings.update(talk=args.talk or settings.current.talk, talk_model=args.talk_model)
     talk = Talk(args.banter if args.banter != "none" else "http://127.0.0.1:11434")  # reads brain.settings at each call
+    threading.Thread(target=_keep_warm, args=(talk, voice), name="net-warm", daemon=True).start()
     seed = args.seed if args.seed is not None else random.randrange(1 << 30)
     host = Host(
         body,
@@ -315,6 +317,31 @@ def _test(args: argparse.Namespace, options: games.Options) -> int:
     finally:
         brain.server.server_close()
     return 0
+
+
+WARM_EVERY = 30.0  # seconds between looks at the kept connections (brain.net.REWARM says when one is freshened)
+
+
+def _keep_warm(talk: Talk, voice: object) -> None:
+    """Open the talk's and ElevenLabs' connections (brain/net.py) as the brain starts, and
+    freshen each once it has sat idle a while, before the server drops it, so a reply
+    never waits for a lookup, a connect and a TLS handshake. Whichever provider and voice
+    the settings name at each look are the ones kept warm."""
+    eleven = voice
+    while eleven is not None and not isinstance(eleven, ElevenVoice):
+        eleven = getattr(eleven, "fallback", None)
+    said = False
+    while True:
+        talk_ms = talk.warm()
+        voice_ms = eleven.warm() if eleven is not None else None
+        if not said and (talk_ms or voice_ms):
+            said = True
+            print(f"net: connections open (talk {_ms(talk_ms)}, ElevenLabs {_ms(voice_ms)})", flush=True)
+        time.sleep(WARM_EVERY)
+
+
+def _ms(ms: int | None) -> str:
+    return "none" if ms is None else f"{ms} ms"  # none: not in use, no key, or unreachable
 
 
 def _saved(path: Path) -> set[str]:

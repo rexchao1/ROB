@@ -7,7 +7,7 @@ import urllib.error
 
 import pytest
 
-from brain import settings, talk
+from brain import net, settings, talk
 
 
 @pytest.fixture
@@ -39,13 +39,13 @@ def test_claude_5_5_bodies_send_no_temperature_and_turn_thinking_off_where_allow
 def test_an_http_400_ends_in_none_and_the_message_reaches_the_log_and_status(anthropic, monkeypatch):
     message = "temperature: this model takes only the default"
 
-    def refuse(req, timeout):
-        sent = json.loads(req.data)
-        assert "temperature" not in sent and timeout >= 6
-        body = io.BytesIO(json.dumps({"type": "error", "error": {"type": "invalid_request_error", "message": message}}).encode())
-        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, body)
+    def refuse(method, url, body, headers, timeout):
+        sent = json.loads(body)
+        assert method == "POST" and "temperature" not in sent and timeout >= 6
+        error = io.BytesIO(json.dumps({"type": "error", "error": {"type": "invalid_request_error", "message": message}}).encode())
+        raise urllib.error.HTTPError(url, 400, "Bad Request", {}, error)
 
-    monkeypatch.setattr(talk.urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(net, "request", refuse)
     logs: list[str] = []
     t = talk.Talk(log=logs.append)
     assert t.status()["ok"] is None and t.status()["key_set"] is True
@@ -66,9 +66,11 @@ def test_the_test_button_answers_a_line_or_a_plain_reason(anthropic, monkeypatch
         return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Evening, table. Ready to lose?"}]}
 
     monkeypatch.setattr(talk.Talk, "_post", answer)
-    t = talk.Talk(log=lambda msg: None)
+    logs: list[str] = []
+    t = talk.Talk(log=logs.append)
     result = t.test()
     assert result["ok"] is True and result["line"] == "Evening, table. Ready to lose?" and result["error"] is None
+    assert f"talk: {result['ms']} ms" in logs  # each call's time, in the brain log
     assert result["provider"] == "anthropic" and result["model"] == "claude-haiku-5-5"
     assert sent[0]["messages"][0]["content"] == talk.TEST_PROMPT and t.status()["ok"] is True
 
