@@ -87,4 +87,4 @@ def test_load_ignores_a_saved_value_of_the_wrong_type(tmp_path, monkeypatch):
     saved.write_text(json.dumps({"persona": "pirate", "effort": 3, "speaker": "mac", "talk": "skynet", "talk_model": None}))
     settings.load(saved)
     s = settings.current
-    assert (s.persona, s.effort, s.speaker, s.talk, s.talk_model) == ("pirate", "low", "mac", "anthropic", None)
+    assert (s.persona, s.effort, s.speaker, s.talk, s.talk_model) == ("host", "low", "mac", "anthropic", None)  # D75: an unknown personality is not believed either

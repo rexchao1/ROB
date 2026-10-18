@@ -6,6 +6,7 @@ next line."""
 from __future__ import annotations
 
 import json
+import re
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -42,10 +43,22 @@ _lock = threading.Lock()
 file: Path | None = None  # where SAVED is kept (gamemaster.rob.json); None keeps nothing
 
 
+_KEYLIKE = ("sk-", "sk_", "aiza", "xi-")  # a key pasted where a model name goes is never believed
+_HEXRUN = re.compile(r"[0-9a-fA-F]{32}")
+
+
 def _fits(name: str, value: Any) -> bool:
     if value is None:
         return name in _MAY_BE_NONE
-    return isinstance(value, str) and value in CHOICES.get(name, (value,))
+    if not isinstance(value, str) or value not in CHOICES.get(name, (value,)):
+        return False
+    if name == "persona" and value not in personas.PERSONAS:
+        return False
+    if name == "eleven_voice" and value not in personas.VOICES:
+        return False
+    if name == "talk_model" and (value.lower().startswith(_KEYLIKE) or _HEXRUN.search(value)):
+        return False
+    return True
 
 
 def load(path: Path) -> None:

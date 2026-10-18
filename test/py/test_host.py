@@ -273,9 +273,9 @@ def test_a_stop_the_host_raises_reaches_the_referee_as_a_stop():
         def show_private(self, seat, card):
             raise GameStopped(reset=True)
 
-    server = TableServer(Stopping(), RealClock(), "127.0.0.1", 0).start()
+    server = TableServer(Stopping(), RealClock(), "127.0.0.1", 0, token="t").start()
     try:
-        remote = RemoteTable(server.url, patience=1.0, log=lambda msg: None)
+        remote = RemoteTable(server.url, token="t", patience=1.0, log=lambda msg: None)
         remote.hello()
         with pytest.raises(GameStopped) as raised:
             remote.show_private(1, Card("MAFIA"))

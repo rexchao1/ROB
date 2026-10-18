@@ -240,7 +240,7 @@ def test_the_saved_personality_file_is_checked_before_it_is_believed(tmp_path):
     before, file_before = settings.snapshot(), settings.file
     try:
         path = tmp_path / "rob.json"
-        path.write_text(json.dumps({"persona": ["evil"], "eleven_voice": 42, "talk_model": "sk-not-saved", "voice": "eleven"}))
+        path.write_text(json.dumps({"persona": ["evil"], "eleven_voice": 42, "talk_model": "sk-not-saved", "voice": "gramophone"}))
         settings.load(path)
         assert settings.snapshot() == before  # nothing of it believed
         path.write_text(json.dumps({"persona": "roaster", "eleven_voice": None}))
