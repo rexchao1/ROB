@@ -530,16 +530,44 @@ class Talk:
             error = f"failed ({type(e).__name__})"
             self._log(f"talk: {provider} {error}")
         ms = int((time.monotonic() - start) * 1000)
+        if error is None:
+            self._log(f"talk: {ms} ms")  # each reply's wait for the model, in the brain log
         with self._lock:
             self._last = {"choice": (provider, model, effort), "ok": error is None, "error": error, "at": time.time(), "ms": ms}
         return text, error, ms
 
     def _post(self, url: str, body: dict[str, Any], headers: dict[str, str], timeout: float | None = None) -> Any:
-        req = urllib.request.Request(
-            url, data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json", **headers}
+        """POST body as JSON over the host's kept connection (brain/net.py) and read the
+        JSON answer; an HTTP error raises urllib.error.HTTPError, as urlopen's did."""
+        from brain import net
+
+        data = net.request(
+            "POST", url, json.dumps(body).encode(), {"Content-Type": "application/json", **headers}, timeout or self.timeout
         )
-        with urllib.request.urlopen(req, timeout=timeout or self.timeout) as res:
-            return json.loads(res.read())
+        return json.loads(data)
+
+    def warm(self) -> int | None:
+        """Open the chosen provider's connection before a reply needs it, with a free GET of
+        its model list, or freshen one that has sat idle a while (brain.net.warm): the ms
+        it took, 0 when it was warm already, None when off, on Ollama, without a key or
+        unreachable."""
+        from brain import net
+
+        provider, _ = self.choice()
+        key = key_for(provider) if provider in KEYS else None
+        if key is None:
+            return None
+        if provider == "anthropic":
+            return net.warm("https://api.anthropic.com/v1/models?limit=1", self._anthropic_headers(key))
+        return net.warm("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", {"x-goog-api-key": key})
+
+    @staticmethod
+    def _anthropic_headers(key: str) -> dict[str, str]:
+        headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        if workspace:  # a key not tied to a workspace (sk-ant-usr...) names one on every call
+            headers["anthropic-workspace-id"] = workspace
+        return headers
 
     def _anthropic(
         self, model: str, effort: str, system: str, prompt: str, max_tokens: int, temperature: float, timeout: float
@@ -548,14 +576,10 @@ class Talk:
         if key is None:
             self._warn_no_key("anthropic")
             return None
-        headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
-        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
-        if workspace:  # a key not tied to a workspace (sk-ant-usr...) names one on every call
-            headers["anthropic-workspace-id"] = workspace
         answer = self._post(
             "https://api.anthropic.com/v1/messages",
             anthropic_body(model, effort, system, prompt, max_tokens, temperature),
-            headers,
+            self._anthropic_headers(key),
             timeout,
         )
         if answer.get("stop_reason") == "refusal":

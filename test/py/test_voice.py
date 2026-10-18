@@ -94,6 +94,31 @@ def test_make_voice_needs_something(tmp_path):
         voice.make_voice(tmp_path, tmp_path / "missing.onnx")
 
 
+def test_elevenlabs_lines_come_over_the_kept_connection_and_a_failure_goes_to_the_fallback(monkeypatch):
+    from brain import net, settings
+
+    monkeypatch.setattr(settings, "current", settings.Settings(voice="eleven"))
+    sent = []
+
+    def answer(method, url, body, headers, timeout):
+        sent.append((method, url, headers["xi-api-key"], timeout))
+        return b"\x01\x00\x02"  # an odd byte: padded to whole samples
+
+    monkeypatch.setattr(net, "request", answer)
+    logs: list[str] = []
+    eleven = voice.ElevenVoice("xi-test-key", fallback=TestVoice(), cache_dir=None, log=logs.append)
+    assert eleven.pcm("Evening, mortals.") == b"\x01\x00\x02\x00"
+    assert sent == [("POST", f"{voice.ELEVEN_API}/{eleven._wanted()}?output_format=pcm_16000", "xi-test-key", voice.ELEVEN_TIMEOUT)]  # noqa: SLF001
+    assert len(logs) == 1 and logs[0].startswith("voice: ElevenLabs ") and " ms for " in logs[0]
+
+    def refuse(method, url, body, headers, timeout):
+        raise voice.urllib.error.HTTPError(url, 401, "Unauthorized", {}, io.BytesIO(b"{}"))
+
+    monkeypatch.setattr(net, "request", refuse)
+    assert voice.decode_test_pcm(eleven.pcm("Pick a game.")) == "Pick a game."
+    assert "ElevenLabs failed (HTTP 401)" in logs[-1]
+
+
 def test_pcm_to_wav_round_trip():
     pcm = (np.arange(1600) % 200 - 100).astype("<i2").tobytes()
     assert voice.wav_to_pcm(voice.pcm_to_wav(pcm)) == pcm
