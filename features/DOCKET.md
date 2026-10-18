@@ -895,7 +895,7 @@ D109 2026-10-18 [I>V]
 D110 2026-10-18 [I>V] amends D72
   pre:   a game is in progress, a lean-in included [I>V]
   trig:  someone says `pause`, `shut up`, `be quiet`, `hush`, or a bare `stop` or `wait` with at most a word of filler (`okay stop`, `rob, wait`) [I>V]
-  resp:  the host holds the game as D72 says; `hold on` is not a pause but the welcome's `not now`; `stop the game` ends the game, never pauses it; the resume words stay those of D72, and D93's point that `let's go` is a yes, not a resume, stands [I>V]
+  resp:  the host holds the game as D72 says; `hold on` is not a pause but the welcome's `not now`; `stop the game` ends the game, never pauses it; the resume words stay those of D72, and the point of D93 that `let's go` is a yes, not a resume, stands [I>V]
   sib:   none -- a stop or reset while paused is handled in D72
   serves: N1
   touches: D58 D72 D93
