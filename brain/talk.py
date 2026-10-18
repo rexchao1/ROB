@@ -305,7 +305,11 @@ def _error_message(e: urllib.error.HTTPError) -> str:
     error = answer.get("error") if isinstance(answer, dict) else None
     message = error.get("message") if isinstance(error, dict) else error
     if isinstance(message, str) and "not scoped to a workspace" in message:
-        return "this key is not tied to a workspace: set the Anthropic workspace ID in Keys, or use a workspace API key (sk-ant-api03...)"
+        kind = "-".join((key_for("anthropic") or "").split("-")[:3])  # "sk-ant-usr": the key's type, never the key
+        return (
+            f"Anthropic says the saved key ({kind}...) is not tied to a workspace: paste a workspace "
+            "key (sk-ant-api03...) in Keys, or set the Anthropic workspace ID (wrkspc_...)"
+        )
     return _short(message) if isinstance(message, str) else ""
 
 
