@@ -541,3 +541,19 @@ def test_talk_settings_snapshot_travels_without_keys():
     finally:
         remote.close()
         server.stop()
+
+
+def test_the_model_turn_gesture_and_setting_travel_to_the_table(served):
+    from brain.remote import METHODS
+
+    assert {"act", "gesture", "setting"} <= set(METHODS)
+    table = FakeTable()
+    table.acts.append({"line": "Hi.", "actions": [{"name": "gesture", "args": {"name": "nod"}}]})
+    server, _ = served(table)
+    remote = _attached(server)
+    assert remote.act("lobby", "hey", tools=["gesture"], seats=3) == {"line": "Hi.", "actions": [{"name": "gesture", "args": {"name": "nod"}}]}
+    assert table.act_calls == [("lobby", "hey", {"tools": ["gesture"], "seats": 3})]
+    assert remote.act("lobby", "again") is None
+    remote.gesture("tilt")
+    assert remote.setting("volume", 40) is True
+    assert [(k, v) for _, k, v in table.log if k in ("gesture", "setting")] == [("gesture", "tilt"), ("setting", ("volume", 40))]

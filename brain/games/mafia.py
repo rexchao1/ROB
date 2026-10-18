@@ -170,9 +170,13 @@ def _mafia_win(table: Table, rng: random.Random, roles: dict[int, str], state: S
     return False
 
 
-def _discuss(table: Table, options: Options) -> None:
+def _discuss(table: Table, options: Options, state: State) -> None:
     """D18: the day's discussion on the table's clock, the halfway call at half time,
-    then "Time. Let's vote."; heard in pieces so the group can vote early."""
+    then "Time. Let's vote."; heard in pieces so the group can vote early. A line said
+    to the host meanwhile gets a short reply (side talk), on the same clock; the facts
+    it gets are only what the whole table knows."""
+    chat = {"game": "mafia", "phase": "day discussion", "seats": state.seats, "round": state.round,
+            "living": sorted(state.living), "out": list(state.out)}
     start = table.now()
     half, end = start + options.day_seconds / 2, start + options.day_seconds
     called = False
@@ -185,7 +189,7 @@ def _discuss(table: Table, options: Options) -> None:
             table.say(lines.TIME_VOTE)
             return
         mark = end if called else half
-        if ears.wants_to_vote(hear(table, max(0.1, min(options.talk_chunk_seconds, mark - now)))):
+        if ears.wants_to_vote(hear(table, max(0.1, min(options.talk_chunk_seconds, mark - now)), chat)):
             table.say(lines.EARLY_VOTE)
             return
 
@@ -196,7 +200,7 @@ def _day(table: Table, rng: random.Random, roles: dict[int, str], state: State, 
     state.report(table)
     table.prepare(DAY_CARDS)  # uploaded during the discussion
     table.say(lines.discussion(options.day_seconds))
-    _discuss(table, options)
+    _discuss(table, options, state)
     out = vote(table, state, options, rng)
     if out is None:
         state.phase = "day"

@@ -2,7 +2,7 @@
 
 A game master for a table of friends, so nobody has to sit out to host: a StackChan (camera, turning head, screen, microphone, speaker) counts the table, deals private roles on its own screen to whoever leans in alone, catches heads-up players at night, takes votes by voice, and runs Mafia (then Imposter, then Wavelength) with a narrator's voice. The brain is a Raspberry Pi that is its own offline network. LA Hacks 2026.
 
-The contract is `features/` (the feature files bind; `DESIGN.md` bounds; `DOCKET.md` holds the rulings). The build plan is `docs/BUILD-PLAN.md`; the operator dashboard has its own, `docs/DASHBOARD-PLAN.md`; one-step start and stop, `docs/STARTUP-PLAN.md`; how ROB talks, hears and how fast he answers, `docs/TALK-PLAN.md`.
+The contract is `features/` (the feature files bind; `DESIGN.md` bounds; `DOCKET.md` holds the rulings). The build plan is `docs/BUILD-PLAN.md`; the operator dashboard has its own, `docs/DASHBOARD-PLAN.md`; one-step start and stop, `docs/STARTUP-PLAN.md`; how ROB talks, hears and how fast he answers, `docs/TALK-PLAN.md`; ROB as a chatbot who picks his own moves and settings, `docs/CHAT-PLAN.md`.
 
 ## Layout
 

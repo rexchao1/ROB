@@ -5,7 +5,7 @@ import random
 
 from fake_table import FakeTable
 
-from brain import lines
+from brain import agent, lines
 from brain.games.common import Options
 from brain.games.welcome import Choice, Welcome
 
@@ -100,13 +100,87 @@ class ChattyTable(FakeTable):
         return queue.pop(0) if queue else None
 
 
-def test_the_greeting_is_the_models_when_it_names_rob_then_the_games():
+def test_the_greeting_is_scripted_then_an_open_question_when_the_talk_is_on():
     table = ChattyTable(welcome_greeting=["Evening, legends! I'm ROB, so glad you came."])
-    _welcome(table).greet()
-    assert table.said == ["Evening, legends! I'm ROB, so glad you came.", lines.games_menu()]
-    table = ChattyTable(welcome_greeting=["Evening, legends. Let the games begin."])  # no name
-    _welcome(table).greet()
-    assert table.said[0] in lines.GREETINGS
+    table.talk_settings = lambda: {"talk": "anthropic"}
+    w = _welcome(table)
+    w.greet()
+    assert table.said[0] in lines.GREETINGS and table.said[1] in lines.OPENERS
+    assert table.calls == [] and w.offered_at == float("-inf")  # no model greeting; "yeah" picks nothing
+
+
+def _turns(monkeypatch, *outcomes):
+    """agent.run_turn answers with `outcomes` in order (each said by the stub as the agent
+    would), then None; every call kept as (situation, heard, facts)."""
+    queue, calls = list(outcomes), []
+
+    def run_turn(table, situation, heard, facts, allowed=agent.LOBBY):
+        calls.append((situation, heard, facts))
+        outcome = queue.pop(0) if queue else None
+        if outcome is not None and outcome.said:
+            table.say(outcome.said)
+        return outcome
+
+    monkeypatch.setattr(agent, "run_turn", run_turn)
+    return calls
+
+
+def test_the_models_line_is_said_and_remembered(monkeypatch):
+    calls = _turns(monkeypatch, agent.Outcome(said="The beach! Who got the worst sunburn?"))
+    table = FakeTable()
+    w = _welcome(table)
+    w.greet()
+    assert w._hear("we just got back from the beach", 1) is None
+    assert table.said[-1] == "The beach! Who got the worst sunburn?"
+    assert list(w.memory)[-2:] == [("them", "we just got back from the beach"), ("ROB", "The beach! Who got the worst sunburn?")]
+    situation, heard, facts = calls[0]
+    assert situation == "lobby" and heard == "we just got back from the beach"
+    assert facts["transcript"] == [["ROB", table.said[0]], ["ROB", table.said[1]]] and facts["memory"] is w.facts
+    assert w.asked_at == table.now()  # a question: a short answer counts
+
+
+def test_the_model_starts_a_game_or_naps(monkeypatch):
+    _turns(monkeypatch, agent.Outcome(said="Imposter it is.", game="imposter"), agent.Outcome(said="Night, all.", nap=True))
+    w = _welcome(FakeTable())
+    assert w._hear("I think we should do the word one", 1) == Choice("imposter", "I think we should do the word one", None, False)
+    assert w._hear("honestly we are all pretty tired", 2) == ""
+
+
+def test_nothing_from_the_model_is_the_scripted_reply(monkeypatch):
+    calls = _turns(monkeypatch)
+    table = FakeTable()
+    w = _welcome(table)
+    w._hear("who are you?", 1)
+    assert len(calls) == 1 and table.said[-1].startswith(("I'm ROB", "Name's ROB"))
+
+
+def test_commands_and_a_named_game_never_reach_the_model(monkeypatch):
+    calls = _turns(monkeypatch)
+    w = _welcome(FakeTable())
+    assert w._hear("let's play mafia", 0).game == "mafia"
+    assert w._hear("ROB, remember that we hate Wordle", 1) is None
+    assert w._hear("not now", 2) == ""
+    assert w._hear("start over", 3) == "restart"
+    assert calls == []
+
+
+def test_a_headcount_is_still_the_codes_when_the_model_answers(monkeypatch):
+    calls = _turns(monkeypatch, agent.Outcome(said="Three! Perfect for Imposter. Want to try it?"))
+    table = FakeTable()
+    w = _welcome(table)
+    w._hear("there are three of us tonight", 1)
+    assert calls[0][2]["seats"] == 3 and w.seats == 3 and ("seated", 3) in [(k, v) for _, k, v in table.log]
+    assert w.suggestion == "imposter" and w.offered_at == table.now()  # the model named it: a yes takes it
+
+
+def test_a_quiet_table_hears_the_models_nudges(monkeypatch):
+    calls = _turns(monkeypatch, agent.Outcome(said="So quiet. Somebody say something."), agent.Outcome(said="Still here."))
+    table = FakeTable()
+    w = _welcome(table)
+    w.greet()
+    assert w.converse() is None
+    assert [facts.get("quiet") for _, _, facts in calls] == [True, True]
+    assert table.said[2:] == ["So quiet. Somebody say something.", "Still here.", lines.NAP]
 
 
 def test_a_hello_and_how_are_you_get_answers_with_the_talk_so_far():

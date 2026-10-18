@@ -417,6 +417,30 @@ def addressed(text: str) -> bool:
     )
 
 
+def side_talk(text: str) -> bool:
+    """A line said to the host that no game listen could use, for a short reply in
+    character during play (docs/CHAT-PLAN.md, step 7): addressed to it (addressed()),
+    and with no seat or number in it, no short yes or no, no "let's vote", no hard
+    command, no request to repeat, no card or memory command, and not transcriber junk."""
+    tokens = _tokens(text)
+    if not tokens or junk(text) or not addressed(text):
+        return False
+    if _numbers(tokens) or _pointed(tokens) or _one_number(tokens) is not None:
+        return False
+    if len(tokens) <= 3 and (says_yes(text) or says_no(text)):
+        return False
+    return not (
+        hard_command(text)
+        or wants_resume(text)
+        or wants_to_vote(text)
+        or wants_repeat(text)
+        or wants_card(text)
+        or saw_card(text)
+        or memory_command(text) is not None
+        or speaker_said(text) is not None
+    )
+
+
 def junk(text: str) -> bool:
     """What the transcriber writes when it loses the thread, not speech: a run-on past
     _RUN_ON words, or one short phrase over and over ("the name. the name. the name.";

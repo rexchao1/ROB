@@ -224,3 +224,31 @@ def test_go_to_sleep_ends_any_game_and_naps(text):
 
 def test_a_stop_phrase_inside_another_word_is_not_a_stop():
     assert not ears.wants_to_stop("we had a great weekend games night")
+
+
+@pytest.mark.parametrize("text", [
+    "rob, what's your favorite game?",
+    "hey rob, are you having fun?",
+    "how are you doing tonight?",
+    "robot, who do you think is lying?",
+    "do you ever get tired of hosting?",
+])
+def test_side_talk_is_a_line_for_the_host(text):
+    assert ears.side_talk(text)
+
+
+@pytest.mark.parametrize("text", [
+    "player two",
+    "rob, i vote for player two",
+    "rob, it's four",
+    "yes rob",
+    "no rob",
+    "rob let's vote",
+    "rob stop the game",
+    "rob be quiet",
+    "rob, say that again",
+    "i think it's mike",  # not said to the host
+    "",
+])
+def test_side_talk_is_never_a_line_the_game_can_use(text):
+    assert not ears.side_talk(text)

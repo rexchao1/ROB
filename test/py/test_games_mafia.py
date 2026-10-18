@@ -217,3 +217,16 @@ def test_two_mafia_one_voted_out_the_game_goes_on():
 def test_a_runaway_game_ends_in_a_draw():
     t = play(FakeTable(5), max_rounds=2)
     assert lines.DRAW in t.said and t.state["round"] == 2 and t.state["over"] is True
+
+
+def test_side_talk_in_the_day_gets_a_reply_and_the_day_runs_on(monkeypatch):
+    from brain import agent
+
+    calls = []
+    monkeypatch.setattr(agent, "run_turn", lambda table, situation, heard, facts, allowed: calls.append(facts))
+    t = night(FakeTable(5), "player four", "player four")
+    t.reply(lines.discussion(120), "rob, who do you think did it?")
+    play(t, max_rounds=1)
+    assert len(calls) == 1 and calls[0]["game"] == "mafia" and calls[0]["phase"] == "day discussion"
+    assert set(calls[0]) == {"game", "phase", "seats", "round", "living", "out"}  # public only, no roles
+    assert lines.TIME_VOTE in t.said

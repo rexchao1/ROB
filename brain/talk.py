@@ -54,6 +54,11 @@ Situations (Host.chat(situation, heard, **facts)):
   anything else    a short generic reply
 Quips (Host.quip(slot, **context)) come through quip(); brain/banter.py's slots say
 what each moment is and how many words it gets.
+
+act() (Host.act, docs/CHAT-PLAN.md) is the turn with tools, Anthropic only: the line
+and the tool calls in one answer, "lobby" (free talk, up to about forty words) or
+"game" (one quick side reply over the public recap). brain/agent.py checks and runs
+the tools; TOOL_SCHEMAS here is what the model is told each one takes.
 """
 
 from __future__ import annotations
@@ -162,6 +167,9 @@ BLOCKLIST = (
     "how can i assist",
     "here to help",
     "anything else i can",
+    "the request",  # the model narrating a tool turn instead of talking
+    "persona",
+    "in character",
 )
 
 STRUCTURED = {
@@ -559,6 +567,98 @@ class Talk:
         line = fit(text, max_words=limit, max_sentences=2)
         return banter.clean(line, limit) if line else None
 
+    def act(self, situation: str, heard: str, facts: dict[str, Any]) -> dict[str, Any] | None:
+        """The model's turn with tools (docs/CHAT-PLAN.md, Table.act): {"line": str | None,
+        "actions": [{"name", "args"}]}, the line fit() to say and only the tools offered
+        (facts tools), or None: not Anthropic (the caller falls back to reply()), no
+        answer, or an answer with neither a line nor a tool. Nothing here checks an
+        action's arguments; brain.agent.run_turn does."""
+        facts = dict(facts or {})
+        if self.choice()[0] != "anthropic" or not self.active():
+            return None
+        offered = [t for t in facts.get("tools") or () if t in TOOL_SCHEMAS]
+        if situation == "game":
+            prompt, tokens, words, sentences = self._game_prompt(heard, facts), ACT_GAME_TOKENS, GAME_WORDS, 2
+        else:
+            prompt, tokens, words, sentences = self._lobby_prompt(heard, facts), ACT_TOKENS, LOBBY_WORDS, 4
+        answer = self._call(self._system(), prompt, max_tokens=tokens, temperature=0.9, tools=tool_specs(offered))[0]
+        if not isinstance(answer, dict):
+            return None
+        text = answer.get("text")
+        line = fit(text, facts, max_words=words, max_sentences=sentences)
+        if text and line is None:
+            self._log(f"talk: dropped a line ROB would not say (an assistant phrase, a seat, a first sentence too long): {text.strip()[:120]}")
+        actions = [a for a in answer.get("actions") or () if a.get("name") in offered]
+        if line is None and not actions:
+            return None
+        if actions:
+            self._log("talk: tools " + ", ".join(f"{a['name']}{json.dumps(a['args'])}" for a in actions))
+        return {"line": line, "actions": actions}
+
+    def _lobby_prompt(self, heard: str, facts: dict[str, Any]) -> str:
+        games = facts.get("games") or lines.game_names()
+        parts = [
+            "It's game night, between games: the group is hanging out with you. This is free conversation about "
+            "anything they bring up, held like a real one: follow the thread from the talk so far, answer, riff, "
+            "and now and then ask something back.",
+            f"The only games you can host are {games}: never name or offer any other game. What they are:\n{lines.games_about()}",
+            _game_flow(),
+        ]
+        if facts.get("suggestion"):
+            parts.append(f"You suggested {lines.game_name(str(facts['suggestion']))}, but they don't have to take it.")
+        remembered = _remembered(facts.get("remembered"))
+        if remembered:
+            parts.append(f"Things you remember about this group: {remembered}. Use one only when it fits, in your own words.")
+        seats = facts.get("seats")
+        if isinstance(seats, int) and seats > 0:
+            parts.append(f"You see seats 1 to {seats}, from your left to your right; a seat number is only for the look tool.")
+        if isinstance(facts.get("minutes"), (int, float)):
+            parts.append(f"Minutes since the talk started without a game: {facts['minutes']:.0f}.")
+        transcript = _transcript(facts.get("transcript"))
+        if transcript:
+            parts.append(f"The talk so far, oldest first:\n{transcript}")
+        said = heard.strip()
+        parts.append(f'Just now someone said: "{said}"' if said else "Nobody has said anything for a while.")
+        parts.append(_results(facts.get("results")))
+        parts.append(
+            "Reply out loud, in character, up to about forty words, often fewer:\n"
+            "- Answer what they said first. Any topic is fine; stay on it while they're on it.\n"
+            "- You'd rather the group picks the game. Start one yourself (start_game) only when they're clearly "
+            "ready or stuck choosing; asked to pick, pick one now and start it, no stalling. When the talk winds down, someone seems bored, or a few minutes have passed, "
+            "nudge toward a game; never on every line.\n"
+            "- Use your body like a person would: look at someone only when you know their seat (they said it); you "
+            "never know who is talking otherwise, so don't guess. Now and then a gesture or a face, not on every line.\n"
+            "- You may change your own personality, voice, speaker or volume (setting) when asked or when it fits.\n"
+            "- You may remember a fact about the group on your own, never private things: no seats, names or roles.\n"
+            "- They want to stop, sleep or be left alone: say a short goodnight and nap.\n"
+            "- Rules of a game asked for: use the rules tool, never explain rules yourself. How many are here: "
+            "count_table.\n"
+            "- Numbers as words; never say player or seat out loud; nothing you already said; never open with "
+            "Ha, Oh, Ah or Ooh.\n"
+            "- Starting a game? Your line says which one and that you're starting it; the game's own intro "
+            "comes right after.\n"
+            "Your text is said out loud exactly as written, so write only what you'd say to them: never describe "
+            "the request, your plan, a setting, a tool or what your head or face is doing. You don't know the day or the date. Every move is a tool call, never words about moving."
+        )
+        return "\n".join(p for p in parts if p)
+
+    def _game_prompt(self, heard: str, facts: dict[str, Any]) -> str:
+        game = facts.get("game")
+        parts = [f"A game of {lines.game_name(str(game))} is being played." if isinstance(game, str) and game else "A game is being played."]
+        recap = facts.get("recap")
+        if isinstance(recap, str) and recap:
+            parts.append(f"What everyone has seen so far: {recap}.")
+        parts.append(f'Someone just said this to you, a side remark the game itself cannot use: "{heard.strip()}"')
+        parts.append(_results(facts.get("results")))
+        parts.append(
+            f"Reply with one quick in-character line, at most {GAME_WORDS} words, then the game goes on. Never "
+            "reveal or hint at anyone's secret role, word or number, even as a joke, and never guess at one. "
+            "Never decide or explain a rule, a score or a winner, never give an instruction, never name a player. "
+            "A glance or a gesture is fine now and then. Your text is said out loud exactly as written: only "
+            "what you'd say to them, never a word about the request, your plan or a tool."
+        )
+        return "\n".join(p for p in parts if p)
+
     # --- prompts ------------------------------------------------------------------
 
     def _system(self, examples: bool = True) -> str:
@@ -682,24 +782,29 @@ class Talk:
     def _ask(self, system: str, prompt: str, *, max_tokens: int, temperature: float) -> str | None:
         return self._call(system, prompt, max_tokens=max_tokens, temperature=temperature)[0]
 
-    def _call(self, system: str, prompt: str, *, max_tokens: int, temperature: float) -> tuple[str | None, str | None, int]:
+    def _call(
+        self, system: str, prompt: str, *, max_tokens: int, temperature: float, tools: list[dict[str, Any]] | None = None
+    ) -> tuple[Any, str | None, int]:
         """(text, error, ms) of one call to the chosen model. error is None when the model
         answered (text may still be None: a refusal or no words); every failure is logged
-        and kept for status(). Off or a missing key makes no call."""
+        and kept for status(). Off or a missing key makes no call. With `tools`
+        (Anthropic only) the text is {"text": str | None, "actions": [{"name", "args"}]}."""
         provider, model = self.choice()
         if provider == "off":
             return None, "the talk is off", 0
         if provider in KEYS and key_for(provider) is None:
             self._warn_no_key(provider)
             return None, f"no {' or '.join(KEYS[provider])} set", 0
+        if tools is not None and provider != "anthropic":
+            return None, f"no tools on {provider}", 0
         effort = self.effort()
         timeout = max(self.timeout, timeout_for(provider, model, effort))
-        text: str | None = None
+        text: Any = None
         error: str | None = None
         start = time.monotonic()
         try:
             if provider == "anthropic":
-                text = self._anthropic(model, effort, system, prompt, max_tokens, temperature, timeout)
+                text = self._anthropic(model, effort, system, prompt, max_tokens, temperature, timeout, tools)
             elif provider == "gemini":
                 text = self._gemini(model, effort, system, prompt, max_tokens, temperature, timeout)
             else:
@@ -756,25 +861,38 @@ class Talk:
         return headers
 
     def _anthropic(
-        self, model: str, effort: str, system: str, prompt: str, max_tokens: int, temperature: float, timeout: float
-    ) -> str | None:
+        self,
+        model: str,
+        effort: str,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        timeout: float,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Any:
         key = key_for("anthropic")
         if key is None:
             self._warn_no_key("anthropic")
             return None
-        answer = self._post(
-            "https://api.anthropic.com/v1/messages",
-            anthropic_body(model, effort, system, prompt, max_tokens, temperature),
-            self._anthropic_headers(key),
-            timeout,
-        )
+        body = anthropic_body(model, effort, system, prompt, max_tokens, temperature)
+        if tools:
+            body["tools"] = tools  # tool_choice stays auto: the only choice thinking allows
+        answer = self._post("https://api.anthropic.com/v1/messages", body, self._anthropic_headers(key), timeout)
         if answer.get("stop_reason") == "refusal":
             self._log("talk: anthropic refused the line")
             return None
-        parts = [c.get("text", "") for c in answer.get("content", []) if isinstance(c, dict) and c.get("type") == "text"]
-        text = "".join(parts).strip()
+        content = [c for c in answer.get("content", []) if isinstance(c, dict)]
+        text = "".join(c.get("text", "") for c in content if c.get("type") == "text").strip()
         if not text and answer.get("stop_reason") == "max_tokens":
             self._log(f"talk: {model} ran out of tokens before the line")
+        if tools is not None:
+            actions = [
+                {"name": c["name"], "args": c.get("input") if isinstance(c.get("input"), dict) else {}}
+                for c in content
+                if c.get("type") == "tool_use" and isinstance(c.get("name"), str)
+            ]
+            return {"text": text or None, "actions": actions}
         return text or None
 
     def _gemini(
@@ -866,3 +984,86 @@ def _transcript(said: Any) -> str:
             who, line = entry
             out.append(f"{'ROB' if who == 'ROB' else 'Them'}: {line.strip()}")
     return "\n".join(out)
+
+
+ACT_TOKENS = 400  # a lobby turn: the line plus a few tool calls
+ACT_GAME_TOKENS = 200
+LOBBY_WORDS = 40
+GAME_WORDS = 15
+
+
+def _results(results: Any) -> str:
+    """What the information tools found, for the follow-up turn; "" for none."""
+    found = [r for r in results if isinstance(r, str) and r] if isinstance(results, (list, tuple)) else []
+    if not found:
+        return ""
+    return "What your tools just found: " + "; ".join(found) + ". Write the line with it now; don't call them again."
+
+
+def _no_args() -> dict[str, Any]:
+    return {"type": "object", "properties": {}}
+
+
+def _one(name: str, schema: dict[str, Any], required: bool = True) -> dict[str, Any]:
+    return {"type": "object", "properties": {name: schema}, **({"required": [name]} if required else {})}
+
+
+def tool_specs(names: Any) -> list[dict[str, Any]]:
+    """Anthropic tool definitions for the tool names offered (brain.agent.TOOLS), in order."""
+    return [{"name": n, "description": TOOL_SCHEMAS[n][0], "input_schema": TOOL_SCHEMAS[n][1]()} for n in names if n in TOOL_SCHEMAS]
+
+
+def _game_flow() -> str:
+    """The suggested game for each headcount and each game's minimum, for the lobby prompt."""
+    picks = []
+    for n in range(1, 7):
+        pick = lines.suggested(n)
+        if pick is not None:
+            picks.append(f"{lines.number_word(n)}{' or more' if n == 6 else ''}: {lines.game_name(pick)}")
+    least = ", ".join(f"{lines.game_name(g)} {lines.number_word(m)}" for g, m in lines.MINIMUM.items())
+    return (
+        "The suggested flow: find out how many are playing (they say it, or count_table), then suggest the game "
+        f"that fits the count ({'; '.join(picks)}), and let them take it or pick another. The fewest each game "
+        f"needs: {least}. Never start a game the count is too small for."
+    )
+
+
+def _tool_schemas() -> dict[str, tuple[str, Callable[[], dict[str, Any]]]]:
+    from brain import agent
+
+    def games() -> list[str]:
+        from brain import games as registry
+
+        return list(registry.GAMES)
+
+    setting_help = (
+        "Change one of your own settings. name persona, how you talk, one of " + ", ".join(f"{k} ({p.label})" for k, p in personas.PERSONAS.items()) + "; "
+        "eleven_voice, who you sound like, one of " + ", ".join(f"{k} ({v.label}, {v.blurb})" for k, v in personas.VOICES.items()) + "; "
+        "use exactly these keys, nothing else; voice: " + " or ".join(settings.CHOICES["voice"]) + "; "
+        "speaker: " + " or ".join(settings.CHOICES["speaker"]) + " (where your voice plays); volume: a whole number 0 to 100."
+    )
+    return {
+        "look": ("Turn your head to a seat (1 is your far left); leave seat out to face straight ahead.",
+                 lambda: _one("seat", {"type": "integer", "minimum": 1}, required=False)),
+        "gesture": ("A quick head move: " + ", ".join(agent.GESTURES) + ".",
+                    lambda: _one("name", {"type": "string", "enum": list(agent.GESTURES)})),
+        "face": ("Your face and lights for a mood.", lambda: _one("name", {"type": "string", "enum": list(agent.FACES)})),
+        "setting": (setting_help, lambda: {
+            "type": "object",
+            "properties": {"name": {"type": "string", "enum": list(agent.SETTINGS)},
+                           "value": {"anyOf": [{"type": "string"}, {"type": "integer"}]}},
+            "required": ["name", "value"],
+        }),
+        "count_table": ("Sweep the camera across the table and count the people; you get the number back.", _no_args),
+        "rules": ("Say the scripted rules of one game out loud, exactly as written; you get told when it's done.",
+                  lambda: _one("game", {"type": "string", "enum": games()})),
+        "start_game": ("Start a game now; your line is the last thing said before it begins.",
+                       lambda: _one("game", {"type": "string", "enum": games()})),
+        "remember": ("Remember one short fact about the group for later nights. Never seats, names or roles.",
+                     lambda: _one("fact", {"type": "string", "maxLength": 100})),
+        "forget": ("Forget the last fact you remembered.", _no_args),
+        "nap": ("Nap after your line, until someone taps your head.", _no_args),
+    }
+
+
+TOOL_SCHEMAS = _tool_schemas()

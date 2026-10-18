@@ -67,6 +67,23 @@ class PiTable:
                     self.talk.unavailable_until = time.monotonic() + RETRY
         return self.remote.chat(situation, heard, **facts)
 
+    def act(self, situation: str, heard: str = "", **facts: Any) -> dict[str, Any] | None:
+        """The model's turn with tools: the Pi's own talk when it can, else the Mac's
+        (whose Host adds its recap). gesture and setting run on the Mac (remote)."""
+        self._sync()
+        if self.talk.active():
+            try:
+                local = dict(facts)
+                if situation == "game":
+                    local["recap"] = self.recap.so_far()
+                answer = self.talk.act(situation, heard, local)
+                if answer:
+                    return answer
+            except Exception:
+                if isinstance(self.talk, PiTalk):
+                    self.talk.unavailable_until = time.monotonic() + RETRY
+        return self.remote.act(situation, heard, **facts)
+
     def quip(self, slot: str, **context: Any) -> None:
         self._sync()
         if self.talk.active():

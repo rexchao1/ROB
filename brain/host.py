@@ -939,11 +939,14 @@ class Host:
             self.say(line)
 
     def talk_settings(self) -> dict[str, Any]:
-        """The Pi's talk follows the dashboard's choices; keys never travel here."""
+        """The Pi's talk follows the dashboard's choices; keys never travel here. "tools":
+        whether the talk can pick ROB's moves now (Anthropic, with a key), so the welcome
+        knows to drop the games menu."""
         snapshot = settings.snapshot()
-        choices = {name: snapshot[name] for name in settings.TALK}
+        choices: dict[str, Any] = {name: snapshot[name] for name in settings.TALK}
         if self.talk is None:
             choices["talk"] = "off"
+        choices["tools"] = self.talk is not None and choices["talk"] == "anthropic" and self.talk.active()
         return choices
 
     def chat(self, situation: str, heard: str = "", **facts: Any) -> str | None:
@@ -958,6 +961,68 @@ class Host:
         if line:
             self._log(f"talk: {line}")
         return line or None
+
+    def act(self, situation: str, heard: str = "", **facts: Any) -> dict[str, Any] | None:
+        """The talk model's turn with tools (Table.act); for "game" with the public recap
+        of the game so far, never a secret. None without a model or on a failure."""
+        self._check_stop()
+        if self.talk is None or not hasattr(self.talk, "act"):
+            return None
+        if situation == "game":
+            facts["recap"] = self.recap.so_far()
+        try:
+            return self.talk.act(situation, heard, facts)
+        except Exception as e:  # the talk is decoration: a failure is a scripted line
+            self._log(f"talk failed: {type(e).__name__}: {e}")
+            return None
+
+    def gesture(self, name: str) -> None:
+        """A quick head move (brain.agent.GESTURES) that ends where the head was."""
+        from brain.agent import GESTURES
+
+        if name not in GESTURES:
+            raise ValueError(f"gesture must be one of {GESTURES}")
+        self._check_stop()
+        yaw, pitch = self.yaw, self.body.pitch
+        moves = {
+            "nod": [(yaw, pitch + 12), (yaw, pitch - 4), (yaw, pitch)],
+            "shake": [(yaw - 12, pitch), (yaw + 12, pitch), (yaw, pitch)],
+            "tilt": [(yaw + 8, pitch + 8), (yaw, pitch)],
+            "look_around": [(yaw - 30, pitch), (yaw + 30, pitch), (yaw, pitch)],
+        }[name]
+        try:
+            for to_yaw, to_pitch in moves:
+                self.body.pitch = int(min(85, max(5, to_pitch)))
+                self._turn(to_yaw)
+        finally:
+            self.body.pitch = pitch
+
+    def setting(self, name: str, value: Any) -> bool:
+        """One of ROB's own settings (brain.agent.SETTINGS) changed the way the dashboard
+        changes it (brain/dashboard.py change(): the speaker through set_speaker), the
+        volume on the robot; False and nothing changed for a value it does not take."""
+        from brain import dashboard
+        from brain.agent import SETTINGS
+
+        if name not in SETTINGS:
+            return False
+        try:
+            if name == "volume":
+                if isinstance(value, str) and value.strip().isdigit():
+                    value = int(value)
+                if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+                    return False
+                if self.dash is not None:
+                    self.dash.set_volume(value)  # the page shows the new volume too
+                else:
+                    self.body.set_volume(value)
+            else:
+                dashboard.change(self, {name: value})
+        except Exception as e:  # noqa: BLE001 - a refused value, or a robot that did not take it
+            self._log(f"setting {name}={value!r} refused: {e}")
+            return False
+        self._log(f"setting: {name} = {value!r}")
+        return True
 
     # --- the loop -------------------------------------------------------------------
 

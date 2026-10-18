@@ -130,6 +130,27 @@ class Table(Protocol):
         scripted line. Says nothing itself, and decides nothing (D14)."""
         ...
 
+    def act(self, situation: str, heard: str = "", **facts: Any) -> dict[str, Any] | None:
+        """The talk model's turn (docs/CHAT-PLAN.md): {"line": str | None, "actions":
+        [{"name": str, "args": {...}}]}, or None (no model, no internet, too slow, or a
+        provider without tools). Situation "lobby" or "game"; facts carry "tools" (the
+        names of brain.agent.TOOLS offered), the transcript and, on a follow-up,
+        "results" (what the information tools found). For "game" the host adds the
+        game's public recap. Says nothing and runs nothing: brain.agent.run_turn checks
+        and runs the actions."""
+        ...
+
+    def gesture(self, name: str) -> None:
+        """A quick head move, one of brain.agent.GESTURES (nod, shake, tilt,
+        look_around), ending where the head was. Cosmetic only."""
+        ...
+
+    def setting(self, name: str, value: Any) -> bool:
+        """Change one of ROB's own settings (brain.agent.SETTINGS: persona,
+        eleven_voice, voice, speaker, volume) as the dashboard would. False, and
+        nothing changed, for a name or value it does not take."""
+        ...
+
     def sleep(self, seconds: float) -> str | None:
         """Nap between games for at most `seconds`: hear nothing (the microphone off)
         until a tap on the host's head ('') or a line typed for it on the operator's

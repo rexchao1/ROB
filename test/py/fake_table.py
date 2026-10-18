@@ -17,7 +17,8 @@ records the card, and it refuses a card that was not prepared. reveal(card, line
 the line and records the card in table.revealed; the card must be prepared too.
 
 Every action lands in table.log as (time, kind, value): "say", "look", "count",
-"prepare", "show", "reveal", "listen", "heard", "faces_up", "wait", "mood", "quip". table.said is
+"prepare", "show", "reveal", "listen", "heard", "faces_up", "wait", "mood", "quip",
+"act", "gesture", "setting" (each act() is in table.act_calls too). table.said is
 the lines alone; table.reports every report() in order; table.state the latest.
 """
 
@@ -56,6 +57,8 @@ class FakeTable:
         self.wakes: deque[str | None] = deque()  # what ends each nap call: '' a tap, a typed line, None nothing
         self.sleeps = 0
         self.max_sleeps = 50
+        self.acts: deque[dict[str, Any] | None] = deque()  # what each act() answers, in order; None once used up
+        self.act_calls: list[tuple[str, str, dict[str, Any]]] = []  # (situation, heard, facts) of each act()
 
     # --- scripting ---------------------------------------------------------------
 
@@ -176,6 +179,20 @@ class FakeTable:
         """The talk model's line: the next of table.chats (a list), else None (no model)."""
         self._note("chat", situation)
         return self.chats.pop(0) if getattr(self, "chats", None) else None
+
+    def act(self, situation: str, heard: str = "", **facts: Any) -> dict[str, Any] | None:
+        """The model's turn: the next of table.acts, else None (no model). Each call is
+        kept in table.act_calls."""
+        self.act_calls.append((situation, heard, facts))
+        self._note("act", situation)
+        return self.acts.popleft() if self.acts else None
+
+    def gesture(self, name: str) -> None:
+        self._note("gesture", name)
+
+    def setting(self, name: str, value: Any) -> bool:
+        self._note("setting", (name, value))
+        return True
 
     # --- reading the record ------------------------------------------------------
 

@@ -1,24 +1,36 @@
-"""The welcome (D38 to D43): when the host starts, and whenever someone says "reset",
-"start over" or "restart", it greets the table and asks what they want to play or how
-many they are, and starts listening right away. The greeting, and the line after a tap
-wakes the host, are the talk model's when it wrote one ahead (Table.chat
-"welcome.greeting" and "welcome.woke"), else scripted. It does not sweep the table on its
-own: a headcount said out loud is taken at its word and gets a suggestion for it (two
-Wavelength, three or four Imposter, five or more Mafia, D38; one player Twenty
-Questions or Wordle), and "count us" or "look around" gets the full sweep, a hello to
-each seat by number and the suggestion. The talk goes on until they pick a game. The
-suggestion and the list of games read lines.MINIMUM, so a game shows up here once it
-is built.
+"""The welcome (D38 to D43, and docs/CHAT-PLAN.md): when the host starts, and whenever
+someone says "reset", "start over" or "restart", it greets the table and starts
+listening right away. The greeting is always scripted (lines.GREETINGS, recorded once);
+then, with the talk on, an open question (lines.OPENERS) and the games come up in the
+talk; offline, the games menu. The line after a tap wakes the host is the talk model's
+when it wrote one ahead (Table.chat "welcome.woke"), else scripted. It does not sweep
+the table on its own: a headcount said out loud is taken at its word (two Wavelength,
+three or four Imposter, five or more Mafia, D38; one player Twenty Questions or
+Wordle), and "count us" or "look around" gets the sweep. The talk goes on until they
+pick a game. The suggestion and the list of games read lines.MINIMUM, so a game shows
+up here once it is built.
 
 What the group says is read in this order (brain/ears.py):
 
+  "remember that ...", "forget"  the facts, with scripted confirmations
   reset                         the welcome again
+  a game's name, no question    that game, on the count so far, at once
+  "not now", "stop", "pause"    a line, then the host naps until a tap on its head
+  noise                         nothing (D39), and so is transcription junk
+  anything else                 the talk model's turn (brain/agent.py, run_turn): the
+                                line it says plus the tools it picked, each checked in
+                                code (start a game, nap, count the table, the rules,
+                                look, a face, remember); a headcount said is still
+                                taken at its word first
+
+When the model gives nothing (offline, no key, too slow, a provider without tools),
+the scripted router answers instead, as before the talk had tools:
+
   a question about a game       its rules, from the script, and "Want to play it?"
   a game's name                 that game, on the count so far (none yet: the game
                                 asks for one; a count said with it: that count, or,
                                 after a sweep, it has to agree: "imposter with six
                                 people", D39)
-  "not now", "stop"             a line, then the host naps until a tap on its head
   "count us", "look around"     the sweep, a hello to each seat, the suggestion
   a headcount                   taken at its word, and the suggestion for it; after a
                                 sweep that saw fewer, "I only see five. Who's hiding?",
@@ -28,19 +40,16 @@ What the group says is read in this order (brain/ears.py):
   "sure", "yeah"                the suggestion, right after the host offered it (D39);
                                 after the model asked something else ("how was the
                                 beach?") a yes is talk, not a pick
-  small talk                    a reply (Table.chat, the host's talk model) or a
-                                scripted one: a hello, "how are you" or "who are you"
-                                is answered even when the host asked nothing (D39, D42)
-  anything else                 noise: nothing (D39), and so is transcription junk
+  small talk                    a reply (Table.chat) or a scripted one
 
-Silence gets at most two nudges; then the host says it is taking a nap and stops
-listening until a tap on its head wakes it (D39). Woken, it says it is up and asks
-what they want to play, and the talk goes on as before. The rules, the count and the suggestion are code
-(D14, D42): the talk model only writes the small-talk lines, and a line it writes that
-does not fit is replaced by a scripted one.
+Silence gets at most two nudges, the model's own words when it gives some, else
+scripted; then the host says it is taking a nap and stops listening until a tap on its
+head wakes it (D39). Woken, it says it is up and asks what they want to play, and the
+talk goes on as before. The rules, the count and the suggestion are code (D14, D42):
+the model picks words and checked tools, never a rule or a count.
 
 The talk is remembered: the last MEMORY lines, both what the group said and what the
-host said (scripted lines too), go to the model with each reply, so it holds a
+host said (scripted lines too), go to the model with each turn, so it holds a
 conversation and never says the same thing twice. The memory belongs to the table: a
 nap keeps it, and a greeting (the start, "reset") clears it. Game end clears it too,
 so the next lobby cannot carry dialogue or game context forward. Nothing is persisted;
@@ -56,13 +65,13 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-from brain import ears, facts, lines
+from brain import agent, ears, facts, lines
 from brain.games.common import Options, State
 from brain.table import Table
 
 RESTART = "restart"  # converse(): someone said "reset"
 _MAX_REPLY = 320  # characters: a model line longer than this is not about three short sentences
-MEMORY = 12  # lines of the talk, both sides, the model sees with each reply
+MEMORY = 40  # lines of the talk, both sides, the model sees with each turn
 _memories: weakref.WeakKeyDictionary[Any, deque[tuple[str, str]]] = weakref.WeakKeyDictionary()
 
 
@@ -98,6 +107,7 @@ class Welcome:
         self.seats = 0  # 0: nobody has said, and no sweep has run
         self.seen = False  # self.seats came from a sweep
         self.counted_at = float("-inf")
+        self.started_at = table.now()  # the talk's start, so the model knows when to nudge toward a game
         self.quiet_since = self.asked_at = float("-inf")
         self.offered_at = float("-inf")  # the last question offered the suggestion, so a yes takes it
         self.memory = _memory(table)
@@ -105,7 +115,6 @@ class Welcome:
         self.later: list[str] = []
         self.suggestion: str | None = None
         self.nudged = 0
-        self.chats = 0
         self.recounts = 0
         self.replied_at = float("-inf")
 
@@ -117,8 +126,11 @@ class Welcome:
         self.table.mood("idle")
         State(phase="welcome", seats=0).report(self.table)
         self.memory.clear()
-        self._say(self._opening("welcome.greeting", named=True) or lines.greeting(self.rng))
-        self._ask(lines.games_menu())
+        self._say(lines.greeting(self.rng))
+        if self._talking():
+            self._ask(lines.opener(self.rng), offer=False)  # the games come up in the talk
+        else:
+            self._ask(lines.games_menu())  # offline, the table still hears what there is
         self.later = lines.nudges(None, self.rng)
 
     def wake(self) -> None:
@@ -128,14 +140,23 @@ class Welcome:
         self._ask(self._opening("welcome.woke") or lines.woke(self.rng))
         self.later = lines.nudges(None, self.rng)
 
-    def _opening(self, situation: str, named: bool = False) -> str | None:
-        """The talk model's greeting or wake-up line, written ahead, if it fits: the
-        greeting (`named`) says it is ROB, the wake-up asks what they want to play;
-        else None."""
+    def _opening(self, situation: str) -> str | None:
+        """The talk model's wake-up line, written ahead, if it fits (it asks what they
+        want to play); else None."""
         line = _fit(self.table.chat(situation, games=lines.game_names(), remembered=self.facts.remembered()))
-        if line is None or (not named and "?" not in line) or (named and not re.search(r"\brob\b", line, re.IGNORECASE)):
-            return None
-        return line
+        return line if line is not None and "?" in line else None
+
+    def _talking(self) -> bool:
+        """The host's talk can pick his moves now (Table.talk_settings "tools"; a table
+        that does not say, "talk" not "off")."""
+        try:
+            choices = self.table.talk_settings() or {}
+        except Exception:  # a table with no talk settings is offline
+            return False
+        if "tools" in choices:
+            return choices["tools"] is True
+        talk = choices.get("talk")
+        return isinstance(talk, str) and talk != "off"
 
     def instead_of(self, game: str, seats: int) -> None:
         """After "Mafia needs at least four players." outside the talk: a game the
@@ -212,12 +233,18 @@ class Welcome:
                 if self.nudged >= min(self.options.nudges, len(self.later)):
                     self._say(lines.NAP)
                     return None  # sleeps until a tap
-                self._ask(self.later[self.nudged])
                 self.nudged += 1
+                turned, answer = self._turn("", now, list(self.memory), answering=False, quiet=True)
+                if not turned:
+                    self._ask(self.later[self.nudged - 1])
+                elif answer is not None:
+                    return None if answer == "" else answer
 
     def _hear(self, heard: str, now: float) -> Choice | str | None:
         """What to do with one listen's words: a Choice, RESTART, "" (wait quietly), or
-        None (keep talking)."""
+        None (keep talking). The commands and a game named outright are the code's and
+        instant; any other line worth answering is the talk model's turn, and the
+        scripted router when the model gives nothing."""
         command = ears.memory_command(heard)
         if command is not None:
             self._remember(*command)
@@ -225,9 +252,84 @@ class Welcome:
         if ears.wants_to_reset(heard):
             self.memory.clear()
             return RESTART
+        game = ears.game_named(heard)
+        if game is not None and ears.asks_rules(heard) is None and "?" not in heard:
+            return Choice(game, heard, self._counted(now), self.seen)
+        if ears.wants_later(heard) or ears.wants_to_stop(heard) or ears.wants_pause(heard) or ears.wants_sleep(heard):
+            self._say(lines.later(self.rng))  # "shut up", "not now": a line, then a nap
+            return ""
         before = list(self.memory)
         if ears.meaningful(heard, answering=True):
             self.memory.append(("them", heard.strip()))
+        rules = ears.asks_rules(heard)
+        if rules is not None:  # the rules are the script's, said as written, never the model's (D42)
+            self.suggestion = rules
+            self._ask(lines.rules(rules))
+            return None
+        answering = now - self.asked_at <= self.options.answer_seconds
+        if ears.meaningful(heard, answering):
+            turned, answer = self._turn(heard, now, before, answering)
+            if turned:
+                return answer
+        return self._scripted(heard, now, before, answering)
+
+    def _turn(self, heard: str, now: float, before: list[tuple[str, str]], answering: bool, quiet: bool = False) -> tuple[bool, Choice | str | None]:
+        """The talk model's turn (brain/agent.py): it says its line and runs its tools.
+        (False, None) when it gave nothing or failed, and the scripted line is said
+        instead; else (True, what _hear answers). A headcount said is still taken at
+        its word, and a sweep's count kept, as the scripted router does."""
+        spoken = ears.count_said(heard) or (ears.bare_number(heard) if answering else None)
+        seats = spoken if spoken is not None else self.seats
+        suggestion = lines.suggested(seats) if spoken is not None else self.suggestion
+        facts: dict[str, Any] = {
+            "transcript": [list(e) for e in before], "remembered": self.facts.remembered(), "memory": self.facts,
+            "games": lines.game_names(), "minimum": dict(lines.MINIMUM), "seats": seats, "answering": answering,
+            "minutes": max(0.0, now - self.started_at) / 60,
+        }
+        if suggestion is not None:
+            facts["suggestion"] = lines.game_name(suggestion)
+        if quiet:
+            facts["quiet"] = True
+        table = _Counting(self.table)
+        try:
+            outcome = agent.run_turn(table, "lobby", heard, facts, agent.LOBBY)
+        except Exception:  # the talk is decoration: a failure is the scripted line
+            outcome = None
+        if outcome is None:
+            return False, None
+        if spoken is not None:
+            self._settled(spoken)
+            self.table.seated(spoken)
+            self.suggestion = suggestion
+        if table.counted is not None:  # count_table: as _count, and the suggestion for it
+            self.seats, self.seen, self.counted_at = table.counted, True, self.table.now()
+            State(phase="welcome", seats=self.seats).report(self.table)
+            self.suggestion = lines.suggested(self.seats)
+        if spoken is not None or table.counted is not None:
+            self.later = lines.nudges(self.suggestion, self.rng)
+        if "forget" in outcome.ran:
+            self.memory.clear()  # a forgotten fact must not survive in recent dialogue
+        if outcome.said:
+            self.memory.append(("ROB", outcome.said))
+            self.quiet_since = self.replied_at = self.table.now()
+            if outcome.said.rstrip().endswith("?"):
+                named = ears.game_named(outcome.said)
+                if named is not None:
+                    self.suggestion = named  # "So, Imposter?": a yes takes it
+                self.asked_at = self.replied_at
+                self.offered_at = self.asked_at if named is not None else float("-inf")
+        else:
+            self.quiet_since = max(self.quiet_since, now)
+        if outcome.game is not None:
+            return True, Choice(outcome.game, heard, self._counted(self.table.now()), self.seen)
+        if outcome.nap:
+            if not outcome.said:
+                self._say(lines.later(self.rng))  # the way to wake him
+            return True, ""
+        return True, None
+
+    def _scripted(self, heard: str, now: float, before: list[tuple[str, str]], answering: bool) -> Choice | str | None:
+        """The scripted router, offline or when the talk model gave nothing (D39)."""
         rules = ears.asks_rules(heard)
         if rules is not None:
             self.suggestion = rules
@@ -236,16 +338,12 @@ class Welcome:
         game = ears.game_named(heard)
         if game is not None:
             return Choice(game, heard, self._counted(now), self.seen)
-        if ears.wants_later(heard) or ears.wants_to_stop(heard) or ears.wants_pause(heard):
-            self._say(lines.later(self.rng))  # "shut up", "not now": a line, then a nap
-            return ""
         if ears.wants_count(heard):
             self._say(lines.looking(self.rng))
             self._count()
             self._hellos()
             self._suggest()
             return None
-        answering = now - self.asked_at <= self.options.answer_seconds
         offered = now - self.offered_at <= self.options.answer_seconds
         spoken = ears.count_said(heard) or (ears.bare_number(heard) if answering else None)
         if spoken is not None:
@@ -307,8 +405,6 @@ class Welcome:
         """Small talk: a reply that knows the talk so far (`before`, what was said before
         `heard`), the model's or a scripted one, never a line just said (D39, D42). A
         question back offers the suggestion only when it names it."""
-        if self.chats >= self.options.max_chats or now - self.replied_at < self.options.reply_gap_seconds:
-            return
         facts: dict[str, Any] = {"remembered": self.facts.remembered(), "answering": answering, "games": lines.game_names(), "transcript": [list(e) for e in before]}
         if self.seats > 0:
             facts["players"] = self.seats
@@ -318,7 +414,6 @@ class Welcome:
         line = _fit(self.table.chat("welcome", heard, **facts))
         if line is None or line in said:
             line = lines.chat_fallback(self.suggestion, self.rng, ears.small_talk(heard), said)
-        self.chats += 1
         if line.endswith("?"):
             self._ask(line, offer=self.suggestion is not None and ears.game_named(line) == self.suggestion)
         else:
@@ -336,6 +431,21 @@ class Welcome:
             self._ask(lines.instead(pick))
         else:
             self._ask(lines.suggestion(self.seats, self.rng))
+
+
+class _Counting:
+    """The table as a talk turn sees it, keeping what a count_table sweep found."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+        self.counted: int | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._table, name)
+
+    def count(self) -> int:
+        self.counted = self._table.count()
+        return self.counted
 
 
 _SEAT = re.compile(r"\b(?:player|players|seat|seats)\b|\d", re.IGNORECASE)

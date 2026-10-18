@@ -592,7 +592,7 @@ def test_talk_settings_snapshot_contains_only_choices(host, monkeypatch):
         talk="gemini", talk_model="gemini-2.5-flash", effort="high", persona="spooky"))
     host.talk = object()
     assert host.talk_settings() == {
-        "talk": "gemini", "talk_model": "gemini-2.5-flash", "effort": "high", "persona": "spooky"}
+        "talk": "gemini", "talk_model": "gemini-2.5-flash", "effort": "high", "persona": "spooky", "tools": False}
     host.talk = None
     assert host.talk_settings()["talk"] == "off"
 
@@ -658,3 +658,19 @@ def test_a_robot_error_marks_the_robot_dropped(body, monkeypatch):
     with pytest.raises(BodyError):
         body.leds([(1, 2, 3)])
     assert body.gateway.dropped
+
+
+def test_a_gesture_moves_the_head_and_ends_where_it_was_and_a_setting_is_checked(host, fake, clock, monkeypatch):
+    monkeypatch.setattr(settings, "current", settings.Settings())
+    monkeypatch.setattr(settings, "file", None)
+    pitch = host.body.pitch
+    w = Worker(clock, host.gesture, "shake")
+    clock.advance(5)
+    assert w.done and w.error is None
+    moves = [(c["args"]["yaw"], c["args"]["pitch"]) for c in _calls(fake, "move_head")]
+    assert moves == [(-12, pitch), (12, pitch), (0, pitch)] and host.body.pitch == pitch
+    assert host.setting("persona", "dramatic") is True and settings.current.persona == "dramatic"
+    assert host.setting("persona", "wizard") is False and settings.current.persona == "dramatic"
+    assert host.setting("volume", 101) is False and host.setting("mic", "mac") is False
+    assert host.setting("volume", 55) is True
+    assert _calls(fake, "set_volume")[-1]["args"] == {"volume": 55}

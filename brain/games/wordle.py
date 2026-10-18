@@ -31,7 +31,7 @@ from collections import Counter
 from typing import Any
 
 from brain import ears, lines
-from brain.games.common import Options, State, abandon, finish, hear
+from brain.games.common import Options, State, abandon, finish, hear, side_reply
 from brain.games.wordle_words import ALLOWED, ANSWERS
 from brain.table import Card, Table
 
@@ -340,6 +340,9 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
             if unknown is not None and _attempt(tokens):
                 table.say(f"{unknown.capitalize()}? Not in my dictionary. Try another.")
                 not_caught = 0
+            elif unknown is None and side_reply(table, heard, {"game": "wordle", "phase": "guess", "tried": list(tried),
+                                                                "left": GUESSES - len(tried)}):
+                pass  # said to the host, not a guess: a short reply (side talk)
             elif _attempt(tokens) and not_caught < MAX_NOT_CAUGHT:
                 table.say(_NOT_CAUGHT)
                 not_caught += 1

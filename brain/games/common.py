@@ -101,12 +101,36 @@ class State:
         self.sitting_out.discard(seat)
 
 
-def hear(table: Table, seconds: float) -> str:
-    """table.listen, except that a request to stop ends the game (GameStopped)."""
+def hear(table: Table, seconds: float, chat: dict[str, Any] | None = None) -> str:
+    """table.listen, except that a request to stop ends the game (GameStopped).
+
+    chat: side talk is welcome at this listen (docs/CHAT-PLAN.md, step 7), with these
+    public facts for the talk model (game, phase, seats; never a role, word or target).
+    A line for the host that the game could not use gets a short reply (side_reply)
+    and comes back as "", so the game carries on as if the table were quiet. Only
+    listens where silence is harmless opt in: never a vote, whisper, guess, count or
+    clue, and nothing at night."""
     heard = table.listen(seconds)
     if ears.wants_to_stop(heard):
         raise GameStopped.heard(heard)
+    if chat is not None and side_reply(table, heard, chat):
+        return ""
     return heard
+
+
+def side_reply(table: Table, heard: str, facts: dict[str, Any]) -> bool:
+    """When `heard` is side talk (ears.side_talk), the talk model's short reply with the
+    game's small toolset (agent.GAME) and True; anything going wrong there says nothing.
+    False, and nothing said, for a line the game may want."""
+    if not ears.side_talk(heard):
+        return False
+    from brain import agent  # here, not at the top: agent's tools may reach back into the games
+
+    try:
+        agent.run_turn(table, "game", heard, dict(facts), agent.GAME)
+    except Exception:  # the game goes on whatever the talk did
+        pass
+    return True
 
 
 def abandon(table: Table, state: State) -> None:

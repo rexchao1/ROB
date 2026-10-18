@@ -219,3 +219,52 @@ def test_a_sweep_that_sees_nobody_and_hears_nothing_stops_without_sweeping_again
     assert gather(t, "imposter", "", state, Options()) is None
     assert [kind for _, kind, _ in t.log].count("count") == 1
     assert state.stalled == "no count"
+
+
+# --- side talk during games (docs/CHAT-PLAN.md, step 7) ---------------------------------
+
+
+@pytest.fixture
+def turns(monkeypatch):
+    from brain import agent
+
+    calls = []
+    monkeypatch.setattr(agent, "run_turn", lambda table, situation, heard, facts, allowed=agent.LOBBY: calls.append(
+        (situation, heard, facts, allowed)))
+    return calls
+
+
+def test_side_talk_at_a_chat_listen_gets_a_turn_and_the_game_hears_nothing(turns):
+    from brain import agent
+    from brain.games.common import hear
+
+    t = FakeTable().hear("rob, are you having fun?")
+    assert hear(t, 5, {"game": "mafia", "phase": "day"}) == ""
+    assert turns == [("game", "rob, are you having fun?", {"game": "mafia", "phase": "day"}, agent.GAME)]
+
+
+def test_without_chat_a_listen_never_takes_a_turn(turns):
+    from brain.games.common import hear
+
+    assert hear(FakeTable().hear("rob, are you having fun?"), 5) == "rob, are you having fun?"
+    assert turns == []
+
+
+def test_a_vote_is_never_side_talk(turns):
+    from brain.games.common import hear
+
+    assert hear(FakeTable().hear("rob, player two"), 5, {"game": "mafia"}) == "rob, player two"
+    assert turns == []
+
+
+def test_a_failed_turn_says_nothing_and_the_game_goes_on(monkeypatch):
+    from brain import agent
+    from brain.games.common import hear
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("no model")
+
+    monkeypatch.setattr(agent, "run_turn", boom)
+    t = FakeTable().hear("rob, are you having fun?")
+    assert hear(t, 5, {"game": "mafia"}) == ""
+    assert t.said == []

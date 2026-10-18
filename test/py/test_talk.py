@@ -90,3 +90,24 @@ def test_load_ignores_a_saved_value_of_the_wrong_type(tmp_path, monkeypatch):
     settings.load(saved)
     s = settings.current
     assert (s.persona, s.effort, s.speaker, s.talk, s.talk_model) == ("pirate", "low", "mac", "anthropic", None)
+
+
+def test_act_sends_the_offered_tools_and_reads_the_line_and_tool_calls(anthropic, monkeypatch):
+    sent = []
+
+    def answer(self, url, body, headers, timeout=None):
+        sent.append(body)
+        return {"stop_reason": "tool_use", "content": [
+            {"type": "text", "text": "Oh, a spooky voice? Say less."},
+            {"type": "tool_use", "id": "t1", "name": "setting", "input": {"name": "persona", "value": "dramatic"}},
+            {"type": "tool_use", "id": "t2", "name": "start_game", "input": {"game": "mafia"}},  # not offered: dropped
+        ]}
+
+    monkeypatch.setattr(talk.Talk, "_post", answer)
+    t = talk.Talk(log=lambda msg: None)
+    turn = t.act("lobby", "do the spooky voice", {"tools": ["look", "setting"], "transcript": [["them", "hi"], ["ROB", "Hey."]]})
+    assert turn == {"line": "Oh, a spooky voice? Say less.", "actions": [{"name": "setting", "args": {"name": "persona", "value": "dramatic"}}]}
+    assert [tool["name"] for tool in sent[0]["tools"]] == ["look", "setting"]
+    assert sent[0]["thinking"] == {"type": "disabled"} and "do the spooky voice" in sent[0]["messages"][0]["content"]
+    settings.current.talk = "gemini"
+    assert t.act("lobby", "hi", {"tools": ["look"]}) is None  # no tools there: the caller uses chat

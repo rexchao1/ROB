@@ -960,3 +960,11 @@ D117 2026-10-18 [I] amends D21
   serves: N1
   touches: D7 D8 D21 D95 D100 D103
 # Rex, 2026-10-18: "Everybody but one person knows the number. Then the person that doesn't know calls individually on each person with a category, and the person called on has to choose a word in that category that's meaning/value is closest (in the person that doesn't know the number opinion) to the number".
+
+D118 2026-10-18 [V] amends D42
+  resp: the host talks like a person, not a game menu: before a game and whenever someone speaks to it during one, a talk model writes its line and may choose its own actions from a fixed set (turn to a seat, nod, shake, a face, its own personality, voice, speaker and volume, counting the table, saying a game's scripted rules, remembering or forgetting a fact, starting a game, taking a nap), each checked in code before it runs; it would rather the group picks the game but may start one; stop, sleep, reset and pause are still read by code first; mid-game side talk uses only what everyone heard and never touches a vote, a whisper, a guess or a count; a model still decides no rule, count, score, winner or secret, and with no model the host is the scripted one of D39 [V]
+  why:   Rex: ROB should feel way more like a chatbot than a game bot, free in movement, settings, speech and topics, still directed toward advancing the game [V]
+  -> structural
+  serves: N1
+  touches: D14 D39 D40 D42
+# docs/CHAT-PLAN.md. Rex's answers: ROB may start a game himself but prefers they choose; may change his own personality and voice unasked; may remember facts on his own (brain/facts.py still refuses private ones); may chat whenever, games included.

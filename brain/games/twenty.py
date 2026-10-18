@@ -27,7 +27,7 @@ import re
 from typing import Any
 
 from brain import ears, lines
-from brain.games.common import Options, State, abandon, hear
+from brain.games.common import Options, State, abandon, hear, side_reply
 from brain.games.twenty_things import KINDS, THINGS, TRAIT, TRAITS, Thing, Trait
 from brain.table import Table
 
@@ -111,9 +111,16 @@ class Twenty:
         self.table.quip("win", game="twenty", outcome="you won this one" if winner == "robot" else "the player beat you")
         self.table.say("Good game." if self.seats == 1 else lines.GOOD_GAME)
 
-    def _await(self, nudge: str, ease: str, usable) -> str:
+    def _facts(self) -> dict[str, Any]:
+        """What side talk may know: never the secret."""
+        return {"game": "twenty", "mode": self.mode, "phase": self.state.phase, "questions": self.used,
+                "left": QUESTIONS - self.used}
+
+    def _await(self, nudge: str, ease: str, usable, chat: bool = False) -> str:
         """The next usable thing said. Silence gets a nudge, then "take your time", then
-        quiet; "hold on" or "wait" pauses the nudges. Stop and reset end the game (hear)."""
+        quiet; "hold on" or "wait" pauses the nudges. Stop and reset end the game (hear).
+        chat: a line said to the host that is not usable gets a short reply (side talk)
+        and does not count as quiet."""
         quiet = 0.0
         step = 0
         patient = False
@@ -126,6 +133,8 @@ class Twenty:
                 continue
             if heard.strip() and usable(heard):
                 return heard
+            if chat and side_reply(self.table, heard, self._facts()):
+                continue
             quiet += chunk
             if quiet >= GONE_AT:
                 raise _Gone()
@@ -166,7 +175,7 @@ class Twenty:
                 self.table.mood("tense")
             self.table.say(" ".join(p for p in (react, prefix, question) if p))
             react = ""
-            heard = self._await("Yes, no, or sort of?", "Take your time.", lambda h: _answer(h) is not None)
+            heard = self._await("Yes, no, or sort of?", "Take your time.", lambda h: _answer(h) is not None, chat=True)
             answer = _answer(heard)
             if answer is None or answer == "unknown":  # "don't know" still uses the question
                 answer = "unknown"
@@ -276,7 +285,8 @@ class Twenty:
                 self._say_counted(line)
                 continue
             if not _asks(heard):
-                continue  # talking among themselves
+                side_reply(self.table, heard, self._facts())  # a line to the host gets a reply; else they are talking among themselves
+                continue
             answer = self._answer(heard, secret)
             if answer is None:
                 self.table.say("Can't answer that one. Try another way.")

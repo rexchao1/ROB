@@ -353,12 +353,18 @@ def flavor(moment: str, rng: random.Random) -> str:
 
 # --- the welcome (D38 to D43) ------------------------------------------------------------
 
-GREETINGS = (
-    "Hey, everybody! I'm ROB, and I'm so glad you're here. Pull up a chair, tonight is game night!",
-    "Oh good, people! Hi, I'm ROB, your host. Welcome, welcome, make yourselves at home.",
-    "Hey hey, it's game night! I'm ROB, and I've been waiting all day for you. Come on in.",
-    "Hi, friends! I'm ROB, and I'll be your host tonight. It's really good to see you.",
-    "Well, look who showed up! Welcome! I'm ROB, and I promise to keep score honestly. Mostly.",
+GREETINGS = (  # always scripted (recorded once, so they play at once), then an OPENERS question
+    "Hi, I'm ROB. I've been sitting here a while. Glad somebody showed up.",
+    "Hey, everyone. I'm ROB, I'm your host, and yes, this is all of me.",
+    "Hey. I'm ROB. Grab a seat and get comfortable. I'll handle the hard part.",
+    "Oh, hi. Sorry, I was rehearsing. I'm ROB, your host.",
+    "Hi, I'm ROB. Take your time getting settled. I'm not going anywhere. I literally can't.",
+    "Okay, people. Good. I'm ROB, and I've been looking forward to this all day.",
+)
+OPENERS = (  # the welcome's second line when the talk is on; the games come up in the talk
+    "So, how's everybody doing?",
+    "What are we in the mood for?",
+    "Anybody already know what they want to play?",
 )
 LOOKING = (
     "Okay, let me get a look at you all.",
@@ -370,6 +376,11 @@ HOW_MANY = "How many of you are playing?"
 
 def greeting(rng: random.Random) -> str:
     return rng.choice(GREETINGS)
+
+
+def opener(rng: random.Random) -> str:
+    """The question after the greeting when the talk is on (offline: games_menu())."""
+    return rng.choice(OPENERS)
 
 
 def _hellos(seat: int, seats: int) -> tuple[str, ...]:
@@ -512,7 +523,8 @@ MAFIA_NEEDS = "Mafia needs at least four of you."
 
 
 def games_menu() -> str:
-    """The welcome's second line: every game built, Mafia's minimum, and the question."""
+    """The welcome's second line when the talk is off: every game built, Mafia's minimum,
+    and the question."""
     return f"Tonight I can host {game_names()}. {MAFIA_NEEDS} Pick one, or tell me how many of you there are and I'll choose."
 
 
@@ -684,7 +696,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
         WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
-        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(), games_menu(),
+        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(), games_menu(), *OPENERS,
     ]
     out += [mafia_intro(1), mafia_intro(2)]
     out += [too_few(g, m) for g, m in MINIMUM.items()]
