@@ -608,7 +608,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
 <div class="paused" id="paused" hidden role="status">
   <div class="box">
     <div class="w" id="pausedWord">Paused</div>
-    <div class="d" id="pausedHint">Say "resume" or tap the robot's head.</div>
+    <div class="d" id="pausedHint">Say "resume" or put a whole hand on top of the robot's head.</div>
     <button class="big" id="resumeBtn">Resume</button>
   </div>
 </div>
@@ -842,7 +842,7 @@ function render() {
   $("pauseBtn").hidden = $("stopBtn").hidden || paused;
   $("paused").hidden = !paused && !asleep;
   $("pausedWord").textContent = asleep ? "Napping" : "Paused";
-  $("pausedHint").textContent = asleep ? "ROB isn't listening. Tap the robot's head to wake it." : 'Say "resume" or tap the robot\'s head.';
+  $("pausedHint").textContent = asleep ? "ROB isn't listening. Put a whole hand on top of the robot's head to wake it." : 'Say "resume" or put a whole hand on top of the robot\'s head.';
   $("resumeBtn").textContent = asleep ? "Wake ROB" : "Resume";
   document.body.classList.toggle("is-paused", paused || asleep);
   const tone = inGame && !g.over ? (TONE[g.phase] || "idle") : "idle";

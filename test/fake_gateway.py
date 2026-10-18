@@ -59,6 +59,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 import cv2
@@ -129,6 +130,8 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "clear_leds": {"type": "object", "properties": {}},
     "get_touch_state": {"type": "object", "properties": {}},
+    "get_touch_sensor_enabled": {"type": "object", "properties": {}},
+    "set_touch_sensor_enabled": {"type": "object", "properties": {"enabled": {"type": "boolean"}}, "required": ["enabled"]},
     "say": {
         "type": "object",
         "properties": {
@@ -177,6 +180,7 @@ class Device:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.captures = Path(tempfile.mkdtemp(prefix="fake-gateway-captures-"))
+        self.now: Callable[[], float] = time.monotonic  # the touch pad's timing; a test sets its virtual clock
         self.reset()
 
     def reset(self) -> None:
@@ -191,7 +195,10 @@ class Device:
             self.default_frame: np.ndarray | None = None
             self.scene: list[table.Face] | None = None
             self.heard: list[str] = []
-            self.touching = False  # a hand on the head
+            self._hand = False  # a hand on top of the head (set through `touching`)
+            self._lifted_at: float | None = None  # when the hand last left, until the pad clears
+            self._touch_event: tuple[str, float] | None = None  # the last gesture and when it happened
+            self.touch_enabled = True
             self.calls: list[dict[str, Any]] = []
             self.seq = 0
             self.epoch = time.monotonic()
@@ -287,9 +294,43 @@ class Device:
         self.leds = [[0, 0, 0] for _ in range(12)]
         return {"ok": True}, None
 
+    # The head's touch pad as measured on the real robot (stackchan-mcp 0.18): a hand
+    # held on top lights zone0 only (raw 3); the pad stays on PAD_STICKS seconds after
+    # the hand leaves; when it clears, last_event becomes "stroke", dated when the hand
+    # left (so its age is about PAD_STICKS then). Never "tap".
+    PAD_STICKS = 2.8
+
+    @property
+    def touching(self) -> bool:
+        return self._hand
+
+    @touching.setter
+    def touching(self, on: bool) -> None:
+        if on == self._hand:
+            return
+        self._hand = on
+        if not on:
+            self._lifted_at = self.now()
+
     def _get_touch_state(self, _: dict[str, Any]):
-        t = self.touching  # the real robot's shape (stackchan-mcp 0.18)
-        return {"available": True, "zone0": t, "zone1": False, "zone2": False, "raw": int(t), "last_event": "idle", "last_event_age_ms": -1}, None
+        now = self.now()
+        pad = self._hand
+        if not pad and self._lifted_at is not None:
+            if now < self._lifted_at + self.PAD_STICKS:
+                pad = True
+            else:
+                self._touch_event = ("stroke", self._lifted_at)
+                self._lifted_at = None
+        pad = pad and self.touch_enabled
+        event, age = ("idle", -1) if self._touch_event is None else (self._touch_event[0], int((now - self._touch_event[1]) * 1000))
+        return {"available": True, "zone0": pad, "zone1": False, "zone2": False, "raw": 3 if pad else 0, "last_event": event, "last_event_age_ms": age}, None
+
+    def _get_touch_sensor_enabled(self, _: dict[str, Any]):
+        return {"enabled": self.touch_enabled}, None
+
+    def _set_touch_sensor_enabled(self, args: dict[str, Any]):
+        self.touch_enabled = bool(args["enabled"])
+        return {"ok": True, "enabled": self.touch_enabled}, None
 
     def _say(self, args: dict[str, Any]):
         # Present because the gateway has it; the brain speaks through /pcm instead.

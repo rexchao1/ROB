@@ -565,7 +565,7 @@ D71 2026-10-18 [I]
 D72 2026-10-18 [I>V]
   pre:   a game is in progress [I>V]
   trig:  someone says `pause` or `hold the game` at any listen [I>V]
-  resp:  the host holds the game: it says `Paused. Say resume or tap my head when you're ready.`, the ring dims, the game's clock stops so a day timer does not run out, and it listens in ten-second windows; `resume`, `we're back`, `keep going`, a tap on its head or the page's Resume carries on with `Okay, back to it.` and the listen that was interrupted runs again; `stop the game` or `reset` said while paused is heard by the game [I>V]
+  resp:  the host holds the game: it says `Paused. Say resume or put your hand on top of my head when you're ready.`, the ring dims, the game's clock stops so a day timer does not run out, and it listens in ten-second windows; `resume`, `we're back`, `keep going`, a tap on its head or the page's Resume carries on with `Okay, back to it.` and the listen that was interrupted runs again; `stop the game` or `reset` said while paused is heard by the game [I>V]
   sib:   none -- a stop or reset while paused is handled in resp
   serves: N1
   touches: D27 D57

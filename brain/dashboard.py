@@ -242,7 +242,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <div class="top">
-  <header><h1>Game master</h1><span id="paused" class="pill warn" hidden>paused</span><span id="asleep" class="pill" hidden>asleep: tap its head to wake it</span><span id="robot" class="pill">robot: ?</span></header>
+  <header><h1>Game master</h1><span id="paused" class="pill warn" hidden>paused</span><span id="asleep" class="pill" hidden>asleep: put a whole hand on top of its head to wake it</span><span id="robot" class="pill">robot: ?</span></header>
   <nav role="tablist">
     <button role="tab" data-tab="play">Play</button>
     <button role="tab" data-tab="rob">ROB</button>

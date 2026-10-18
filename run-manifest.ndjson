@@ -67,7 +67,7 @@
 {"file":"features/operator-dashboard.feature","title":"The page shows the game as it happens","status":"unbound"}
 {"file":"features/operator-dashboard.feature","title":"The volume is set on the robot and never saved","status":"unbound"}
 {"file":"features/operator-dashboard.feature","title":"Typed hearing replaces the microphone at the next listen","status":"unbound"}
-{"file":"features/pausing.feature","title":"A tap on the head resumes","status":"unbound"}
+{"file":"features/pausing.feature","title":"A hand on top of the head resumes","status":"unbound"}
 {"file":"features/pausing.feature","title":"Hold on and wait pause the game too","status":"unbound"}
 {"file":"features/pausing.feature","title":"Pause holds the game's clock","status":"unbound"}
 {"file":"features/pausing.feature","title":"Stop while paused stops the game","status":"unbound"}

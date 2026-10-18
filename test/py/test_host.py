@@ -78,7 +78,8 @@ def clock():
 
 
 @pytest.fixture
-def host(body, clock, tmp_path):
+def host(body, fake, clock, tmp_path):
+    fake.device.now = clock.now  # the touch pad keeps the table's time
     return Host(body, clock, TestVoice(), NoBanter(), sets_dir=tmp_path, rng=random.Random(0), log=lambda _: None)
 
 
@@ -469,6 +470,26 @@ def test_a_tap_on_the_head_ends_the_pause(host, fake, clock):
     fake.device.touching = False
     clock.advance(4)
     assert w.done and w.result == ""
+
+
+def test_one_hand_on_the_head_wakes_one_nap_not_the_next(host, fake, clock):
+    # The pad stays on seconds after the hand leaves and then reports a stroke: the
+    # hold that woke the first nap must not end the second at once.
+    w = Worker(clock, host.sleep, 30.0)
+    clock.advance(2)
+    fake.device.touching = True
+    clock.advance(2)
+    assert w.done and w.result == ""
+    fake.device.touching = False  # the pad stays on about three seconds more
+    w2 = Worker(clock, host.sleep, 10.0)
+    clock.advance(12)
+    assert w2.done and w2.result is None  # slept the whole time
+    w3 = Worker(clock, host.sleep, 10.0)
+    clock.advance(1)
+    fake.device.touching = True  # a new hold wakes the next nap
+    clock.advance(2)
+    assert w3.done and w3.result == ""
+    fake.device.touching = False
 
 
 def test_stop_said_while_paused_reaches_the_game(host, fake, clock):

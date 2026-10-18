@@ -519,10 +519,10 @@ def instead(game: str) -> str:
 
 
 LATER = (
-    "No rush. Tap my head when you're ready to play.",
-    "Cool, I'll take a nap. Tap my head when you want a game.",
+    "No rush. Put your hand on top of my head when you're ready to play.",
+    "Cool, I'll take a nap. Rest your hand on top of my head when you want a game.",
 )
-NAP = "I'll take a nap. Tap my head when you want me."  # the host stops listening until a tap wakes it
+NAP = "I'll take a nap. Put your hand on top of my head when you want me."  # the host stops listening until a touch wakes it
 WOKE = (
     "I'm up! What are we playing?",
     "Hey, I'm awake. What do you want to play?",
@@ -539,7 +539,7 @@ def looking(rng: random.Random) -> str:
 
 
 def woke(rng: random.Random) -> str:
-    """A tap on the head woke the host: "I'm up", and a question."""
+    """A hand on the head woke the host: "I'm up", and a question."""
     return rng.choice(WOKE)
 
 

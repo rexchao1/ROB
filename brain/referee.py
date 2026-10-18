@@ -35,7 +35,7 @@ from brain.lobby import Lobby
 from brain.remote import RemoteTable, TableRefused, TableReset, TableUnreachable
 
 RETRY = 2.0  # seconds between attempts to reach the table
-RECOVERY = "Sorry, I lost my place. Tap my head to start again."  # the brain's line when it sends none
+RECOVERY = "Sorry, I lost my place. Put your hand on top of my head to start again."  # the brain's line when it sends none
 LISTEN_WINDOW = 4.0
 
 
@@ -79,7 +79,7 @@ class Referee:
                 nap = lost or bool(first and hello.get("calls"))  # picking up after a cut, or after another referee
                 if nap:
                     if lost:
-                        self._say_recovery()  # "... Tap my head to start again."
+                        self._say_recovery()  # "... Put your hand on top of my head to start again."
                     self._idle()
                 lost = first = False
                 self.idle_loop(welcome, nap=nap)

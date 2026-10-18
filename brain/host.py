@@ -10,7 +10,7 @@ it waits real time.
 
 The private screen (D7, D8) is the one tight loop: a photo every POLL seconds while a
 card is owed, the card up only while exactly one close face is in view, blanked at
-the first photo with two. A player can answer it without the camera too: a head tap,
+the first photo with two. A player can answer it without the camera too: a hand on the head,
 or "show me" (typed, or said in a short listen while nobody leans in) puts the card up
 on trust, "got it" moves on, and "pause" or "stop the game" work there as anywhere.
 
@@ -56,8 +56,8 @@ GIVE_UP = 30.0  # stop waiting for a lean-in after this long
 HEAR_AFTER = 4.0  # nobody close this long after the lean-in line: a short listen for "show me"
 HEAR_EVERY = 6.0  # and again this often; photos stop while the host listens (one gateway command at a time)
 HEAR_SECONDS = 3.0  # each of those listens
-TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a tap is "show me"
-TRUST = 4.0  # seconds the card stays up on a tap or "show me", the camera or not
+TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a hand on it is "show me"
+TRUST = 4.0  # seconds the card stays up on a touch or "show me", the camera or not
 SPEAKERS = ("robot", "mac")
 LISTEN_WINDOW = 4.0  # the idle loop's listening window, waiting for a game's name
 MAX_LISTEN = 30.0  # the gateway's longest listen
@@ -71,11 +71,11 @@ PHOTO_RETRY_WAIT = 3.0  # seconds between those tries; the robot reconnects on i
 SCAN_ON = (0, 22, 40)  # the ring's colour for the part of the counting sweep done so far
 SCAN_SEEN = (0, 90, 30)  # the ring's colour where the sweep saw a face
 RING = 12  # LEDs on the ring
-RECOVERY = "Sorry, I lost my place. Tap my head to start again."
+RECOVERY = "Sorry, I lost my place. Put your hand on top of my head to start again."
 PAUSED_WINDOW = 10.0  # seconds per listen while paused: the robot chimes each time its microphone opens
 PAUSED_LEDS = (6, 6, 10)  # the ring while paused
 ASLEEP_LEDS = (2, 2, 4)  # the ring while the host naps between games, its microphone off
-PAUSED = "Paused. Say resume or tap my head when you're ready."
+PAUSED = "Paused. Say resume or put your hand on top of my head when you're ready."
 RESUMED = "Okay, back to it."
 
 
@@ -308,7 +308,7 @@ class Host:
                 text = self._hear(PAUSED_WINDOW)
                 if ears.wants_to_stop(text):
                     return text
-                if ears.wants_resume(text) or (self.body.touched(self.clock.now() - checked + 1.0)):
+                if ears.wants_resume(text) or self.body.touched(self.clock.now() - checked + 1.0, self.clock.now()):
                     break
         finally:
             self.paused = False
@@ -329,7 +329,7 @@ class Host:
         out with neither."""
         self._check_stop()
         if not self.asleep:
-            self._log("asleep: a tap on the head wakes me")
+            self._log("asleep: a hand on my head wakes me")
             if self.dash is not None:
                 self.dash.record("game", "asleep")
             self.body.leds([ASLEEP_LEDS])
@@ -346,13 +346,13 @@ class Host:
                 break
             self.wait(TOUCH_EVERY)
             now = self.clock.now()
-            if self.body.touched(now - checked + 0.5):
+            if self.body.touched(now - checked + 0.5, now):
                 woke = ""
             checked = now
         if woke is None:
             return None
         self.asleep = False
-        self._log("awake" + (f" (typed): {woke}" if woke else ": the head was tapped"))
+        self._log("awake" + (f" (typed): {woke}" if woke else ": the head was touched"))
         if self.dash is not None:
             self.dash.record("game", "awake")
         self.body.leds([self.ring])
@@ -620,8 +620,8 @@ class Host:
                 answers = [(text, True) for text in self._typed()]
                 if not showing and trusted is None:
                     if now - touch_checked >= TOUCH_EVERY:
-                        if self.body.touched(now - touch_checked + 0.5):
-                            self._log("head tapped: the card goes up")
+                        if self.body.touched(now - touch_checked + 0.5, now):
+                            self._log("head touched: the card goes up")
                             answers.append(("show me", False))
                         touch_checked = now
                     if n == 0 and now >= next_hear and now + HEAR_SECONDS <= start + GIVE_UP:
