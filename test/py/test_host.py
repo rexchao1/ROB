@@ -543,6 +543,25 @@ def test_one_hand_on_the_head_wakes_one_nap_not_the_next(host, fake, clock):
     fake.device.touching = False
 
 
+def test_a_pause_typed_mid_game_holds_the_next_line_and_a_stop_ends_the_game(host, fake, clock):
+    host.state = {"game": "mafia", "phase": "day", "over": False}
+    host.inject("pause")  # the dashboard's Pause, while the game is not listening
+    w = Worker(clock, host.say, "Player two, who do you vote for?")
+    clock.advance(1)
+    assert host.paused and _said(fake) == [PAUSED] and not w.done
+    host.inject("stop the game")
+    clock.advance(PAUSED_WINDOW + 1)
+    assert w.done and isinstance(w.error, GameStopped) and not host.paused
+    assert "Player two, who do you vote for?" not in _said(fake)
+
+
+def test_a_stop_typed_mid_game_ends_it_before_the_next_wait(host, fake, clock):
+    host.state = {"game": "mafia", "phase": "night", "over": False}
+    host.inject("stop the game")
+    w = Worker(clock, host.wait, 3.0)
+    assert w.done and isinstance(w.error, GameStopped)
+
+
 def test_stop_said_while_paused_reaches_the_game(host, fake, clock):
     host.state = {"game": "mafia", "phase": "night", "over": False}  # a pause holds a game
     fake.device.heard.append("pause")

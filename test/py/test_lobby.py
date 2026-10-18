@@ -143,3 +143,13 @@ def test_game_reset_and_disconnect_clear_dialogue_without_saving_roles(monkeypat
         lobby.play("mafia", "mafia")
     assert not w.memory
     assert lobby.facts.remembered() == []
+
+
+def test_a_stopped_game_goes_back_to_listening_awake_then_naps_after_the_quiet(monkeypatch):
+    _played(monkeypatch, outcome="stopped")
+    table = FakeTable().hear("let's play imposter")
+    _lobby(table).run()
+    assert table.said == [lines.NAP]  # no nap line straight after the stop
+    kinds = _kinds(table)
+    first_sleep = kinds.index("sleep")
+    assert kinds[1:first_sleep].count("listen") >= 2  # awake and listening for a game's name first

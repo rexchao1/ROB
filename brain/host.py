@@ -204,11 +204,45 @@ class Host:
 
     def wait(self, seconds: float) -> None:
         self._check_stop()
+        self._interrupt()
         self.clock.sleep(seconds)
 
     def say(self, line: str) -> None:
+        self._interrupt()
         self.last_line = line
         self._speak(line)
+
+    def _interrupt(self) -> None:
+        """A pause or a stop typed on the dashboard (its Pause and Stop buttons) takes
+        effect before the game's next line or wait, not only at its next listen."""
+        if self.paused or not self._in_game():
+            return
+        text = self._take_command()
+        if text is None:
+            return
+        self._heard_typed(text)
+        if not ears.wants_to_stop(text):
+            text = self._pause()
+        if text:
+            while self._take_command() is not None:  # a second press of Stop is the same stop
+                pass
+            raise GameStopped(reset=ears.wants_to_reset(text))
+
+    def _take_command(self) -> str | None:
+        """The first typed line that pauses or stops the game, taken out; the rest wait
+        for the next listen."""
+        def wanted(text: str) -> bool:
+            return ears.wants_to_stop(text) or ears.wants_pause(text)
+
+        with self._lock:
+            for text in self._injected:
+                if wanted(text):
+                    self._injected.remove(text)
+                    return text
+        if self.dash is None:
+            return None
+        typed = self.dash.take_first(wanted)
+        return None if typed is None else typed.strip().lower()
 
     def _speak(self, line: str, mouth: bool = True) -> None:
         """Say a line; the host's own lines (the pause, the speaker) come here directly,
