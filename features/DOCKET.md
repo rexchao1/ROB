@@ -930,3 +930,13 @@ D114 2026-10-18 [I>V]
   sib:   none -- a repeat has no failure case
   serves: N1
   touches: D112
+
+D115 2026-10-18 [I]
+  pre:   a game reaches one of its big moments: a death at night or nobody dying, a player voted out, the Imposter named, a Wavelength target or total, a Wordle ending, a winner [I]
+  trig:  the host says the line for it [I]
+  resp:  the host's screen shows a card for the moment while it says the line (Imposter: `PLAYER 3` over `was the Imposter` with `Player three was the Imposter.`, then `beach` over `was the word` with `The word was beach.`), keeps it up about two seconds, then shows the host's face again; a card the screen cannot show leaves the line said without it, and no reveal is ever shown while a private card is owed [I]
+  why:   the screen holds five cards and a new set takes seconds to upload, so the cards are uploaded while the host is still talking: with the deal's cards when the outcome is known in advance, otherwise as soon as it is [I]
+  sib:   none -- a card the screen cannot show is the rule's own fallback
+  serves: N1
+  touches: D7 D16 D17 D18 D19 D20 D21
+# Rex asked for reveal moments on ROB's screen (relayed, 2026-10-18). Proposed, unratified: the cards' words are the build's.

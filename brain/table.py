@@ -21,16 +21,22 @@ MOODS = ("idle", "listening", "night", "day", "tense", "win")
 
 @dataclass(frozen=True)
 class Card:
-    """Something private for one player's eyes on the host's screen (D7): a role, a
-    word, a target number."""
+    """Something on the host's screen: private, for one player's eyes (D7: a role, a
+    word, a target number), or a reveal the whole table sees while the host says it
+    ("VILLAGE" / "wins")."""
 
     text: str  # the big line: "MAFIA", "beach", "7"
     sub: str | None = None  # an optional small line under it: "cold - hot"
+    kind: str | None = None  # what a reveal means: one of REVEALS; None for a role or a word dealt
     # How the card looks: a key of brain.cards.STYLES ("villain", "helper", "town",
     # "number", "win", "out", ...), its accent color. None lets brain/cards.py pick
-    # from the text (the role cards, a number) or the default. Looks only: two cards
-    # with the same text and sub are the same card whatever their style.
+    # from the kind, then the text (the role cards, a number) or the default. Looks only: two cards
+    # with the same text, sub and kind are the same card whatever their style.
     style: str | None = field(default=None, compare=False)
+
+
+# What a reveal card means (Card.kind), so the screen can give each its own look.
+REVEALS = ("win", "out", "safe", "word", "target", "score")
 
 
 class Table(Protocol):
@@ -64,8 +70,10 @@ class Table(Protocol):
 
     def prepare(self, cards: list[Card]) -> None:
         """The cards this game will show (at most five, all distinct), so the host can
-        put them on its screen ahead of time; may take a while on the real body. Call it
-        once per game, before the first show_private(). Replaces the previous cards."""
+        put them on its screen ahead of time; may take a while on the real body, so it
+        returns at once there and the upload runs while the host talks. Call it before
+        the first show_private(), and again when the cards to come change (the reveals
+        once the deal is done). Replaces the previous cards."""
         ...
 
     def show_private(self, seat: int, card: Card) -> bool:
@@ -76,6 +84,15 @@ class Table(Protocol):
         once the player has seen it and leaned back (the screen blank again), or False
         when nobody leaned in within the host's time limit (the screen blank). `card` must
         be one of the prepared cards."""
+        ...
+
+    def reveal(self, card: Card, line: str) -> None:
+        """A big moment for the whole table: `card` on the screen while the host says
+        `line`, held a moment after, then the host's own face again. `card` must be one
+        of the prepared cards; a game prepares its reveals with its private cards, or
+        prepares them again once what it will reveal is known (an upload of a few
+        seconds on the real body, done while the host talks). A card the screen cannot
+        show leaves the line said without it. Never shown while a private card is owed."""
         ...
 
     def listen(self, seconds: float) -> str:

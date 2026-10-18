@@ -14,7 +14,7 @@ or a plain blank frame. set_avatar("happy") then shows the first card.
 The look. The face is drawn in one of FACE_THEMES (one per personality, Persona.face):
 a solid colored background with a few small stars, white eyes with a colored iris and
 a glint, pink cheeks, and a mouth that opens to show a tongue. A card is drawn in one
-of STYLES, picked by Card.style (else by its text: the role cards by team, a number):
+of STYLES, picked by Card.style (else by its kind, then its text: the role cards by team, a number):
 a deep tinted background, a rounded border in the accent, the big line white over a
 shadow, the sub line a light tint of the accent. Everything is solid fills, because a
 gradient bands in RGB565. The gateway's "matrix" mode (90 frames, every eyes x mouth
@@ -89,6 +89,8 @@ STYLES: dict[str, CardStyle] = {
 }
 # The style a card gets from its text when it names none: the role cards by team.
 TEXT_STYLES = {"MAFIA": "villain", "IMPOSTER": "villain", "DOCTOR": "helper", "VILLAGER": "town"}
+# The style a reveal gets from its kind (brain.table.REVEALS), before its text's.
+KIND_STYLES = {"win": "win", "out": "out", "safe": "helper", "word": "default", "target": "number", "score": "number"}
 
 # The blank slot stays plain and unlit: nothing to read, nothing to guess from.
 CARD_BG: RGB = (10, 12, 20)
@@ -128,11 +130,11 @@ DEFAULT_FACE = "host"
 
 
 def style_of(card: Card) -> CardStyle:
-    """The card's colors: its own style, else its text's (a role, a number), else the
+    """The card's colors: its own style, else its kind's, else its text's (a role, a number), else the
     default. An unknown style name falls back the same way, so a typo never stops a game."""
     if card.style in STYLES:
         return STYLES[card.style]
-    key = TEXT_STYLES.get(card.text.strip().upper())
+    key = KIND_STYLES.get(card.kind or "") or TEXT_STYLES.get(card.text.strip().upper())
     if key is None and card.text.strip().isdigit():
         key = "number"
     return STYLES[key or "default"]
@@ -342,7 +344,7 @@ def pack(cards: list[Card], face: str | None = None) -> tuple[bytes, dict[str, A
     assert len(data) == SET_BYTES
     slots: dict[str, Any] = {slot: None for slot in SLOTS}
     for slot, card in zip(SLOTS, cards):
-        slots[slot] = {"text": card.text, "sub": card.sub}
+        slots[slot] = {"text": card.text, "sub": card.sub, **({"kind": card.kind} if card.kind else {})}
         if card.style is not None:
             slots[slot]["style"] = card.style
     manifest = {"mode": "layered", "bytes": SET_BYTES, "sha256": hashlib.sha256(data).hexdigest(), "face": face or DEFAULT_FACE, "slots": slots}
@@ -360,11 +362,13 @@ def write_set(cards: list[Card], directory: Path, face: str | None = None) -> Pa
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{manifest['sha256'][:12]}.bin"
     side = manifest_path(path)
-    if not (path.exists() and path.stat().st_size == SET_BYTES and side.exists()):
+    if not (path.exists() and path.stat().st_size == SET_BYTES):
         tmp = path.with_suffix(".bin.tmp")
         tmp.write_bytes(data)
         tmp.replace(path)
-        side.write_text(json.dumps(manifest, indent=2) + "\n")
+    text = json.dumps(manifest, indent=2) + "\n"
+    if not side.exists() or side.read_text() != text:  # the same pixels may carry other kinds
+        side.write_text(text)
     return path.resolve()
 
 
@@ -377,7 +381,7 @@ def slot_of(manifest: dict[str, Any], card: Card) -> str:
     """The set_avatar face name that shows this card; KeyError when the set does not hold it."""
     for slot in SLOTS:
         held = manifest["slots"].get(slot)
-        if held is not None and held["text"] == card.text and held.get("sub") == card.sub:
+        if held is not None and held["text"] == card.text and held.get("sub") == card.sub and held.get("kind") == card.kind:
             return slot
     raise KeyError(f"the set does not hold {card!r}")
 
@@ -385,4 +389,4 @@ def slot_of(manifest: dict[str, Any], card: Card) -> str:
 def card_in(manifest: dict[str, Any], face: str) -> Card | None:
     """What a face name shows in this set: its card, or None for the host's face, a blank slot or "off"."""
     held = manifest["slots"].get(face) if face in SLOTS else None
-    return None if held is None else Card(held["text"], held.get("sub"), held.get("style"))
+    return None if held is None else Card(held["text"], held.get("sub"), held.get("kind"), held.get("style"))

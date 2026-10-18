@@ -13,10 +13,11 @@ A listen with nothing scripted hears silence (''). faces_up() answers each sweep
 table.sweeps (a list of seat lists, consumed in order; [] once used up). count()
 answers from table.counts the same way (the last value repeats). show_private returns
 False for the seats in `no_lean`; like the real host it says "Player N, lean in." and
-records the card, and it refuses a card that was not prepared.
+records the card, and it refuses a card that was not prepared. reveal(card, line) says
+the line and records the card in table.revealed; the card must be prepared too.
 
 Every action lands in table.log as (time, kind, value): "say", "look", "count",
-"prepare", "show", "listen", "heard", "faces_up", "wait", "mood", "quip". table.said is
+"prepare", "show", "reveal", "listen", "heard", "faces_up", "wait", "mood", "quip". table.said is
 the lines alone; table.reports every report() in order; table.state the latest.
 """
 
@@ -45,6 +46,7 @@ class FakeTable:
         self.reports: list[dict[str, Any]] = []
         self.prepared: list[Card] = []
         self.shown: list[tuple[int, Card]] = []
+        self.revealed: list[tuple[Card, str]] = []  # (card, the line said with it)
         self.facing: int | None = None
         self._keyed: dict[str, deque[str]] = {}
         self._queue: deque[str] = deque()
@@ -115,6 +117,13 @@ class FakeTable:
         self.shown.append((seat, card))
         self._note("show", (seat, card))
         return True
+
+    def reveal(self, card: Card, line: str) -> None:
+        assert card.kind is not None, f"a reveal card needs a kind: {card}"
+        assert card in self.prepared, f"{card} was not prepared ({self.prepared})"
+        self.revealed.append((card, line))
+        self._note("reveal", card)
+        self.say(line)
 
     def listen(self, seconds: float) -> str:
         assert seconds > 0

@@ -21,9 +21,10 @@ def play(t: FakeTable, psychic: int = 2, rounds=ROUNDS) -> FakeTable:
 def test_the_psychic_alone_sees_the_target():
     t = play(FakeTable(5))
     seat, card = t.shown[0]
-    assert seat == 2 and card == Card("7", "cold - hot")
+    assert seat == 2 and card == Card("7", "cold - hot", "target")
     assert t.said[t.said.index(lines.round_line(1)) + 1] == "Player two, lean in."
-    assert Card("7", "cold - hot") in t.prepared and len(t.prepared) == 3
+    first = next(value for _, kind, value in t.log if kind == "prepare")
+    assert Card("7", "cold - hot", "target") in first and len(first) == 3
 
 
 @pytest.mark.parametrize("guess, score", [("six", "Nine points."), ("seven", "Ten points."), ("one", "Four points."), ("ten", "Seven points.")])

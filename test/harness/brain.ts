@@ -35,6 +35,8 @@ export interface Call {
   t: number
   /** "pcm" only: the line's text, carried in the test voice's clip. */
   line?: string | null
+  /** "pcm" only: the card on the screen as the line played (a reveal), or null. */
+  showing?: { text: string; sub: string | null; kind: string | null } | null
 }
 
 /** The robot's screen: the avatar face set, blinking, and the card that face shows from the loaded set. */
@@ -42,6 +44,8 @@ export interface Screen {
   face: string
   blink: boolean
   showing: { text: string; sub: string | null } | null
+  /** What the card shown means (a reveal's kind: "win", "out", ...), or null. */
+  kind: string | null
   /** The loaded card set's path, or null. */
   set: string | null
 }

@@ -25,7 +25,7 @@ def test_words_are_dealt_and_one_player_sees_imposter():
     t = play(FakeTable(5))
     assert [seat for seat, _ in t.shown] == [1, 2, 3, 4, 5]
     assert dict(t.shown) == {1: Card("beach"), 2: Card("beach"), 3: Card("IMPOSTER"), 4: Card("beach"), 5: Card("beach")}
-    assert set(t.prepared) == {Card("beach"), Card("IMPOSTER")}
+    assert {Card("beach"), Card("IMPOSTER")} <= set(t.prepared)
 
 
 def test_each_player_gives_one_clue_in_seat_order():

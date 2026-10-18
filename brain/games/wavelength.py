@@ -8,6 +8,11 @@ work."). Cooperative: nobody wins or loses, so the winner stays None.
 
 next_psychic in the report is who would lead the round after the current one, and
 after the last round, the next game's first round.
+
+Each round's target card goes up again, for everyone, as the host says what it was.
+The total is known only once the last guess is in, so its card is prepared then (with
+that round's target, still to be revealed): the upload runs while the host says the
+round's points, and the target's reveal waits only for what is left of it.
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ import random
 from typing import Any
 
 from brain import ears, lines
-from brain.games.common import Options, State, abandon, finish, hear
+from brain.games.common import Options, State, abandon, decided, finish, hear
 from brain.table import Card, Table
 
 
@@ -36,6 +41,10 @@ def plan_rounds(rng: random.Random, rig: dict[str, Any], rounds: int) -> list[di
     while len(planned) < rounds:
         planned.append({"spectrum": spectra.pop(), "target": rng.randint(1, 10)})
     return planned
+
+
+def total_card(points: int) -> Card:
+    return Card(str(points), "points" if points != 1 else "point", "score")
 
 
 def score(target: int, guess: int) -> int:
@@ -58,7 +67,7 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
     if not 1 <= start <= seats:
         raise ValueError(f"a rig that does not fit {seats} seats: {rig}")
     rounds = plan_rounds(rng, rig, options.wavelength_rounds)
-    cards = [Card(str(r["target"]), r["spectrum"]) for r in rounds]
+    cards = [Card(str(r["target"]), r["spectrum"], "target") for r in rounds]
     table.prepare(list(dict.fromkeys(cards)))
     table.say(lines.WAVELENGTH_INTRO)
     table.say(lines.flavor("wavelength", rng))
@@ -91,11 +100,14 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
         table.say(lines.WAVELENGTH_TALK)
         guess = _guess(table, options)
         points = 0 if guess is None else score(r["target"], guess)
-        table.say(lines.NO_GUESS if guess is None else lines.points(points))
-        table.say(lines.target_was(r["target"]))
         scores.append(points)
+        if i == len(rounds) - 1:
+            table.prepare([card, total_card(sum(scores))])
+        table.say(lines.NO_GUESS if guess is None else lines.points(points))
+        table.reveal(card, lines.target_was(r["target"]))
         state.extra = {**state.extra, "scores": list(scores), "total": sum(scores)}
         state.report(table)
 
-    table.say(lines.total(sum(scores)))
+    decided(table, state, None)
+    table.reveal(total_card(sum(scores)), lines.total(sum(scores)))
     finish(table, state, None, rng)

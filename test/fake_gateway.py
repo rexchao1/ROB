@@ -34,8 +34,10 @@ harness reads it directly):
                               320x240 JPEG.
   POST /mock/hear             body: {"text": "..."}; queued for the next listen, which
                               answers every queued transcript joined by spaces
-  GET  /mock/calls            the record: [{seq, tool, args, answer, error, line?}]
-  GET  /mock/screen           {face, blink, showing: {text, sub} or null, set}
+  GET  /mock/calls            the record: [{seq, tool, args, answer, error, line?,
+                              showing?}]; a /pcm's showing is the card on the screen
+                              ({text, sub, kind}) as the line played, or null
+  GET  /mock/screen           {face, blink, showing: {text, sub} or null, kind, set}
   GET  /mock/head             {yaw, pitch}
 
 Until a table or a frame is pushed take_photo refuses (a camera with nothing to show is a test
@@ -376,6 +378,7 @@ class Device:
                 "face": self.face,
                 "blink": self.blink,
                 "showing": None if card is None else {"text": card.text, "sub": card.sub},
+                "kind": None if card is None else card.kind,
                 "set": self.set_path,
             }
 
@@ -441,6 +444,8 @@ def build_app(device: Device):
             entry["error"] = "X-Sample-Rate is required"
             return JSONResponse({"error": entry["error"]}, status_code=400)
         entry["line"] = voice.decode_test_pcm(raw)
+        screen = device.screen()
+        entry["showing"] = None if screen["showing"] is None else {**screen["showing"], "kind": screen["kind"]}
         frames = max(1, len(raw) // (int(rate) * 2 * 60 // 1000 or 1))
         answer = {"source": "pcm", "frame_count": frames, "sample_rate": 16000, "frame_duration_ms": 60, "duration_ms": frames * 60}
         entry["answer"] = answer

@@ -288,12 +288,17 @@ class Body:
         text = answer.data.get("text", "") if isinstance(answer.data, dict) else ""
         return text if isinstance(text, str) else ""
 
-    def play(self, pcm: bytes) -> None:
-        """Play 16 kHz mono s16le PCM on the speaker; returns once it has played."""
+    def play(self, pcm: bytes, mouth: bool = True) -> None:
+        """Play 16 kHz mono s16le PCM on the speaker; returns once it has played. mouth:
+        on the Mac's speaker, move the robot's mouth with it (False while a card is up,
+        since a mouth frame is the whole face and would cover the card)."""
         if not pcm:
             return
         if self.speaker == "mac":
-            self._play_here(pcm)
+            if mouth:
+                self._play_here(pcm)
+            else:
+                self._play_here(pcm, mouth=False)
             return
         headers = {"Content-Type": "application/octet-stream", "X-Sample-Rate": str(SAMPLE_RATE), "X-Channels": "1"}
         if self.token:
@@ -308,7 +313,7 @@ class Body:
         except (urllib.error.URLError, OSError) as e:
             raise BodyError(f"POST /pcm: {e}") from None
 
-    def _play_here(self, pcm: bytes) -> None:
+    def _play_here(self, pcm: bytes, mouth: bool = True) -> None:
         """Play on this machine's audio output (afplay) while the robot moves its mouth."""
         fd, path = tempfile.mkstemp(suffix=".wav", prefix="gm-line-")
         try:
@@ -322,7 +327,8 @@ class Body:
             except OSError as e:
                 raise BodyError(f"afplay: {e}") from None
             try:
-                self.gateway.call("set_mouth_sequence", {"steps": mouth_steps(pcm)})
+                if mouth:
+                    self.gateway.call("set_mouth_sequence", {"steps": mouth_steps(pcm)})
             except BodyError:
                 pass  # the line still plays; only the mouth stays still
             if player.wait() != 0:
