@@ -147,6 +147,19 @@ def test_a_rig_reaches_the_referee_and_is_used_once(remote, fake):
     assert loaded and "beach" in str(remote.tb.host._manifest)  # noqa: SLF001
 
 
+def test_the_dashboard_shows_the_pi_waiting_until_the_referee_calls_in(fake, tmp_path):
+    tb = make_test_brain(fake.mcp_url, sets_dir=tmp_path, referee="remote")
+    url = _start(tb.server)
+    try:
+        assert call(url, "GET", "/dash/api/state")[1]["links"]["pi"] == "waiting"
+        tb.table.hello("dash-test")
+        assert call(url, "GET", "/dash/api/state")[1]["links"]["pi"] == "connected"
+    finally:
+        tb.table.stop()
+        tb.server.shutdown()
+        tb.server.server_close()
+
+
 def test_without_a_referee_the_clock_moves_freely_and_the_robot_is_still_set_up(fake, tmp_path):
     tb = make_test_brain(fake.mcp_url, sets_dir=tmp_path, referee="remote")
     url = _start(tb.server)
