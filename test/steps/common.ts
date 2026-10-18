@@ -472,6 +472,10 @@ export function scatter(living: number[]): (voter: number) => string | undefined
 
 /** Through whatever comes first (the deal, a quiet night, the day's talk) to the vote. */
 export async function toVote(w: World): Promise<void> {
+  // A vote just ended: its reveal card is still up (the phase still "vote") until the game moves on.
+  if ((await state(w)).phase === 'vote' && VOTE_END.test((await brain(w).said())[w.cursor ?? 0] ?? '')) {
+    await until(w, 'the last vote to be over', async () => (await state(w)).phase !== 'vote', 10)
+  }
   if ((await state(w)).phase === 'deal') await deal(w)
   if ((await state(w)).phase === 'night') await night(w)
   if ((await state(w)).phase === 'day') await day(w)
@@ -508,6 +512,25 @@ export function defineHear(reg: Step): void {
     if (w.notBefore !== undefined) {
       expect((await brain(w).said()).slice(w.since ?? 0, w.notBefore), 'said before its time').not.toContain(text(line))
     }
+  })
+}
+
+/** A reveal: the card on the host's screen while it says a line, then its face again. */
+export function defineReveal(reg: Step): void {
+  reg.define(/^the host's screen shows "(.+)" and "(.+)" while it says "(.+)"$/, async (w, big, sub, line) => {
+    const b = brain(w)
+    await until(w, `the host saying "${text(line)}"`, async () => (await heard(w)).includes(text(line)), 30)
+    const said = await b.said()
+    const i = said.lastIndexOf(text(line))
+    const call = (await b.gateway.told('pcm'))[i]
+    expect(call?.showing, `the screen while the host said "${text(line)}"`).toMatchObject({ text: text(big), sub: text(sub) })
+  })
+  reg.define(/^the host's own face is back on its screen afterwards$/, async (w) => {
+    const b = brain(w)
+    await until(w, "the host's face back on its screen", async () => {
+      const screen = await b.screen()
+      return screen.face === 'idle' && screen.showing === null
+    }, 10)
   })
 }
 

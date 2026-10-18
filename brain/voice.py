@@ -5,7 +5,8 @@ becomes 16 kHz mono signed 16-bit little-endian PCM here, and the host sends it 
 gateway's POST /pcm, which plays it outside the gateway's command queue.
 
   CachedVoice  the fixed lines, recorded once with ElevenLabs by scripts/make-voice.py
-               into voice/<line_key>.wav (D30); a line not recorded goes to the fallback
+               into voice/<voice id>/<line_key>.wav (D30); a recording plays only while
+               its voice is the one ROB speaks in, every other line goes to the fallback
   ElevenVoice  a live ElevenLabs voice for the lines not recorded, when the settings ask
                for it and ELEVENLABS_API_KEY is set; each line is kept on disk, so a
                repeat costs nothing; any failure falls back to Piper for that line
@@ -24,7 +25,6 @@ import struct
 import sys
 import time
 import urllib.error
-import urllib.request
 import wave
 from collections.abc import Callable
 from collections import OrderedDict
@@ -179,31 +179,51 @@ class _Memo:
 
 
 class CachedVoice:
-    """The recorded lines (<directory>/<line_key>.wav, any rate, width and channel count),
-    a miss going to the fallback; with no fallback a miss raises VoiceError."""
+    """The recorded lines, a folder per ElevenLabs voice (<directory>/<voice id>/<line_key>.wav,
+    any rate, width and channel count). A recording plays only while its voice is the one
+    ROB speaks in (brain.settings: ElevenLabs on and that voice picked, eleven_voice_id),
+    so changing the voice or the personality never leaves some lines in the old voice;
+    with Piper picked, Piper says them all. Every other line goes to the fallback. With
+    no fallback the recordings are the only voice: the default voice's play whatever is
+    picked, and a miss raises VoiceError."""
 
-    def __init__(self, directory: Path, fallback: Voice | None = None) -> None:
+    def __init__(self, directory: Path, fallback: Voice | None = None, default_voice: str | None = None) -> None:
         self.directory = Path(directory)
         self.fallback = fallback
+        self.default_voice = default_voice  # --eleven-voice; None: ELEVEN_VOICE
         self._memo = _Memo()
 
+    def _path(self, text: str) -> Path | None:
+        """Where the line's recording in ROB's voice now would be; None while he speaks in
+        Piper and has another voice to say it with."""
+        from brain import settings
+
+        if settings.current.voice != "eleven" and self.fallback is not None:
+            return None
+        voice_id = eleven_voice_id(self.default_voice or ELEVEN_VOICE)
+        if not voice_id.isalnum():  # an ElevenLabs id is letters and digits; anything else is no folder of ours
+            return None
+        return self.directory / voice_id / f"{line_key(text)}.wav"
+
     def recorded(self, text: str) -> bool:
-        return (self.directory / f"{line_key(text)}.wav").is_file()
+        """A recording of the line plays now."""
+        path = self._path(text)
+        return path is not None and path.is_file()
 
     def pcm(self, text: str) -> bytes:
-        key = line_key(text)
-        hit = self._memo.get(key)
-        if hit is not None:
-            return hit
-        path = self.directory / f"{key}.wav"
-        if path.is_file():
-            pcm = wav_to_pcm(path.read_bytes())
-        elif self.fallback is not None:
+        path = self._path(text)
+        if path is not None:
+            key = f"{path.parent.name}/{path.stem}"
+            hit = self._memo.get(key)
+            if hit is not None:
+                return hit
+            if path.is_file():
+                pcm = wav_to_pcm(path.read_bytes())
+                self._memo.put(key, pcm)
+                return pcm
+        if self.fallback is not None:
             return self.fallback.pcm(text)  # not kept here: the fallback keeps its own, and its voice can change
-        else:
-            raise VoiceError(f"no recording of {text!r} in {self.directory} and no local voice")
-        self._memo.put(key, pcm)
-        return pcm
+        raise VoiceError(f"no recording of {text!r} in {self.directory} and no local voice")
 
 
 class PiperVoice:
@@ -257,6 +277,16 @@ ELEVEN_VOICE = "iP95p4xoKVk53GoZ742B"  # "Chris", a stock premade voice: natural
 ELEVEN_TIMEOUT = 5.0
 ELEVEN_CACHE = ROOT / ".cache" / "eleven"  # .cache/ is gitignored
 ELEVEN_REST = 30.0  # after a failure, Piper alone for this long, so a dead network does not stall every line
+ELEVEN_WARM = "https://api.elevenlabs.io/v1/models"  # a free GET that opens the connection (ElevenVoice.warm)
+
+
+def eleven_voice_id(default: str = ELEVEN_VOICE) -> str:
+    """The ElevenLabs voice ROB speaks in while ElevenLabs is on: the one picked on the
+    dashboard, else the personality's, else `default` (--eleven-voice)."""
+    from brain import personas, settings
+
+    picked = personas.VOICES.get(settings.current.eleven_voice or "")
+    return picked.eleven_id if picked else personas.get(settings.current.persona).eleven_voice or default
 
 
 def env(name: str) -> str | None:
@@ -315,12 +345,11 @@ class ElevenVoice:
 
     def _wanted(self) -> str | None:
         """The voice id to use now, or None when the settings want another voice."""
-        from brain import personas, settings
+        from brain import settings
 
         if settings.current.voice != "eleven":
             return None
-        picked = personas.VOICES.get(settings.current.eleven_voice or "")
-        return picked.eleven_id if picked else personas.get(settings.current.persona).eleven_voice or self.voice_id
+        return eleven_voice_id(self.voice_id)
 
     def _fall_back(self, text: str) -> bytes:
         if self.fallback is None:
@@ -335,7 +364,11 @@ class ElevenVoice:
         hit = self._memo.get(key)
         if hit is not None:
             return hit
-        path = self.cache_dir / f"{key}.pcm" if self.cache_dir is not None else None
+        from brain.voice_cache import fixed_keys
+
+        # One-off speech stays in the bounded RAM memo, even if an old disk file exists.
+        scripted = line_key(text) in fixed_keys()
+        path = self.cache_dir / f"{key}.pcm" if self.cache_dir is not None and scripted else None
         if path is not None and path.is_file():
             pcm = path.read_bytes()
             self._memo.put(key, pcm)
@@ -359,22 +392,36 @@ class ElevenVoice:
         self._memo.put(key, pcm)
         return pcm
 
+    def warm(self) -> int | None:
+        """Open the ElevenLabs connection before a line needs it, or freshen one that has
+        sat idle a while (brain.net.warm): the ms it took, 0 when it was warm already,
+        None while the settings want another voice or it is unreachable."""
+        from brain import net
+
+        if self._wanted() is None:
+            return None
+        return net.warm(ELEVEN_WARM, {"xi-api-key": self._key})
+
     def _fetch(self, text: str, voice_id: str) -> bytes:
+        """The line's audio, over the kept connection (brain/net.py); its time goes to the log."""
+        from brain import net
+
         body = {
             "text": text,
             "model_id": self.model,
             "voice_settings": {"stability": 0.4, "similarity_boost": 0.8, "style": 0.35, "use_speaker_boost": True},
         }
-        req = urllib.request.Request(
+        start = time.monotonic()
+        pcm = net.request(
+            "POST",
             f"{ELEVEN_API}/{voice_id}?output_format=pcm_16000",
-            data=json.dumps(body).encode("utf-8"),
-            method="POST",
-            headers={"xi-api-key": self._key, "Content-Type": "application/json", "Accept": "audio/pcm"},
+            json.dumps(body).encode("utf-8"),
+            {"xi-api-key": self._key, "Content-Type": "application/json", "Accept": "audio/pcm"},
+            self.timeout,
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as res:
-            pcm = res.read()
         if not pcm:
             raise VoiceError("ElevenLabs sent no audio")
+        self.log(f"voice: ElevenLabs {int((time.monotonic() - start) * 1000)} ms for {seconds(pcm):.1f} s of audio")
         return pcm + b"\x00" * (len(pcm) % 2)  # whole 16-bit samples
 
 
@@ -394,15 +441,15 @@ def make_voice(
     eleven_voice: str = ELEVEN_VOICE,
     eleven_model: str = ELEVEN_MODEL,
 ) -> Voice:
-    """The real voice: the recorded lines first, then ElevenLabs live (with a key, while
-    the settings ask for it), then Piper. Any one alone works; none raises VoiceError,
-    since a host that cannot speak cannot run a game."""
+    """The real voice: the lines recorded in the voice picked first, then ElevenLabs live
+    (with a key, while the settings ask for it), then Piper. Any one alone works; none
+    raises VoiceError, since a host that cannot speak cannot run a game."""
     piper = PiperVoice(piper_model) if piper_model is not None else None
     rest: Voice | None = piper
     if eleven_key:
         rest = ElevenVoice(eleven_key, eleven_voice, eleven_model, fallback=piper)
     if voice_dir is not None:
-        return CachedVoice(voice_dir, fallback=rest)
+        return CachedVoice(voice_dir, fallback=rest, default_voice=eleven_voice)
     if rest is not None:
         return rest
     raise VoiceError("no voice: give a directory of recorded lines, a Piper model, or both")

@@ -608,7 +608,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
 <div class="paused" id="paused" hidden role="status">
   <div class="box">
     <div class="w" id="pausedWord">Paused</div>
-    <div class="d" id="pausedHint">Say "resume" or tap the robot's head.</div>
+    <div class="d" id="pausedHint">Say "resume" or put a whole hand on top of the robot's head.</div>
     <button class="big" id="resumeBtn">Resume</button>
   </div>
 </div>
@@ -842,7 +842,7 @@ function render() {
   $("pauseBtn").hidden = $("stopBtn").hidden || paused;
   $("paused").hidden = !paused && !asleep;
   $("pausedWord").textContent = asleep ? "Napping" : "Paused";
-  $("pausedHint").textContent = asleep ? "ROB isn't listening. Tap the robot's head to wake it." : 'Say "resume" or tap the robot\'s head.';
+  $("pausedHint").textContent = asleep ? "ROB isn't listening. Put a whole hand on top of the robot's head to wake it." : 'Say "resume" or put a whole hand on top of the robot\'s head.';
   $("resumeBtn").textContent = asleep ? "Wake ROB" : "Resume";
   document.body.classList.toggle("is-paused", paused || asleep);
   const tone = inGame && !g.over ? (TONE[g.phase] || "idle") : "idle";
@@ -857,12 +857,12 @@ function render() {
 // Geometry from brain/cards.py host_face(): a 160x120 screen, eyes at y 50, mouth at (80, 88).
 function faceSVG(fs) {
   const c = (k, d) => esc((fs && fs[k]) || d);
-  const bg = c("bg", "#0c0c14"), ink = c("ink", "#f5f5f5"), cheek = c("cheek", "#c85a78"), mouth = c("mouth", "#96283c");
+  const bg = c("bg", "#0c0c14"), ink = c("ink", "#f5f5f5"), iris = c("iris", bg), cheek = c("cheek", "#c85a78"), mouth = c("mouth", "#96283c");
   let eyes = "";
   for (const [cx, t] of [[50, 1], [110, -1]]) {
-    eyes += '<line x1="' + (cx - 14) + '" y1="' + (32 + 3 * t) + '" x2="' + (cx + 14) + '" y2="' + (32 - 3 * t) + '" stroke="' + ink + '" stroke-width="3"/>' +
-      '<g class="eo"><circle cx="' + cx + '" cy="50" r="12" fill="' + ink + '"/><circle cx="' + (cx + 2) + '" cy="51" r="5" fill="' + bg + '"/></g>' +
-      '<g class="eh"><path d="M' + (cx - 12) + ' 50 A12 12 0 0 0 ' + (cx + 12) + ' 50 Z" fill="' + ink + '"/><path d="M' + (cx - 3) + ' 50 A5 5 0 0 0 ' + (cx + 7) + ' 50 Z" fill="' + bg + '"/><line x1="' + (cx - 12) + '" y1="50" x2="' + (cx + 12) + '" y2="50" stroke="' + ink + '" stroke-width="2"/></g>' +
+    eyes += '<line x1="' + (cx - 14) + '" y1="' + (30 + 3 * t) + '" x2="' + (cx + 14) + '" y2="' + (30 - 3 * t) + '" stroke="' + ink + '" stroke-width="4" stroke-linecap="round"/>' +
+      '<g class="eo"><circle cx="' + cx + '" cy="50" r="12" fill="' + ink + '"/><circle cx="' + (cx + 2) + '" cy="51" r="8" fill="' + iris + '"/><circle cx="' + (cx + 2) + '" cy="51" r="4" fill="#0c1028"/></g>' +
+      '<g class="eh"><path d="M' + (cx - 12) + ' 50 A12 12 0 0 0 ' + (cx + 12) + ' 50 Z" fill="' + ink + '"/><path d="M' + (cx - 6) + ' 50 A8 8 0 0 0 ' + (cx + 10) + ' 50 Z" fill="' + iris + '"/><line x1="' + (cx - 12) + '" y1="50" x2="' + (cx + 12) + '" y2="50" stroke="' + ink + '" stroke-width="2"/></g>' +
       '<g class="ec"><path d="M' + (cx + 11.3) + ' 48.7 A12 8 0 0 1 ' + (cx - 11.3) + ' 48.7" fill="none" stroke="' + ink + '" stroke-width="3" stroke-linecap="round"/></g>' +
       '<ellipse cx="' + (cx - 4 * t) + '" cy="72" rx="9" ry="5" fill="' + cheek + '"/>';
   }

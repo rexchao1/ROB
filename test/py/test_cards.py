@@ -115,8 +115,7 @@ def test_rgb565_round_trip():
     ],
 )
 def test_no_card_clips(card):
-    img = cards.render_card(card)
-    ink = np.abs(img.astype(int) - np.array(cards.CARD_BG)).sum(axis=2) > 60
+    ink = np.asarray(cards.card_text(card))[..., 3] > 60  # the words, not the border
     ys, xs = np.nonzero(ink)
     assert ys.size, "nothing drawn"
     edge = 3
@@ -125,8 +124,7 @@ def test_no_card_clips(card):
 
 
 def test_short_words_are_big():
-    img = cards.render_card(Card("MAFIA"))
-    ys, _ = np.nonzero(np.abs(img.astype(int) - np.array(cards.CARD_BG)).sum(axis=2) > 60)
+    ys, _ = np.nonzero(np.asarray(cards.card_text(Card("MAFIA")))[..., 3] > 60)
     assert ys.max() - ys.min() >= 30
 
 
@@ -139,3 +137,25 @@ def test_more_than_five_or_repeated_cards_are_refused():
         cards.render_card(Card("  "))
     assert len(cards.pack([])[0]) == 537_600
     assert len(cards.pack([Card(str(i)) for i in range(5)])[0]) == 537_600
+
+
+def test_card_styles():
+    assert cards.style_of(Card("MAFIA")) == cards.STYLES["villain"]
+    assert cards.style_of(Card("DOCTOR")) == cards.STYLES["helper"]
+    assert cards.style_of(Card("7", "cold - hot")) == cards.STYLES["number"]
+    assert cards.style_of(Card("beach")) == cards.STYLES["default"]
+    assert cards.style_of(Card("beach", style="win")) == cards.STYLES["win"]
+    assert cards.style_of(Card("beach", style="no such style")) == cards.STYLES["default"]
+    # the style is the look only: the same card whatever it is drawn in
+    assert Card("MAFIA", style="out") == Card("MAFIA")
+    assert cards.render_card(Card("MAFIA")).tobytes() != cards.render_card(Card("MAFIA", style="out")).tobytes()
+    _, manifest = cards.pack([Card("YOU WIN", style="win")])
+    assert cards.card_in(manifest, "happy").style == "win"
+
+
+def test_every_personality_has_a_face():
+    from brain import personas
+
+    faces = {p.face for p in personas.PERSONAS.values()}
+    assert faces <= set(cards.FACE_THEMES) and len(faces) == len(personas.PERSONAS)
+    assert cards.pack([], face="spooky")[0] != cards.pack([], face="host")[0]

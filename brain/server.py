@@ -1,8 +1,8 @@
 """The brain's one HTTP server.
 
 Always: GET /state, the game state the host last published ({"game": null} before
-any), for watching a real game from a laptop; and the dashboard, GET /dashboard and
-its routes (brain/dashboard.py).
+any), for watching a real game from a laptop; and the host's settings API under
+/dashboard/* (brain/dashboard.py), which the game screen's drawer uses.
 
 Under --test only, the endpoints a test drives the brain with. None seeds game state:
 a test rigs the random choices (who is the Mafia, the word, the targets) and pushes
@@ -50,7 +50,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from brain import dashboard
 from brain.clock import ClockStuck, VirtualClock
-from brain.dash import FACE_STYLE, DashError
+from brain.dash import DashError, face_style
 from brain.keys import KeysError
 from brain.host import Host
 
@@ -221,7 +221,7 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
                     raise _NotFound
                 return 200, jpeg
             if route == ("GET", "/robot"):
-                return 200, {"robot": dash.robot(), "face_style": FACE_STYLE}
+                return 200, {"robot": dash.robot(), "face_style": face_style()}
             if route == ("POST", "/volume"):
                 return 200, dash.set_volume(_json(body).get("volume"))
             if route == ("POST", "/hear"):
@@ -281,11 +281,10 @@ def make_handler(host: Host, fake: FakeControl | None, reset: Callable[..., None
             return self.rfile.read(length) if length > 0 else b""
 
         def _send(self, status: int, payload: Any) -> None:
-            html = isinstance(payload, dashboard.Html)
-            data = payload.encode("utf-8") if html else json.dumps(payload).encode("utf-8")
+            data = json.dumps(payload).encode("utf-8")
             self.send_response(status)
             self._cors()
-            self.send_header("Content-Type", "text/html; charset=utf-8" if html else "application/json")
+            self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

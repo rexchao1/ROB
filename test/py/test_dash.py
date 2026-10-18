@@ -183,3 +183,21 @@ def test_backdrops_come_from_the_art_folder_and_nowhere_else(brain, tmp_path, mo
     assert status == 200 and headers["Content-Type"] == "image/jpeg" and body.startswith(b"\xff\xd8")
     for name in ("missing.jpg", "..%2Findex.html", "CREDITS.md", "alt/mafia-night-2.jpg"):
         assert _raw(brain.url + "/dash/art/" + name)[0] == 404
+
+
+def test_unchanged_tuning_and_content_do_not_rewrite(brain, tmp_path, monkeypatch, restore):
+    from pathlib import Path
+
+    dash = brain.host.dash
+    dash.settings_path = tmp_path / "settings.json"
+    dash.apply({"listen_window": 8})
+    dash.set_content({"imposter_words": ["lighthouse", "zoo"]})
+    before = dash.settings_path.read_text()
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "write_text", lambda *a, **kw: pytest.fail("unchanged tuning wrote a file"))
+        dash.apply({"listen_window": 8})
+        dash.set_content({"imposter_words": ["lighthouse", "zoo"]})
+        dash.save()
+    assert dash.settings_path.read_text() == before
+    dash.apply({"listen_window": 9})
+    assert dash.settings_path.read_text() != before

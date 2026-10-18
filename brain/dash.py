@@ -41,7 +41,7 @@ import cv2
 import numpy as np
 
 from brain import cards as cardset
-from brain import lines, portraits, vision
+from brain import lines, personas, portraits, settings, vision
 from brain.dashboard import LABELS, SPOKEN
 from brain.games import GAMES
 from brain.banter import NoBanter
@@ -63,8 +63,11 @@ def _hex(rgb: tuple[int, int, int]) -> str:
     return "#%02x%02x%02x" % rgb
 
 
-# The host's own face as cards.py draws it on the robot's screen, for the page to draw the same.
-FACE_STYLE = {"bg": _hex(cardset.FACE_BG), "ink": _hex(cardset.FACE_INK), "cheek": _hex(cardset.FACE_CHEEK), "mouth": _hex(cardset.FACE_MOUTH)}
+def face_style() -> dict[str, str]:
+    """The host's own face as cards.py draws it on the robot's screen (in the current
+    personality's colors), for the page to draw the same."""
+    th = cardset.face_theme(personas.get(settings.current.persona).face)
+    return {"bg": _hex(th.bg), "ink": _hex(th.ink), "iris": _hex(th.iris), "cheek": _hex(th.cheek), "mouth": _hex(th.mouth)}
 
 
 class DashError(ValueError):
@@ -256,7 +259,7 @@ class Dash:
             "paused": bool(getattr(host, "paused", False)),
             "asleep": bool(getattr(host, "asleep", False)),
             "robot": self.robot(),
-            "face_style": FACE_STYLE,
+            "face_style": face_style(),
             "seats_info": self.seats_info(seats),
         }
 
@@ -546,6 +549,11 @@ class Dash:
             del data["values"]["sweep_step"]
         if self._content_edited:
             data["content"] = self.content()
+        try:
+            if json.loads(self.settings_path.read_text()) == data:
+                return
+        except (OSError, ValueError):
+            pass
         tmp = self.settings_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2) + "\n")
         tmp.replace(self.settings_path)

@@ -78,7 +78,8 @@ def clock():
 
 
 @pytest.fixture
-def host(body, clock, tmp_path):
+def host(body, fake, clock, tmp_path):
+    fake.device.now = clock.now  # the touch pad keeps the table's time
     return Host(body, clock, TestVoice(), NoBanter(), sets_dir=tmp_path, rng=random.Random(0), log=lambda _: None)
 
 
@@ -342,6 +343,39 @@ def test_listening_takes_its_window_on_the_clock_in_pieces_the_gateway_allows(ho
     assert [c["args"]["duration_ms"] for c in _calls(fake, "listen")] == [30000, 15000]
 
 
+def test_after_a_listen_the_ring_turns_back_while_the_line_is_made(host, fake):
+    from brain.voice import VoiceError
+
+    turned = threading.Event()
+    leds = host.body.leds
+
+    def ring(colors):
+        leds(colors)
+        turned.set()
+
+    class Slow:
+        def pcm(self, text):
+            assert turned.wait(5), "the ring waited for the line's audio"
+            return TestVoice().pcm(text)
+
+    host.body.leds = ring
+    host.voice = Slow()
+    host._listening = True  # as a listen leaves it
+    host.say("Mafia it is.")
+    tools = [c["tool"] for c in fake.device.calls]
+    assert tools.index("set_all_leds") < tools.index("pcm") and _said(fake) == ["Mafia it is."]
+
+    class Broken:
+        def pcm(self, text):
+            raise VoiceError("no voice")
+
+    host.voice = Broken()
+    host._listening = True
+    with pytest.raises(VoiceError):
+        host.say("Wordle it is.")
+    assert _said(fake) == ["Mafia it is."]
+
+
 def test_mood_keeps_the_hosts_face_and_colours_the_ring(host, fake, clock):
     Worker(clock, host.mood, "night")
     assert fake.device.face == "idle"
@@ -471,6 +505,26 @@ def test_a_tap_on_the_head_ends_the_pause(host, fake, clock):
     assert w.done and w.result == ""
 
 
+def test_one_hand_on_the_head_wakes_one_nap_not_the_next(host, fake, clock):
+    # The pad stays on seconds after the hand leaves and then reports a stroke: the
+    # hold that woke the first nap must not end the second at once.
+    w = Worker(clock, host.sleep, 30.0)
+    clock.advance(2)
+    fake.device.touching = True
+    clock.advance(2)
+    assert w.done and w.result == ""
+    fake.device.touching = False  # the pad stays on about three seconds more
+    w2 = Worker(clock, host.sleep, 10.0)
+    clock.advance(12)
+    assert w2.done and w2.result is None  # slept the whole time
+    w3 = Worker(clock, host.sleep, 10.0)
+    clock.advance(1)
+    fake.device.touching = True  # a new hold wakes the next nap
+    clock.advance(2)
+    assert w3.done and w3.result == ""
+    fake.device.touching = False
+
+
 def test_stop_said_while_paused_reaches_the_game(host, fake, clock):
     host.state = {"game": "mafia", "phase": "night", "over": False}  # a pause holds a game
     fake.device.heard.append("pause")
@@ -494,3 +548,13 @@ def test_a_quiet_lobby_listens_in_longer_windows_and_closely_again_once_it_hears
         assert _calls(fake, "listen")[-1]["args"]["duration_ms"] == host.listen_window * 1000
     finally:
         host.stop()
+
+
+def test_talk_settings_snapshot_contains_only_choices(host, monkeypatch):
+    monkeypatch.setattr(settings, "current", settings.Settings(
+        talk="gemini", talk_model="gemini-2.5-flash", effort="high", persona="spooky"))
+    host.talk = object()
+    assert host.talk_settings() == {
+        "talk": "gemini", "talk_model": "gemini-2.5-flash", "effort": "high", "persona": "spooky"}
+    host.talk = None
+    assert host.talk_settings()["talk"] == "off"

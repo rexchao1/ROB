@@ -4,6 +4,7 @@ the far side), and every kind of refusal raises BodyError."""
 
 import os
 import socket
+import time
 
 import numpy as np
 import pytest
@@ -163,7 +164,7 @@ def test_speaker_mac_plays_here_and_only_moves_the_robots_mouth(monkeypatch):
         def __init__(self, args):
             played.append((args[0], open(args[1], "rb").read()[:4]))
 
-        def wait(self):
+        def wait(self, timeout=None):
             return 0
 
     class Recorder:
@@ -177,3 +178,46 @@ def test_speaker_mac_plays_here_and_only_moves_the_robots_mouth(monkeypatch):
     assert calls[0][1]["steps"][-1]["shape"] == "closed"
     with pytest.raises(ValueError):
         Body(Recorder(), "http://127.0.0.1:9/pcm", speaker="radio")
+
+
+def test_speaker_mac_returns_once_the_line_has_played_not_when_afplay_exits(monkeypatch):
+    """afplay lingers about 0.8 s after the sound ends: the host does not wait for that."""
+    import subprocess
+
+    from brain import body as body_module
+
+    monkeypatch.setattr(body_module, "PLAYED_AFTER", 0.05)
+    waits, paths, exited = [], [], []
+
+    class Lingering:
+        def __init__(self, args):
+            paths.append(args[1])
+
+        def wait(self, timeout=None):
+            if timeout is None:  # the reaper, after the host has moved on
+                exited.append(True)
+                return 0
+            waits.append(timeout)
+            raise subprocess.TimeoutExpired("afplay", timeout)
+
+    class Mouth:
+        def call(self, name, args=None, timeout=None):
+            pass
+
+    monkeypatch.setattr(body_module.subprocess, "Popen", Lingering)
+    Body(Mouth(), "http://127.0.0.1:9/pcm", speaker="mac").play(_tone(0.1, 10_000))
+    assert waits and 0.1 < waits[0] <= 0.15  # the line's length and PLAYED_AFTER, no more
+    assert not os.path.exists(paths[0])  # the WAV is gone though afplay still has it open
+    for _ in range(100):
+        if exited:
+            break
+        time.sleep(0.01)
+    assert exited, "afplay is reaped when it exits"
+
+    class Failing(Lingering):
+        def wait(self, timeout=None):
+            return 1
+
+    monkeypatch.setattr(body_module.subprocess, "Popen", Failing)
+    with pytest.raises(BodyError):
+        Body(Mouth(), "http://127.0.0.1:9/pcm", speaker="mac").play(_tone(0.1, 10_000))

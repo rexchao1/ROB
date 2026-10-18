@@ -19,7 +19,7 @@ Table whose every method is one of those calls.
   POST /table/rig    {"game"}      -> {"rig": {...} | null}: the next game's rig
   GET  /table/attached             -> {"attached", "epoch"}
 
-A Card travels as {"text", "sub"}. A GameStopped the host raises (a stop said during
+A Card travels as {"text", "sub", "kind", "style"}. A GameStopped the host raises (a stop said during
 the deal) reaches the referee as GameStopped, so its game ends as at any listen. A call is named by (session, id): RemoteTable sends
 the same call again after a dropped connection or a "pending" answer, and the server
 runs it once and answers the repeat from it. With a token, every request carries
@@ -69,7 +69,7 @@ PORT = 8090
 LEASE = 5.0  # real seconds without a request before the referee counts as gone
 HOLD = 15.0  # real seconds a /table/call waits for its answer before answering "pending"
 PATIENCE = 60.0  # real seconds RemoteTable keeps retrying an unreachable server
-METHODS = ("now", "wait", "say", "look", "count", "seated", "prepare", "show_private", "listen", "faces_up", "mood", "report", "quip", "chat", "sleep")
+METHODS = ("now", "wait", "say", "look", "count", "seated", "prepare", "show_private", "reveal", "listen", "faces_up", "mood", "report", "quip", "chat", "sleep", "talk_settings")
 
 
 class RemoteError(Exception):
@@ -107,9 +107,12 @@ def _dumps(value: Any) -> bytes:
 
 
 def _card(value: Any) -> Card:
-    if not isinstance(value, dict) or not isinstance(value.get("text"), str) or not isinstance(value.get("sub"), (str, type(None))):
+    if not isinstance(value, dict) or not isinstance(value.get("text"), str) or not all(
+        isinstance(value.get(k), (str, type(None))) for k in ("sub", "kind")
+    ):
         raise ValueError(f"not a card: {value!r}")
-    return Card(value["text"], value.get("sub"))
+    style = value.get("style")
+    return Card(value["text"], value.get("sub"), value.get("kind"), style if isinstance(style, str) else None)
 
 
 class _Job:
@@ -254,7 +257,10 @@ class TableServer:
                 self._owner = session
             self._cv.notify_all()
             extra = self.extra() if callable(self.extra) else self.extra
-            return {**extra, "epoch": self.epoch, "calls": self._ran}
+            # Settings are a lock-protected snapshot, independent of the body worker.
+            # A fresh virtual table may still be finishing setup until its first reset.
+            choices = self.table.talk_settings() if hasattr(self.table, "talk_settings") else {"talk": "off"}
+            return {**extra, "epoch": self.epoch, "calls": self._ran, "talk_settings": choices}
 
     def rig(self, game: str) -> dict[str, Any] | None:
         return self.rigs(game) if self.rigs is not None else None
@@ -292,6 +298,8 @@ class TableServer:
             args = [[_card(c) for c in args[0]], *args[1:]]
         elif method == "show_private" and len(args) == 2:
             args = [args[0], _card(args[1])]
+        elif method == "reveal" and len(args) == 2:
+            args = [_card(args[0]), args[1]]
         with self._cv:
             self._ran += 1
         return getattr(self.table, method)(*args, **kwargs)
@@ -480,6 +488,9 @@ class RemoteTable:
     def show_private(self, seat: int, card: Card) -> bool:
         return bool(self._call("show_private", seat, card))
 
+    def reveal(self, card: Card, line: str) -> None:
+        self._call("reveal", card, line)
+
     def listen(self, seconds: float) -> str:
         return str(self._call("listen", seconds) or "")
 
@@ -494,6 +505,9 @@ class RemoteTable:
 
     def quip(self, slot: str, **context: Any) -> None:
         self._call("quip", slot, **context)
+
+    def talk_settings(self) -> dict[str, Any]:
+        return self._call("talk_settings")
 
     def chat(self, situation: str, heard: str = "", **facts: Any) -> str | None:
         line = self._call("chat", situation, heard, **facts)

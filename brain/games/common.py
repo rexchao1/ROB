@@ -48,8 +48,8 @@ class Options:
     answer_seconds: float = 20.0  # a short answer ("sure", "nah") counts this long after the host asks something
     nudge_seconds: float = 25.0  # this long with nothing said to the host gets a nudge
     nudges: int = 2  # nudges before the host waits quietly
-    reply_gap_seconds: float = 8.0  # at most one small-talk reply this often
-    max_chats: int = 6  # small-talk replies in one welcome
+    reply_gap_seconds: float = 1.0  # at most one small-talk reply this often
+    max_chats: int = 100  # small-talk replies in one welcome; the nap after two unanswered nudges ends idle talk
     count_fresh_seconds: float = 120.0  # a game named this soon after the welcome's count starts on it
 
 
@@ -111,15 +111,30 @@ def abandon(table: Table, state: State) -> None:
     state.report(table)
 
 
-def finish(table: Table, state: State, winner: str | None, rng: random.Random) -> None:
-    """The game is over: report it, then a little ceremony."""
+OUTCOMES = {  # how a game came out, for the last quip: only what was just said out loud, never who
+    "mafia": "the Mafia won",
+    "village": "the village won",
+    "players": "the players won",
+    "imposter": "the Imposter got away",
+}
+
+
+def decided(table: Table, state: State, winner: str | None) -> None:
+    """The game is over, reported before the host reveals how (Table.reveal holds the
+    card a moment), so the state does not lag the line; finish() follows."""
     state.over = True
     state.winner = winner
     state.phase = "over"
     state.report(table)
+
+
+def finish(table: Table, state: State, winner: str | None, rng: random.Random) -> None:
+    """The game is over: report it, then a little ceremony."""
+    decided(table, state, winner)
     table.mood("win")
     table.say(lines.flavor("win", rng))
-    table.quip("win", game=state.game)
+    outcome = OUTCOMES.get(winner or "", "someone won" if winner else None)  # a seat (Hot Seat's winner) never goes to a quip
+    table.quip("win", game=state.game, **({"outcome": outcome} if outcome else {}))
     table.say(lines.GOOD_GAME)
 
 
