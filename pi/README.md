@@ -26,10 +26,6 @@ The game master runs on a Raspberry Pi 5 (8 GB) with no internet: the Pi is its 
 
 Both services start on boot after step 1, so after the first time it is: power on the Pi, power on the robot, wait for the robot's face, play.
 
-## The status light
-
-An RGB LED on the Pi shows how far it has come up: red when the Pi is on, yellow when the Wi-Fi is up, green when the robot is connected. Wire it with a 220-330 ohm resistor on each colour leg: red to GPIO17 (pin 11), green to GPIO27 (pin 13), blue to GPIO22 (pin 15, unused), and the long leg to ground (pin 9). `install.sh` enables it as `status-led`; to try it by hand, `python3 pi/status-led.py`. For a red-yellow-green LED instead, put `LED_YELLOW=<the yellow leg's GPIO>` in the settings file. Red shows once the service starts, about 10-20 seconds after power-on.
-
 ## Recorded voice
 
 The fixed lines sound best recorded with ElevenLabs. On a machine with internet, from the repository root: `ELEVENLABS_API_KEY=... .venv/bin/python scripts/make-voice.py --voice-id <id>`, then copy `voice/*.wav` to the Pi's `voice/` folder. Lines that are not recorded are spoken by Piper.

@@ -42,3 +42,16 @@ Once, from the phone hotspot to the Pi's network. The Mac's Wi-Fi changes in ste
 5. The Mac: `scripts/wifi.sh game`, then `qnx/ap.sh confirm`.
 6. The robot: its setup page (README, "Setting up the robot"): Wi-Fi `gamemaster` and the password, OTA `http://10.77.0.2:8768/ota/`, gateway `ws://10.77.0.2:8765/`. From the Mac that means `scripts/wifi.sh back`, the robot's "Xiaozhi..." network, then `scripts/wifi.sh game` again.
 7. The gateway: restart it with `VISION_HOST=10.77.0.2` (`scripts/game.sh` starts it so, and refuses one running with the old address). Then README, "Running a game".
+
+## The status light
+
+A red-yellow-green LED on the Pi's header shows how far the box has come up: red once the Pi is on, yellow once its Wi-Fi has an address (the hotspot or `gamemaster`), green once the robot is on the same Wi-Fi. Green means the robot's MAC (`ROBOT_MAC` in `qnx/ap/net.conf`) answers a ping, not that the gateway on the Mac has it. A new robot needs its MAC there: it is the `device_id` in the gateway's `curl -s 127.0.0.1:8767/status`.
+
+Wiring, with a 220-330 ohm resistor on each colour leg: red to pin 11 (GPIO17), yellow to pin 13 (GPIO27), green to pin 15 (GPIO22), the common (longest) leg to pin 9 (ground). Pin 1 is the square pad at the header's end away from the USB ports, in the row nearer the middle of the board.
+
+    qnx/led.sh install     copy qnx/led/status-led.py to ~/gmled on the Pi and start it
+    qnx/led.sh test        each colour for 2 s
+    qnx/led.sh status      whether it runs, and what it last showed (~/gmled/led.log)
+    qnx/led.sh boot        start it at every power-on (one line in post_startup.sh, backed up first); unboot takes it out
+
+The pins are QNX's `rpi_gpio` files, `/dev/gpio/N` (write `out`, then `on` or `off`), which qnxuser may write as a member of the gpio group. The robot answers pings slowly (up to about a second in Wi-Fi power save), so each ping waits 2 s and three misses in a row turn the light back to yellow.
