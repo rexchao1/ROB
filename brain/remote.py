@@ -19,7 +19,8 @@ Table whose every method is one of those calls.
   POST /table/rig    {"game"}      -> {"rig": {...} | null}: the next game's rig
   GET  /table/attached             -> {"attached", "epoch"}
 
-A Card travels as {"text", "sub"}. A call is named by (session, id): RemoteTable sends
+A Card travels as {"text", "sub"}. A GameStopped the host raises (a stop said during
+the deal) reaches the referee as GameStopped, so its game ends as at any listen. A call is named by (session, id): RemoteTable sends
 the same call again after a dropped connection or a "pending" answer, and the server
 runs it once and answers the repeat from it. With a token, every request carries
 "Authorization: Bearer <token>".
@@ -61,6 +62,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from brain.clock import Clock, ClockCancelled, VirtualClock
+from brain.games.common import GameStopped
 from brain.table import Card
 
 PORT = 8090
@@ -510,7 +512,10 @@ class RemoteTable:
                 raise TableReset(answer.get("epoch"))
             if kind == "replaced":
                 raise TableRefused("another referee took the table")
-            raise RemoteError(str(answer.get("type") or "Error"), str(answer.get("message") or ""))
+            type_name, message = str(answer.get("type") or "Error"), str(answer.get("message") or "")
+            if type_name == "GameStopped":  # a stop said during the deal: the game ends, as at any listen
+                raise GameStopped(reset=message == "reset")
+            raise RemoteError(type_name, message)
 
     def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         data = _dumps(body)

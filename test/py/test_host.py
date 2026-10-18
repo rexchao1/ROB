@@ -9,13 +9,17 @@ import threading
 import pytest
 
 import table
-from brain import cards, games, lines, vision
+from brain import cards, games, lines, settings, vision
 from brain.banter import NoBanter
-from brain.clock import VirtualClock
+from brain.clock import RealClock, VirtualClock
 from brain.body import BodyError
+from brain.games.common import GameStopped
+from brain.remote import RemoteTable, TableServer
 from brain.lobby import PAUSE, QUIET, QUIET_WINDOW
 from brain.host import (
     GIVE_UP,
+    HEAR_AFTER,
+    HEAR_SECONDS,
     MOOD_LEDS,
     PAUSED,
     PAUSED_LEDS,
@@ -27,6 +31,7 @@ from brain.host import (
     RETURN_SPEED,
     SCAN_SEEN,
     SWEEP_SPEED,
+    TRUST,
     TURN_SETTLE,
     Host,
     HostError,
@@ -37,6 +42,7 @@ from brain.voice import TestVoice
 
 SEATS = [-60.0, -30.0, 0.0, 30.0, 60.0]
 CLOSE = [table.Face(0, close=True)]
+DOCTOR = {"text": "DOCTOR", "sub": None}
 TWO_CLOSE = [table.Face(-15, close=True), table.Face(15, close=True)]
 
 
@@ -213,12 +219,85 @@ def test_a_second_face_blanks_the_card_at_the_next_photo_and_it_comes_back_after
 def test_nobody_leaning_in_is_asked_again_every_ten_seconds_and_given_up_on_at_thirty(host, fake, clock):
     w = _dealing(host, fake, clock)
     clock.advance(REPROMPT + 0.5)
-    assert _said(fake) == ["Player three, lean in."] * 2
+    again = "Player three, lean in close, or say show me."
+    assert _said(fake) == ["Player three, lean in.", again]
     clock.advance(GIVE_UP - REPROMPT - 0.8)  # t = 29.9
-    assert not w.done and _said(fake) == ["Player three, lean in."] * 3
+    assert not w.done and _said(fake) == ["Player three, lean in.", again, again]
     clock.advance(1)
     assert w.done and w.result is False
     assert _faces(fake) == ["idle"]  # the card's slot was never set
+    assert [c["args"]["duration_ms"] for c in _calls(fake, "listen")] == [HEAR_SECONDS * 1000] * 4  # at 4, 10, 16 and 22 s
+
+
+def test_show_me_typed_puts_the_card_up_on_trust_and_other_lines_wait_for_the_game(host, fake, clock):
+    w = _dealing(host, fake, clock)
+    host.inject("player two")  # not for the deal: the game's next listen hears it
+    host.inject("Show me")
+    clock.advance(0.3)
+    assert fake.device.screen()["showing"] == DOCTOR  # nobody close: on trust
+    clock.advance(TRUST - 0.5)
+    assert not w.done and fake.device.screen()["showing"] == DOCTOR
+    clock.advance(0.5)
+    assert w.done and w.result is True and fake.device.screen()["showing"] is None
+    assert _calls(fake, "listen") == []
+    w = Worker(clock, host.listen, 4)
+    clock.advance(4)
+    assert w.done and w.result == "player two"
+
+
+def test_i_m_looking_said_in_the_short_listen_shows_the_card_and_got_it_moves_on(host, fake, clock):
+    w = _dealing(host, fake, clock)
+    fake.device.heard.append("I'm looking.")
+    clock.advance(HEAR_AFTER + HEAR_SECONDS)  # the listen from 4 s heard it
+    assert fake.device.screen()["showing"] == DOCTOR
+    host.inject("got it")
+    clock.advance(0.3)
+    assert w.done and w.result is True
+    assert fake.device.screen()["showing"] is None and fake.device.screen()["face"] == "idle"
+
+
+def test_stop_the_game_during_a_lean_in_ends_the_game_with_the_card_blanked(host, fake, clock):
+    w = _dealing(host, fake, clock)
+    _show(fake, CLOSE)
+    clock.advance(0.3)
+    assert fake.device.screen()["showing"] == DOCTOR
+    host.inject("stop the game")
+    clock.advance(0.3)
+    assert w.done and isinstance(w.error, GameStopped) and not w.error.reset
+    screen = fake.device.screen()
+    assert (screen["face"], screen["blink"], screen["showing"]) == ("idle", True, None)
+
+
+def test_a_stop_the_host_raises_reaches_the_referee_as_a_stop():
+    class Stopping:
+        def show_private(self, seat, card):
+            raise GameStopped(reset=True)
+
+    server = TableServer(Stopping(), RealClock(), "127.0.0.1", 0).start()
+    try:
+        remote = RemoteTable(server.url, patience=1.0, log=lambda msg: None)
+        remote.hello()
+        with pytest.raises(GameStopped) as raised:
+            remote.show_private(1, Card("MAFIA"))
+        assert raised.value.reset
+        remote.close()
+    finally:
+        server.stop()
+
+
+def test_speaker_mac_at_a_listen_moves_the_voice_and_the_listen_goes_on(host, fake, clock, monkeypatch):
+    played = []
+    monkeypatch.setattr(host.body, "_play_here", played.append)  # no afplay in a test
+    monkeypatch.setattr(settings, "file", None)
+    monkeypatch.setattr(settings.current, "speaker", settings.current.speaker)  # put back after
+    fake.device.heard.append("change your speaker to the Mac")
+    w = Worker(clock, host.listen, 4)
+    clock.advance(4)
+    assert host.body.speaker == "mac" and settings.current.speaker == "mac"
+    assert len(played) == 1 and _said(fake) == []  # "Okay, I'll talk through the Mac." played on the Mac
+    fake.device.heard.append("player two")
+    clock.advance(4)
+    assert w.done and w.result == "player two"
 
 
 def test_two_faces_that_never_part_end_the_wait(host, fake, clock):

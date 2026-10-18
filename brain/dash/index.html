@@ -244,18 +244,31 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   display: flex; flex-direction: column;
 }
 .drawer.open { transform: none; }
-.dhead { display: flex; align-items: center; gap: 12px; padding: max(16px, env(safe-area-inset-top)) 24px 16px; border-bottom: 1px solid var(--line); }
+.dhead { display: flex; align-items: center; gap: 12px; padding: max(16px, env(safe-area-inset-top)) 24px 12px; }
 .dhead .dtitle { flex: 1; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+/* the tabs: one segmented bar, the open tab a raised pill */
+.dnav { padding: 0 24px 12px; border-bottom: 1px solid var(--line); }
+.dtabs { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--fill); }
+.dtabs button {
+  flex: 1 1 0; min-width: 0; height: 32px; padding: 0 4px; border: 0; border-radius: var(--r-s);
+  background: transparent; color: var(--text-2); font-size: 13px; font-weight: 600; white-space: nowrap; transition: background .15s, color .15s;
+}
+.dtabs button:hover { color: var(--text); }
+.dtabs button[aria-selected="true"] { background: rgba(255,255,255,.24); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.5); }
 .dbody { flex: 1; overflow-y: auto; padding: 0 24px 32px; overscroll-behavior: contain; }
+.tab { animation: fade .15s ease-out; }
 .sec { padding: 24px 0; }
-.sec + .sec, .sec + .more { border-top: 1px solid var(--line); }
+.sec + .sec { border-top: 1px solid var(--line); }
 .sec h2 { font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 12px; }
 .empty { color: var(--text-2); font-size: 15px; padding: 8px 0; }
+.note { font-size: 13px; color: var(--text-2); margin-top: 8px; }
+.note:empty { display: none; }
+.note.lead { margin: 0 0 16px; }
+.note q { color: var(--text); quotes: '"' '"'; }
 
-/* host: one row of choices per setting */
-.hrow + .hrow { margin-top: 16px; }
-.hrow .k { display: block; font-weight: 600; margin-bottom: 8px; }
+/* host: rows of choices; .fill makes a row of equal segments */
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg.fill button { flex: 1 1 0; min-width: 0; }
 .seg button {
   height: 40px; padding: 0 14px; border-radius: var(--r-s); border: 1px solid var(--line-2);
   background: transparent; color: var(--text); font-size: 15px; font-weight: 600; white-space: nowrap;
@@ -280,22 +293,61 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .field:focus { border-color: var(--text); }
 .field::placeholder { color: var(--text-3); }
 
-/* folded parts: "Show what it sees" and "More" */
-details.fold2 > summary, details.more > summary {
+/* folded part: "Show what it sees" */
+details.fold2 > summary {
   list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
   font-weight: 600; color: var(--text-2); padding: 12px 0; user-select: none;
 }
-details.fold2 > summary::-webkit-details-marker, details.more > summary::-webkit-details-marker { display: none; }
-details.fold2 > summary::before, details.more > summary::before {
+details.fold2 > summary::-webkit-details-marker { display: none; }
+details.fold2 > summary::before {
   content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
   transform: rotate(-45deg); transition: transform .15s; margin: 0 4px 0 2px;
 }
-details[open].fold2 > summary::before, details[open].more > summary::before { transform: rotate(45deg); }
-details.fold2 > summary:hover, details.more > summary:hover { color: var(--text); }
+details[open].fold2 > summary::before { transform: rotate(45deg); }
+details.fold2 > summary:hover { color: var(--text); }
 details.fold2 { margin-top: 8px; }
-details.more { padding: 12px 0 0; }
-details.more > summary { font-size: 17px; color: var(--text); }
-.more .sec:first-of-type { padding-top: 8px; }
+
+/* choice cards: personality, ElevenLabs voices, models */
+.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.chips button {
+  min-height: 56px; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line-2); background: var(--fill);
+  color: var(--text); text-align: left; font-size: 15px; font-weight: 600; line-height: 1.25;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
+.chips.one button { min-height: 48px; justify-content: center; }
+.chips button small { display: block; font-size: 12px; font-weight: 400; color: var(--text-2); margin-top: 2px; }
+.chips button:hover { border-color: var(--text-2); }
+.chips button[aria-pressed="true"] { background: var(--text); color: var(--ink); border-color: var(--text); }
+.chips button[aria-pressed="true"] small { color: rgba(0,0,0,.6); }
+.chips button.busy, .seg button.busy { opacity: .5; }
+.chips.dim button[aria-pressed="true"] { background: var(--fill-2); color: var(--text); border-color: var(--text-2); }
+.chips.dim button[aria-pressed="true"] small { color: var(--text-2); }
+.seg + .chips { margin-top: 12px; }
+.volrow { display: flex; align-items: center; gap: 12px; }
+.volrow svg { flex: none; width: 18px; height: 18px; color: var(--text-2); }
+.volrow .v { width: 32px; text-align: right; font-weight: 600; }
+.mform { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.mform label { font-weight: 600; flex: none; }
+.mform .field { font-family: var(--mono); font-size: 13px; }
+.mform .field.on { border-color: var(--text); }
+.mform .tick { width: 16px; flex: none; }
+.chips:empty, .chips:empty + .mform { margin-top: 0; }
+
+/* the talk's status card and the test's answer */
+.tstat { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: var(--r); background: var(--fill); border: 1px solid var(--line); }
+.tstat .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); }
+.tstat[data-s="ok"] .dot { background: var(--green); box-shadow: 0 0 10px rgba(48,209,88,.7); }
+.tstat[data-s="warn"] .dot { background: var(--amber); }
+.tstat[data-s="bad"] .dot { background: var(--red); }
+.tstat .tx { flex: 1; min-width: 0; }
+.tstat .t1 { font-weight: 600; }
+.tstat[data-s="bad"] .t1 { color: var(--red); }
+.tstat[data-s="warn"] .t1 { color: var(--amber); }
+.tstat .t2 { font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+.linkbtn { background: none; border: 0; padding: 0; margin-top: 2px; color: var(--text); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.tres { margin-top: 12px; padding: 4px 0 4px 16px; border-left: 2px solid var(--green); font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; animation: fade .2s ease-out; }
+.tres.err { border-left-color: var(--red); font-size: 15px; font-weight: 400; }
+.tres small { display: block; color: var(--text-2); font-size: 13px; font-weight: 400; margin-top: 4px; }
 
 /* camera: the photo, seat crops, log */
 .cam-frame { position: relative; aspect-ratio: 4 / 3; background: #0a0a0a; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }
@@ -318,7 +370,7 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
 .filters button { border: 0; background: transparent; color: var(--text-2); font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: var(--r-s); }
 .filters button[aria-pressed="true"] { background: var(--fill-2); color: var(--text); }
 .feed {
-  height: 360px; overflow-y: auto; border-top: 1px solid var(--line);
+  height: max(280px, calc(100dvh - 248px)); overflow-y: auto; border-top: 1px solid var(--line);
   display: flex; flex-direction: column; overscroll-behavior: contain;
 }
 .ev { display: grid; grid-template-columns: 44px 52px minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -341,8 +393,6 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
 .jump.on { display: block; }
 
 /* tuning sliders and switches */
-.tgroup + .tgroup { margin-top: 16px; }
-.tgroup h3 { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0; }
 .tgroup > :last-child, #camSettings > :last-child { border-bottom: 0; }
 .setting {
   display: grid; grid-template-columns: minmax(0, 1fr) 96px 16px; grid-template-areas: "lab lab lab" "ctl val tick";
@@ -380,7 +430,7 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
 .kclear:hover { color: var(--red); }
 .kclear.arm { color: var(--ink); background: var(--red); }
 
-/* ---------- ROB: name and the customize sheet ---------- */
+/* ---------- ROB: name and the customize button ---------- */
 .rob { flex: none; display: grid; justify-items: center; gap: 8px; }
 .rob .bot { width: 128px; }
 .robname { font-size: 15px; font-weight: 800; letter-spacing: .2em; padding-left: .2em; }
@@ -388,29 +438,10 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bord
   margin-top: 16px; height: 44px; padding: 0 18px; border-radius: 22px; font-size: 15px; font-weight: 600;
   background: var(--text); color: var(--ink); border: 0; display: inline-flex; align-items: center; gap: 8px;
 }
-.custbtn span { font-weight: 400; color: rgba(0,0,0,.55); }
+.custbtn { max-width: 100%; white-space: nowrap; }
+.custbtn span { font-weight: 400; color: rgba(0,0,0,.55); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .custbtn span:not(:empty)::before { content: "\00b7"; margin-right: 8px; }
 .custbtn:active { transform: scale(.97); }
-.sheetscrim { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 18; animation: fade .2s ease-out; }
-.sheet {
-  position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 19;
-  width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto;
-  background: #0d0d0f; border: 1px solid var(--line-2); border-radius: 16px; padding: 20px 24px 24px; animation: fade .2s ease-out;
-}
-.sheethead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.sheethead h2 { margin: 0; font-size: 20px; font-weight: 700; }
-.crow { margin-top: 16px; }
-.crow .k { font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
-.chips5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.chips5 button {
-  min-height: 64px; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line-2); background: var(--fill);
-  color: var(--text); text-align: left; font-size: 15px; font-weight: 600; line-height: 1.25;
-}
-.chips5 button small { display: block; font-size: 12px; font-weight: 400; color: var(--text-2); margin-top: 2px; }
-.chips5 button:hover { border-color: var(--text-2); }
-.chips5 button[aria-pressed="true"] { background: var(--text); color: var(--ink); border-color: var(--text); }
-.chips5 button[aria-pressed="true"] small { color: rgba(0,0,0,.6); }
-.chips5 button.busy { opacity: .5; }
 
 /* ---------- paused ---------- */
 .pausebtn {
@@ -463,8 +494,6 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   .lobby-head { gap: 16px; }
   .rob .bot { width: 72px; }
   .robname { font-size: 13px; }
-  .chips5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sheet { padding: 16px; }
   .seat.has-av .sn { width: 22px; height: 22px; font-size: 12px; right: -3px; bottom: -3px; }
   .seat.tap.has-av .sn { width: 24px; height: 24px; font-size: 13px; }
   .bottom { padding-top: 32px; }
@@ -475,7 +504,9 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   .banner { padding: 24px 16px; }
   .banner .w { font-size: 32px; }
   .dhead { padding-left: 16px; padding-right: 16px; }
+  .dnav { padding: 0 16px 12px; }
   .dbody { padding: 0 16px 24px; }
+  .chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pausebtn, .stop { padding: 0 12px; white-space: nowrap; }
   body[data-screen="game"] .brand { display: none; }
 }
@@ -514,7 +545,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
     <div>
       <h1>What are we playing?</h1>
       <div class="hint">Say <q>let's play Mafia</q> or tap a game.</div>
-      <button class="custbtn" id="custBtn" aria-haspopup="dialog">Customize ROB<span id="custNow"></span></button>
+      <button class="custbtn" id="custBtn" aria-controls="drawer">Customize ROB<span id="custNow"></span></button>
     </div>
   </div>
   <div class="cards">
@@ -573,16 +604,6 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   </div>
 </main>
 
-<!-- Customize ROB -->
-<div class="sheetscrim" id="custScrim" hidden></div>
-<div class="sheet" id="cust" role="dialog" aria-label="Customize ROB" hidden>
-  <div class="sheethead"><h2>Customize ROB</h2>
-    <button class="iconbtn" id="custClose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-  </div>
-  <div class="crow"><div class="k">Personality</div><div class="chips5" id="custPersona"></div></div>
-  <div class="crow" id="custVoiceRow"><div class="k">Voice</div><div class="chips5" id="custVoice"></div></div>
-</div>
-
 <!-- Paused (lobby or game) -->
 <div class="paused" id="paused" hidden role="status">
   <div class="box">
@@ -601,36 +622,109 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
-  <div class="dbody">
-    <section class="sec">
-      <h2>Camera</h2>
-      <div id="camSettings"><div class="empty">Loading</div></div>
-      <details class="fold2" id="seeDet">
-        <summary>Show what it sees</summary>
-        <div class="cam-frame">
-          <img id="photo" alt="Latest camera frame with face boxes">
-          <div class="cam-empty" id="camEmpty">No photo yet</div>
+  <div class="dnav">
+    <div class="dtabs" id="dtabs" role="tablist" aria-label="Settings">
+      <button role="tab" id="t-rob" data-tab="rob" aria-controls="tab-rob">ROB</button>
+      <button role="tab" id="t-ai" data-tab="ai" aria-controls="tab-ai">AI</button>
+      <button role="tab" id="t-keys" data-tab="keys" aria-controls="tab-keys">Keys</button>
+      <button role="tab" id="t-game" data-tab="game" aria-controls="tab-game">Game</button>
+      <button role="tab" id="t-camera" data-tab="camera" aria-controls="tab-camera">Camera</button>
+      <button role="tab" id="t-log" data-tab="log" aria-controls="tab-log">Log</button>
+    </div>
+  </div>
+  <div class="dbody" id="dbody">
+    <!-- ROB: who it is and how it sounds -->
+    <div class="tab" id="tab-rob" role="tabpanel" aria-labelledby="t-rob" hidden>
+      <section class="sec" id="bPersona" hidden>
+        <h2>Personality</h2>
+        <div class="chips one" id="hPersona"></div>
+      </section>
+      <section class="sec" id="bVoice" hidden>
+        <h2>Voice</h2>
+        <div class="seg fill" id="hEngine" role="group" aria-label="Voice engine"></div>
+        <div class="chips" id="hEleven"></div>
+        <div class="note" id="hVoiceNote"></div>
+      </section>
+      <section class="sec" id="bSpeaker" hidden>
+        <h2>Speaker</h2>
+        <div class="seg fill" id="hSpeaker" role="group" aria-label="Speaker"></div>
+        <div class="note">Where ROB's voice plays. You can also say <q>change your speaker to the Mac</q>.</div>
+      </section>
+      <section class="sec">
+        <h2>Robot volume</h2>
+        <div class="volrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
+          <input type="range" id="volR" min="0" max="100" step="1" value="50" aria-label="Robot volume"><span class="v num" id="volRV">-</span>
         </div>
-        <div class="cam-line" id="camLine"></div>
-        <div class="crops" id="crops" hidden></div>
-      </details>
-    </section>
-    <section class="sec">
-      <h2>Keys</h2>
-      <div id="keys"><div class="empty">Loading</div></div>
-    </section>
-    <details class="more" id="moreDet">
-      <summary>More</summary>
-      <section class="sec">
-        <h2>Talk</h2>
-        <div class="seg" id="talkSeg" role="group" aria-label="Talk"></div>
+        <div class="note">The robot's own speaker, set live. On this Mac, ROB plays at the Mac's volume.</div>
       </section>
-      <section class="sec">
-        <div id="tuning"></div>
+    </div>
+
+    <!-- AI: the talk behind ROB's lines -->
+    <div class="tab" id="tab-ai" role="tabpanel" aria-labelledby="t-ai" hidden>
+      <section class="sec" id="bStatus" hidden>
+        <h2>Status</h2>
+        <div class="tstat" id="talkStat" data-s="idle">
+          <span class="dot" aria-hidden="true"></span>
+          <div class="tx" role="status"><div class="t1" id="tsT"></div><div class="t2" id="tsD"></div><button class="linkbtn" id="tsKeys" hidden>Open Keys</button></div>
+          <button class="btn sm" id="talkTest">Test</button>
+        </div>
+        <div class="tres" id="talkRes" role="status" hidden></div>
       </section>
+      <section class="sec" id="bProvider" hidden>
+        <h2>Provider</h2>
+        <div class="seg fill" id="hTalk" role="group" aria-label="Provider"></div>
+      </section>
+      <section class="sec" id="bModel" hidden>
+        <h2>Model</h2>
+        <div class="chips" id="hModels"></div>
+        <form class="mform" id="modelForm" autocomplete="off">
+          <label for="modelCustom">Custom</label>
+          <input class="field" id="modelCustom" spellcheck="false" autocapitalize="off" autocorrect="off" enterkeyhint="done" placeholder="Any model name, then Enter">
+          <span class="tick" id="modelTick" aria-hidden="true">✓</span>
+        </form>
+      </section>
+      <section class="sec" id="bEffort" hidden>
+        <h2>Effort</h2>
+        <div class="seg fill" id="hEffort" role="group" aria-label="Effort"></div>
+        <div class="note">Low is fastest and plenty for party lines.</div>
+      </section>
+    </div>
+
+    <!-- Keys: write-only -->
+    <div class="tab" id="tab-keys" role="tabpanel" aria-labelledby="t-keys" hidden>
+      <section class="sec">
+        <div class="note lead">Saved to this Mac's .env.local and never shown again.</div>
+        <div id="keys"><div class="empty">Loading</div></div>
+      </section>
+    </div>
+
+    <!-- Game: timing and listening -->
+    <div class="tab" id="tab-game" role="tabpanel" aria-labelledby="t-game" hidden>
+      <div id="tuning"><section class="sec"><div class="empty">Loading</div></section></div>
+    </div>
+
+    <!-- Camera: the head, the scan, the face finder -->
+    <div class="tab" id="tab-camera" role="tabpanel" aria-labelledby="t-camera" hidden>
+      <section class="sec">
+        <div id="camSettings"><div class="empty">Loading</div></div>
+        <details class="fold2" id="seeDet">
+          <summary>Show what it sees</summary>
+          <div class="cam-frame">
+            <img id="photo" alt="Latest camera frame with face boxes">
+            <div class="cam-empty" id="camEmpty">No photo yet</div>
+          </div>
+          <div class="cam-line" id="camLine"></div>
+          <div class="crops" id="crops" hidden></div>
+        </details>
+      </section>
+    </div>
+
+    <!-- Log: what was said and heard -->
+    <div class="tab" id="tab-log" role="tabpanel" aria-labelledby="t-log" hidden>
       <section class="sec">
         <div class="log-head">
-          <h2>Log</h2>
+          <h2>What ROB said and heard</h2>
           <div class="filters" id="filters">
             <button aria-pressed="true" data-f="all">All</button>
             <button aria-pressed="false" data-f="talk">Talk</button>
@@ -642,7 +736,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
           <button class="jump" id="jump">Jump to latest</button>
         </div>
       </section>
-    </details>
+    </div>
   </div>
 </aside>
 
@@ -664,7 +758,7 @@ const WINNERS = { mafia: "Mafia wins", village: "Village wins", players: "Player
 const SEAT_TAP = { vote: 1, night: 1, clue: 1 };
 const HINTS = {
   count: "Is that the right count?",
-  deal: "Each player leans in when called.",
+  deal: 'Lean in when called, or say "show me".',
   night: "Tap the seat the table points at.",
   morning: "The host reads out the night.",
   day: "Call the vote when the table is ready.",
@@ -751,7 +845,7 @@ function render() {
   const tone = inGame && !g.over ? (TONE[g.phase] || "idle") : "idle";
   if (document.body.dataset.tone !== tone) document.body.dataset.tone = tone;
   setScene(inGame ? sceneFor(name, g.phase) : "lobby");
-  if (inGame) { starting = null; if (!$("cust").hidden) openCust(false); renderGame(s, g, name); } else renderLobby(s);
+  if (inGame) { starting = null; renderGame(s, g, name); } else renderLobby(s);
   renderRobot(s);
   renderDrawer(s);
 }
@@ -888,6 +982,10 @@ function renderActions(s, g) {
     html += '<div class="arow"><button class="big accent" data-say="yes">Yes</button>' +
       '<span class="stepper"><button data-step="-1" aria-label="One fewer">−</button><span class="v num">' + countN + '</span><button data-step="1" aria-label="One more">+</button></span>' +
       '<button class="big ghost" data-say="there are ' + countN + ' of us">There are ' + countN + "</button></div>";
+  } else if (phase === "deal") {
+    // the card goes up on trust, or the player has seen it and the deal moves on
+    html += '<div class="arow"><button class="big accent" data-say="show me">Show the card</button>' +
+      '<button class="big ghost" data-say="got it">They\'ve seen it</button></div>';
   } else if (phase === "day") {
     html += '<div class="arow"><button class="big accent" data-say="let\'s vote">Vote now</button></div>';
   } else if (phase === "guess") {
@@ -1075,28 +1173,31 @@ $("filters").addEventListener("click", (e) => {
 
 // ---------- volume (the robot's speaker; set live, not saved) ----------
 let volHold = 0, volT;
+const VOLS = [["vol", "volV"], ["volR", "volRV"]]; // the header's pop and the ROB tab
+function showVolume(v, known) {
+  for (const [r, l] of VOLS) { $(l).textContent = known ? v : "-"; if (known) $(r).value = v; }
+}
 function renderVolume(v) {
   if (volHold) return;
-  const known = typeof v === "number";
-  $("volV").textContent = known ? v : "-";
-  if (known) $("vol").value = v;
+  showVolume(v, typeof v === "number");
 }
 $("volBtn").onclick = (e) => { e.stopPropagation(); const p = $("volPop"), open = p.hidden; p.hidden = !open; $("volBtn").setAttribute("aria-expanded", String(open)); if (open) $("vol").focus(); };
 document.addEventListener("click", (e) => { if (!$("volPop").hidden && !e.target.closest(".vol")) { $("volPop").hidden = true; $("volBtn").setAttribute("aria-expanded", "false"); } });
-$("vol").addEventListener("input", () => {
-  const v = Math.round(+$("vol").value);
-  $("volV").textContent = v;
+function onVolume(e) {
+  const v = Math.round(+e.target.value);
+  showVolume(v, true);
   volHold = 1; clearTimeout(volT);
   volT = setTimeout(async () => {
     const d = await act("volume", { volume: v });
-    if (d && typeof d.volume === "number") { $("vol").value = d.volume; $("volV").textContent = d.volume; }
+    if (d && typeof d.volume === "number") showVolume(d.volume, true);
     setTimeout(() => { volHold = 0; }, 1200);
   }, 250);
-});
+}
+for (const [r] of VOLS) $(r).addEventListener("input", onVolume);
 
 // ---------- drawer: what the camera sees ----------
 function renderDrawer(s) {
-  const open = $("drawer").classList.contains("open") && $("seeDet").open;
+  const open = $("drawer").classList.contains("open") && tab === "camera" && $("seeDet").open;
   const p = s.photo;
   if (p && p.id !== photoId && open) {
     photoId = p.id;
@@ -1121,11 +1222,10 @@ function renderCrops(list) {
     : '<div class="none"></div>') + "<figcaption>Seat " + x.seat + "</figcaption></figure>").join("");
 }
 $("seeDet").addEventListener("toggle", () => { if ($("seeDet").open) { photoId = null; cropSig = ""; if (state) renderDrawer(state); } });
-$("moreDet").addEventListener("toggle", () => { if ($("moreDet").open) feed.scrollTop = feed.scrollHeight; });
 
-// ---------- drawer: the host (personality, voice, talk; /dashboard's own API) ----------
-const HOST_LABEL = { piper: "Built-in", eleven: "ElevenLabs", anthropic: "Claude", gemini: "Gemini", off: "Scripted" };
-const HOST_HIDE = { ollama: 1 };
+// ---------- drawer: ROB and the AI (/dashboard's own API) ----------
+const HOST_LABEL = { piper: "Built-in", eleven: "ElevenLabs", anthropic: "Claude", gemini: "Gemini", ollama: "Ollama", off: "Scripted" };
+const cap = (k) => String(k).charAt(0).toUpperCase() + String(k).slice(1);
 async function hostApi(path, body) {
   const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
   const r = await fetch("/dashboard/" + path, opt);
@@ -1134,58 +1234,165 @@ async function hostApi(path, body) {
   if (!r.ok) throw new Error((data && data.error) || ("HTTP " + r.status));
   return data;
 }
-let hostBusy = false;
+let hostData = null, hostBusy = false;
 async function loadHost() {
   try { renderHost(await hostApi("state")); } catch (e) { /* stays as it was */ }
 }
 function chip(field, key, label, on, blurb) {
   return '<button data-f="' + field + '" data-k="' + esc(key) + '" aria-pressed="' + on + '">' + esc(label) + (blurb ? "<small>" + esc(blurb) + "</small>" : "") + "</button>";
 }
+// the page refreshes this every few seconds: only touch what changed, so hover and focus stay put
+const drawn = new WeakMap();
+function setHTML(el, html) { if (drawn.get(el) !== html) { drawn.set(el, html); el.innerHTML = html; } }
+const isList = (x) => Array.isArray(x) && x.length > 0;
+function modelLabel(d, provider, key) {
+  const m = d && d.talk_models && (d.talk_models[provider] || []).find((x) => x.key === key);
+  return m ? m.label || m.key : key || "The default model";
+}
 function renderHost(d) {
+  if (!d || typeof d !== "object") return;
+  hostData = d;
   const cur = d.settings || {};
+  // ROB: personality, voice, speaker (a block whose field is missing stays hidden)
   const personas = d.personas || [];
-  $("custPersona").innerHTML = personas.map((p) => chip("persona", p.key, p.label || p.key, cur.persona === p.key)).join("");
-  const voices = d.eleven_voices || [];
-  const vcur = cur.eleven_voice || (voices[0] && voices[0].key);
-  $("custVoiceRow").hidden = !voices.length;
-  $("custVoice").innerHTML = voices.map((v) => chip("eleven_voice", v.key, v.label || v.key, vcur === v.key, v.blurb)).join("");
+  $("bPersona").hidden = !personas.length;
+  setHTML($("hPersona"), personas.map((p) => chip("persona", p.key, p.label || p.key, cur.persona === p.key)).join(""));
   const p = personas.find((x) => x.key === cur.persona);
-  $("custNow").textContent = p ? p.label : "";
-  $("talkSeg").innerHTML = (d.talks || []).filter((k) => !HOST_HIDE[k]).map((k) => chip("talk", k, HOST_LABEL[k] || k, cur.talk === k)).join("");
+  $("custNow").textContent = p ? p.label || p.key : "";
+  const engines = d.voices || [], voices = d.eleven_voices || [];
+  $("bVoice").hidden = !engines.length && !voices.length;
+  setHTML($("hEngine"), engines.map((k) => chip("voice", k, HOST_LABEL[k] || cap(k), cur.voice === k)).join(""));
+  const vcur = cur.eleven_voice || (voices[0] && voices[0].key), elevenOn = cur.voice === "eleven" || !engines.length;
+  setHTML($("hEleven"), voices.map((v) => chip("eleven_voice", v.key, v.label || v.key, vcur === v.key, v.blurb)).join(""));
+  $("hEleven").classList.toggle("dim", !elevenOn);
+  $("hVoiceNote").textContent = voices.length && !elevenOn ? "These voices play once ElevenLabs is on and its key is in Keys." : "";
+  $("bSpeaker").hidden = !isList(d.speakers);
+  setHTML($("hSpeaker"), (d.speakers || []).map((x) => chip("speaker", x.key, x.label || cap(x.key), (cur.speaker || "robot") === x.key)).join(""));
+
+  // AI: provider, model, effort, status
+  const talks = d.talks || [], off = cur.talk === "off";
+  $("bProvider").hidden = !talks.length;
+  setHTML($("hTalk"), talks.map((k) => chip("talk", k, HOST_LABEL[k] || cap(k), cur.talk === k)).join(""));
+  const models = (d.talk_models && d.talk_models[cur.talk]) || [];
+  const mcur = cur.talk_model || (models[0] && models[0].key) || null;
+  const custom = !!cur.talk_model && !models.some((m) => m.key === cur.talk_model);
+  $("bModel").hidden = !talks.length || off;
+  setHTML($("hModels"), models.map((m) => chip("talk_model", m.key, m.label || m.key, !custom && mcur === m.key, m.blurb)).join(""));
+  const mc = $("modelCustom");
+  if (document.activeElement !== mc) mc.value = custom ? cur.talk_model : "";
+  mc.classList.toggle("on", custom);
+  $("bEffort").hidden = !isList(d.efforts) || off;
+  setHTML($("hEffort"), (d.efforts || []).map((k) => chip("effort", k, cap(k), (cur.effort || "low") === k)).join(""));
+  renderTalkStatus(d);
+}
+function renderTalkStatus(d) {
+  const has = Object.prototype.hasOwnProperty.call(d, "talk_status");
+  $("bStatus").hidden = !has;
+  if (!has) return;
+  const st = d.talk_status, cur = d.settings || {};
+  let s = "idle", t1, t2 = "", testable = true, keys = false;
+  if (!st) { t1 = "The talk is not set up"; t2 = "ROB uses its written lines here."; testable = false; }
+  else if (st.provider === "off" || cur.talk === "off") { t1 = "Scripted"; t2 = "ROB uses its written lines. No AI calls."; testable = false; }
+  else {
+    const prov = HOST_LABEL[st.provider] || st.provider || "the provider";
+    const model = modelLabel(d, st.provider, st.model);
+    const when = st.at ? ", " + fmtAge(Date.now() / 1000 - st.at) + " ago" : "";
+    if (st.key_set === false) { s = "warn"; t1 = "No key"; t2 = "Add the " + prov + " key in Keys."; keys = true; }
+    else if (st.ok === true) { s = "ok"; t1 = "Working"; t2 = model + (st.ms != null ? ", " + st.ms + " ms" : "") + when; }
+    else if (st.ok === false) { s = "bad"; t1 = "Last call failed"; t2 = (st.error || "No reason given") + " (" + model + when + ")"; }
+    else { t1 = "Not tried yet"; t2 = model + ". Test makes one call now."; }
+  }
+  $("talkStat").dataset.s = s; $("tsT").textContent = t1; $("tsD").textContent = t2;
+  $("tsKeys").hidden = !keys; $("talkTest").hidden = !testable;
+}
+async function postHost(body) {
+  const snap = await hostApi("settings", body);
+  if (hostData && snap && typeof snap === "object") { hostData.settings = Object.assign({}, hostData.settings, snap); renderHost(hostData); }
+  return snap;
 }
 async function pickHost(e) {
-  const b = e.target.closest("button[data-f]"); if (!b || hostBusy || b.getAttribute("aria-pressed") === "true") return;
+  const b = e.target.closest("button[data-f]"); if (!b || hostBusy) return;
+  if (b.getAttribute("aria-pressed") === "true" && !b.closest(".dim")) return; // a dimmed voice can still turn ElevenLabs on
+  const f = b.dataset.f, k = b.dataset.k, body = { [f]: k };
+  if (f === "talk") body.talk_model = null; // a model name belongs to one provider
+  if (f === "talk" || f === "talk_model" || f === "effort") $("talkRes").hidden = true;
   hostBusy = true; b.classList.add("busy");
-  try { await hostApi("settings", { [b.dataset.f]: b.dataset.k }); }
-  catch (err) { toast("Didn't change: " + err.message, true); }
-  hostBusy = false;
+  try {
+    await postHost(body);
+    if (f === "speaker") toast(k === "mac" ? "ROB plays on this Mac now" : "ROB plays on the robot now");
+  } catch (err) { toast("Didn't change: " + err.message, true); }
+  b.classList.remove("busy"); hostBusy = false;
   loadHost();
 }
-for (const id of ["custPersona", "custVoice", "talkSeg"]) $(id).addEventListener("click", pickHost);
-function openCust(open) {
-  $("cust").hidden = !open; $("custScrim").hidden = !open;
-  if (open) loadHost();
-}
-$("custBtn").onclick = () => openCust(true);
-$("custClose").onclick = () => openCust(false);
-$("custScrim").onclick = () => openCust(false);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("cust").hidden) openCust(false); });
+for (const id of ["hPersona", "hEngine", "hEleven", "hSpeaker", "hTalk", "hModels", "hEffort"]) $(id).addEventListener("click", pickHost);
+$("modelForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const inp = $("modelCustom"), v = inp.value.trim(), t = $("modelTick");
+  $("talkRes").hidden = true;
+  try {
+    await postHost({ talk_model: v || null }); // empty goes back to the provider's default
+    inp.blur(); t.textContent = "✓"; t.className = "tick on"; setTimeout(() => { t.className = "tick"; }, 1600);
+    if (hostData) renderHost(hostData);
+  } catch (err) { t.textContent = "!"; t.className = "tick err"; toast("Didn't change: " + err.message, true); }
+  loadHost();
+});
+$("modelCustom").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); e.target.blur(); if (hostData) renderHost(hostData); } });
+$("tsKeys").onclick = () => setTab("keys");
+// one real call through the game's own request path
+$("talkTest").onclick = async () => {
+  const b = $("talkTest"), r = $("talkRes");
+  b.disabled = true; b.textContent = "Testing";
+  let d;
+  try { d = await hostApi("talk-test", {}); } catch (e) { d = { ok: false, error: e.message }; }
+  d = d || { ok: false };
+  b.disabled = false; b.textContent = "Test";
+  const who = [d.model ? modelLabel(hostData, d.provider, d.model) : "", d.ms ? d.ms + " ms" : ""].filter(Boolean).join(", ");
+  r.className = "tres" + (d.ok ? "" : " err");
+  r.innerHTML = (d.ok ? '"' + esc(d.line || "") + '"' : esc(d.error || "No answer.")) + (who ? "<small>" + esc(who) + "</small>" : "");
+  r.hidden = false;
+  loadHost();
+};
 loadHost();
+
+// ---------- drawer tabs (the last one open is kept for the session) ----------
+const TABS = ["rob", "ai", "keys", "game", "camera", "log"];
+let tab = (() => { try { const t = sessionStorage.getItem("gm-tab"); return TABS.includes(t) ? t : "rob"; } catch (e) { return "rob"; } })();
+function setTab(t) {
+  if (!TABS.includes(t)) return;
+  tab = t;
+  try { sessionStorage.setItem("gm-tab", t); } catch (e) { /* private mode */ }
+  $("dtabs").querySelectorAll("[role=tab]").forEach((b) => { const on = b.dataset.tab === t; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; });
+  for (const k of TABS) $("tab-" + k).hidden = k !== t;
+  $("dbody").scrollTop = 0;
+  if (t === "log") { feed.scrollTop = feed.scrollHeight; $("jump").classList.remove("on"); }
+  if (t === "camera") { photoId = null; cropSig = ""; if (state) renderDrawer(state); }
+  if ((t === "rob" || t === "ai") && $("drawer").classList.contains("open")) loadHost();
+}
+$("dtabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); });
+$("dtabs").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  const i = TABS.indexOf(tab) + (e.key === "ArrowRight" ? 1 : -1);
+  setTab(TABS[(i + TABS.length) % TABS.length]);
+  $("t-" + tab).focus();
+});
+setTab(tab);
 
 // ---------- drawer open and close ----------
 function openDrawer(open) {
   $("drawer").classList.toggle("open", open); $("dscrim").classList.toggle("open", open);
   $("drawer").setAttribute("aria-hidden", String(!open)); $("gear").setAttribute("aria-expanded", String(open));
-  if (open) { photoId = null; cropSig = ""; loadHost(); loadSettings(); loadKeys(); if (state) renderDrawer(state); }
+  if (open) { photoId = null; cropSig = ""; loadHost(); loadSettings(); loadKeys(); if (state) renderDrawer(state); if (tab === "log") feed.scrollTop = feed.scrollHeight; }
 }
 $("gear").onclick = () => openDrawer(!$("drawer").classList.contains("open"));
+$("custBtn").onclick = () => { setTab("rob"); openDrawer(true); };
 $("dclose").onclick = () => openDrawer(false);
 $("dscrim").onclick = () => openDrawer(false);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("drawer").classList.contains("open")) openDrawer(false); });
 
 // ---------- poll ----------
 // The events route answers ids greater than `since`; ask from the last id seen.
-let polling = false;
+let polling = false, pollN = 0;
 async function poll() {
   if (polling) return; polling = true;
   const [s, ev] = await Promise.allSettled([api("state"), api("events?since=" + lastId)]);
@@ -1201,12 +1408,18 @@ async function poll() {
   if (s.status === "fulfilled" && s.value) { setConn(true); state = s.value; try { render(); } catch (e) { console.error(e); } }
   else { setConn(false); if (state) try { render(); } catch (e) { console.error(e); } }
   polling = false;
+  // ROB's picks and the talk's status: every 3 s while that tab is open, else every 15 s (the lobby's button)
+  pollN++;
+  const hostOpen = $("drawer").classList.contains("open") && (tab === "rob" || tab === "ai");
+  if (!hostBusy && pollN % (hostOpen ? 3 : 15) === 0) loadHost();
 }
 setInterval(poll, 1000);
 poll();
 
-// ---------- tuning: head pitch and scan step up top, the rest under More ----------
-const CAMERA_KEYS = ["pitch", "sweep_step"];
+// ---------- tuning: the Camera tab (head, scan, face finder) and the Game tab (the rest) ----------
+const CAMERA_KEYS = ["pitch", "sweep_step", "hfov", "score_min", "close_width"];
+const CAMERA_GROUPS = ["Camera", "Head"];
+const GROUP_ORDER = ["Timing", "Voice"], GROUP_LABEL = { Voice: "Listening and quips" };
 const pendingSet = {}; let setT;
 function fmtVal(v, step) {
   const dec = step && step < 1 ? Math.min(3, String(step).split(".")[1]?.length || 2) : 0;
@@ -1216,23 +1429,32 @@ async function loadSettings() {
   if (Object.keys(pendingSet).length) return; // a change is on its way; don't redraw under the finger
   let d;
   try { d = await api("settings"); }
-  catch (e) { if (!$("camSettings").querySelector(".setting")) $("camSettings").innerHTML = '<div class="empty">Did not load.</div>'; return; }
+  catch (e) {
+    if (!$("camSettings").querySelector(".setting")) $("camSettings").innerHTML = '<div class="empty">Did not load.</div>';
+    if (!$("tuning").querySelector(".setting")) $("tuning").innerHTML = '<section class="sec"><div class="empty">Did not load.</div></section>';
+    return;
+  }
   renderSettings(d);
 }
 const photosText = (n) => n + (n === 1 ? " photo" : " photos");
 function renderSettings(d) {
   const values = d.values || {}, schema = d.schema || [];
+  const isCam = (f) => CAMERA_KEYS.includes(f.key) || CAMERA_GROUPS.includes(f.group);
+  const rank = (f) => { const i = CAMERA_KEYS.indexOf(f.key); return i < 0 ? 99 : i; };
   const cam = $("camSettings"); cam.innerHTML = "";
-  for (const k of CAMERA_KEYS) { const f = schema.find((x) => x.key === k); if (f) cam.appendChild(settingRow(f, values[f.key], false, d.photos)); }
+  for (const f of schema.filter(isCam).sort((x, y) => rank(x) - rank(y))) cam.appendChild(settingRow(f, values[f.key], true, d.photos));
+  if (!cam.children.length) cam.innerHTML = '<div class="empty">No camera settings.</div>';
   const groups = {};
-  for (const f of schema) if (!CAMERA_KEYS.includes(f.key)) (groups[f.group || "Other"] = groups[f.group || "Other"] || []).push(f);
+  for (const f of schema) if (!isCam(f)) (groups[f.group || "Other"] = groups[f.group || "Other"] || []).push(f);
+  const order = (g) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? 99 : i; };
   const root = $("tuning"); root.innerHTML = "";
-  for (const [gname, fields] of Object.entries(groups)) {
-    const g = document.createElement("div"); g.className = "tgroup";
-    g.innerHTML = "<h3>" + esc(gname) + "</h3>";
-    for (const f of fields) g.appendChild(settingRow(f, values[f.key], true));
+  for (const gname of Object.keys(groups).sort((x, y) => order(x) - order(y))) {
+    const g = document.createElement("section"); g.className = "sec tgroup";
+    g.innerHTML = "<h2>" + esc(GROUP_LABEL[gname] || gname) + "</h2>";
+    for (const f of groups[gname]) g.appendChild(settingRow(f, values[f.key], true));
     root.appendChild(g);
   }
+  if (!root.children.length) root.innerHTML = '<section class="sec"><div class="empty">No game settings.</div></section>';
 }
 function settingRow(f, v, withHelp, photos) {
   const row = document.createElement("div"); row.className = "setting";

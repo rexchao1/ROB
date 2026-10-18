@@ -7,10 +7,17 @@ winner; a spoken line that runs long, sounds like an assistant or names a seat i
 dropped by fit() and the game says a scripted line instead. Anything slow, missing or
 broken returns None for the same reason, so every game still plays offline.
 
-Which provider, which model and which personality are read from brain.settings at each
-call, so the dashboard can change them mid-game. Keys come from the environment or
-.env.local (ANTHROPIC_API_KEY, GEMINI_API_KEY or GOOGLE_API_KEY) and are
-never logged.
+Which provider, which model, which effort and which personality are read from
+brain.settings at each call, so the dashboard can change them mid-game. MODELS lists the
+models the page offers (the first of each provider is its default); any name starting
+with "claude" or "gemini" also works. Keys come from the environment or .env.local
+(ANTHROPIC_API_KEY, GEMINI_API_KEY or GOOGLE_API_KEY) and are never logged.
+
+Each Claude model takes a different request (anthropic_body): Claude 4.7 and later
+answer HTTP 400 to a temperature, and thinking is turned off where the model allows it
+at the effort asked, else it is given room. A failed call logs the provider's own error
+message and status() keeps the last outcome for the page; test() makes one real call
+for the page's Test button.
 
 Situations (Host.chat(situation, heard, **facts)):
   welcome          lobby small talk; facts players, answering, suggestion
@@ -31,7 +38,9 @@ import json
 import os
 import re
 import sys
+import http.client
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -43,15 +52,28 @@ from brain import banter, personas, settings
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env.local"
 
-TIMEOUT = 4.0  # seconds: past this the game says a scripted line
+TIMEOUT = 4.0  # seconds: the least any call waits; past its own wait the game says a scripted line
 MAX_WORDS = 20
 MAX_SENTENCES = 2
 
-DEFAULT_MODELS = {
-    "anthropic": "claude-haiku-5-5",  # claude-sonnet-5-5 also works (--talk-model)
-    "gemini": "gemini-2.5-flash",
-    "ollama": "llama3.2:3b",
+EFFORTS = settings.CHOICES["effort"]  # low, medium, high, max: how hard the model thinks
+
+MODELS: dict[str, list[dict[str, str]]] = {  # what the page offers; the first is the default
+    "anthropic": [
+        {"key": "claude-haiku-5-5", "label": "Haiku 5.5", "blurb": "Fastest and cheapest."},
+        {"key": "claude-sonnet-5-5", "label": "Sonnet 5.5", "blurb": "Smarter, a bit slower."},
+        {"key": "claude-opus-5-5", "label": "Opus 5.5", "blurb": "Smartest and slowest; it always thinks first."},
+    ],
+    "gemini": [
+        {"key": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "blurb": "Fast and cheap."},
+        {"key": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash-Lite", "blurb": "Fastest and cheapest, a little plainer."},
+        {"key": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "blurb": "Smartest and slowest; it always thinks first."},
+    ],
+    "ollama": [
+        {"key": "llama3.2:3b", "label": "Llama 3.2 3B", "blurb": "Runs on this Mac, no key and no internet."},
+    ],
 }
+DEFAULT_MODELS = {provider: models[0]["key"] for provider, models in MODELS.items()}
 KEYS = {
     "anthropic": ("ANTHROPIC_API_KEY",),
     "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
@@ -97,6 +119,18 @@ _SEAT_NAMED = re.compile(r"\b(?:player|seat)s?\s+(?:\d+|" + "|".join(_NUMBER_WOR
 _EMOJI = re.compile("[\U0001f000-\U0001faff☀-➿️‍]")
 _STAGE = re.compile(r"\*[^*]*\*|\([^)]*\)|\[[^\]]*\]")
 _SENTENCE = re.compile(r"[^.!?]+[.!?]*")
+_CLAUDE = re.compile(r"claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?!\d)")  # family, major, minor (a date is not a minor)
+_KEYLIKE = re.compile(r"sk-ant-[\w-]+|AIza[\w-]{20,}")
+
+THINKING_TOKENS = {"low": 1024, "medium": 2048, "high": 4096, "max": 8192}  # room for thinking, when it runs
+GEMINI_BUDGETS = {"low": 0, "medium": 1024, "high": 4096, "max": 8192}  # thinkingBudget by effort
+GEMINI_THINKING = (  # (model prefix, its least thinking budget); flash-lite before flash
+    ("gemini-2.5-flash-lite", 0),
+    ("gemini-2.5-flash", 0),
+    ("gemini-2.5-pro", 128),  # Pro always thinks
+)
+_SLOWER = {"high": 1.5, "max": 2.0}  # more wait at the high efforts
+TEST_PROMPT = "Say a one-line hello to the table, under ten words."
 
 _env_lock = threading.Lock()
 _env_loaded = False
@@ -182,6 +216,99 @@ def structured(situation: str, text: Any) -> str | None:
     return None
 
 
+def anthropic_body(model: str, effort: str, system: str, prompt: str, max_tokens: int, temperature: float) -> dict[str, Any]:
+    """The Messages API body for one line, shaped for the model, since each answers HTTP
+    400 to a field it does not take. Claude 4.6 and older take a temperature and think
+    only when asked; the effort goes to the ones that take it (not Haiku 4.5 or Sonnet
+    4.5). Claude 4.7 and later take no temperature. On the 5 models thinking is turned
+    off where the model allows it at this effort (Haiku and the 5.0 models by "disabled",
+    Sonnet 5.5 by "between_tools", none at max); where it still runs (Opus 5.5, Fable,
+    any effort at max) max_tokens leaves it room. A name we do not know gets only the
+    fields every model takes."""
+    body: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    m = _CLAUDE.match(model)
+    if m is None:
+        return body
+    family, version = m.group(1), (int(m.group(2)), int(m.group(3) or 0))
+    if version <= (4, 6):
+        body["temperature"] = temperature
+        if version == (4, 6):
+            body["output_config"] = {"effort": effort}
+        elif family == "opus" and version == (4, 5):
+            body["output_config"] = {"effort": "high" if effort == "max" else effort}  # max came with 4.6
+        return body
+    body["output_config"] = {"effort": effort}
+    if version < (5, 0):  # Opus 4.7 and 4.8: no thinking unless asked for
+        return body
+    off: dict[str, str] | None = None
+    if effort != "max":
+        if family == "sonnet" and version >= (5, 5):
+            off = {"type": "between_tools"}
+        elif family == "haiku" or (family in ("sonnet", "opus") and version == (5, 0)):
+            off = {"type": "disabled"}
+    if off is not None:
+        body["thinking"] = off
+    else:
+        body["max_tokens"] = max_tokens + THINKING_TOKENS.get(effort, THINKING_TOKENS["max"])
+    return body
+
+
+def gemini_config(model: str, effort: str, max_tokens: int, temperature: float) -> dict[str, Any]:
+    """Gemini's generationConfig for one line: no thinking on Flash and Flash-Lite at low
+    effort, a bigger budget at each higher one (Pro takes 128 at least), with
+    maxOutputTokens raised by the budget. A model we do not know keeps its own thinking."""
+    config: dict[str, Any] = {"maxOutputTokens": max_tokens, "temperature": temperature}
+    least = next((n for prefix, n in GEMINI_THINKING if model.startswith(prefix)), None)
+    if least is None:
+        return config
+    budget = max(GEMINI_BUDGETS.get(effort, 0), least)
+    config["thinkingConfig"] = {"thinkingBudget": budget}
+    config["maxOutputTokens"] = max_tokens + budget
+    return config
+
+
+def timeout_for(provider: str, model: str, effort: str) -> float:
+    """Seconds a cloud call may take before the game says a scripted line: about 6 for
+    Haiku and quick Flash, 10 for Sonnet and thinking Flash, 20 for Opus, Fable and Pro,
+    more at high and max. 0 for Ollama (the Talk's own timeout)."""
+    if provider == "anthropic":
+        wait = 6.0 if "haiku" in model else 10.0 if "sonnet" in model else 20.0
+    elif provider == "gemini":
+        wait = 20.0 if "pro" in model else 6.0 if effort == "low" else 10.0
+    else:
+        return 0.0
+    return wait * _SLOWER.get(effort, 1.0)
+
+
+def _short(text: str, limit: int = 200) -> str:
+    """A message fit for the log and the page: one line, no key, about limit characters."""
+    text = _KEYLIKE.sub("[key]", re.sub(r"\s+", " ", text).strip())
+    for names in KEYS.values():
+        for name in names:
+            value = os.environ.get(name, "").strip()
+            if len(value) >= 8:
+                text = text.replace(value, "[key]")
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+
+def _error_message(e: urllib.error.HTTPError) -> str:
+    """The provider's own reason for an HTTP error ({"error": {"message": ...}}), or ""."""
+    try:
+        answer = json.loads(e.read() or b"null")
+    except (OSError, ValueError, http.client.HTTPException):
+        return ""
+    error = answer.get("error") if isinstance(answer, dict) else None
+    message = error.get("message") if isinstance(error, dict) else error
+    if isinstance(message, str) and "not scoped to a workspace" in message:
+        return "this key is not tied to a workspace: set the Anthropic workspace ID in Keys, or use a workspace API key (sk-ant-api03...)"
+    return _short(message) if isinstance(message, str) else ""
+
+
 class Talk:
     """The talk client Host.chat and Host.quip call. Every call reads brain.settings."""
 
@@ -195,6 +322,8 @@ class Talk:
         self.timeout = timeout
         self._log = log or (lambda msg: print(msg, file=sys.stderr, flush=True))
         self._warned: set[str] = set()
+        self._lock = threading.Lock()  # the host thread and the dashboard's both call
+        self._last: dict[str, Any] | None = None  # the last call's outcome, for status()
         load_env_local()
         provider, model = self.choice()
         if provider == "off":
@@ -202,7 +331,7 @@ class Talk:
         elif provider in KEYS and key_for(provider) is None:
             self._warn_no_key(provider)
         else:
-            self._log(f"talk: {provider} {model}")
+            self._log(f"talk: {provider} {model}, effort {self.effort()}")
 
     # --- what the host calls ------------------------------------------------------
 
@@ -219,6 +348,11 @@ class Talk:
         elif provider == "ollama" and model.startswith(("claude", "gemini")):
             model = ""
         return provider, model or DEFAULT_MODELS.get(provider, "")
+
+    def effort(self) -> str:
+        """The effort from brain.settings; anything else reads as low."""
+        effort = settings.current.effort
+        return effort if effort in EFFORTS else "low"
 
     def active(self) -> bool:
         """A model is set up to answer: not off, and the key is there (Ollama needs none)."""
@@ -239,6 +373,38 @@ class Talk:
         ):
             return None
         return line
+
+    def status(self) -> dict[str, Any]:
+        """What the page shows: the provider, model and effort now, whether the key is
+        there (None when none is needed), and the last call's outcome (ok, a short error,
+        when and how long), None until a call is made with these choices."""
+        provider, model = self.choice()
+        effort = self.effort()
+        with self._lock:
+            last = self._last if self._last and self._last["choice"] == (provider, model, effort) else None
+        return {
+            "provider": provider,
+            "model": model or None,
+            "effort": effort,
+            "key_set": key_for(provider) is not None if provider in KEYS else None,
+            "ok": last["ok"] if last else None,
+            "error": last["error"] if last else None,
+            "at": last["at"] if last else None,
+            "ms": last["ms"] if last else None,
+        }
+
+    def test(self) -> dict[str, Any]:
+        """One real call now, the way the game makes them (the page's Test button): a short
+        hello through the system prompt and fit(). ok is whether the model answered; error
+        says why not, or that its answer was not a line ROB would say."""
+        provider, model = self.choice()
+        text, error, ms = self._call(self._system(), TEST_PROMPT, max_tokens=40, temperature=0.9)
+        ok = error is None
+        line = fit(text) if ok else None
+        if ok and line is None:
+            error = "the model answered, but not with a line ROB would say" if text else "the model answered with no line"
+        self._log(f"talk: test {provider} {model}: {line or error}, {ms} ms")
+        return {"ok": ok, "provider": provider, "model": model or None, "line": line, "error": error, "ms": ms}
 
     def quip(self, slot: str, context: dict[str, Any]) -> str | None:
         """One short line at a slot the script marks (D14), held to banter's stricter
@@ -315,68 +481,100 @@ class Talk:
     # --- providers ----------------------------------------------------------------
 
     def _ask(self, system: str, prompt: str, *, max_tokens: int, temperature: float) -> str | None:
+        return self._call(system, prompt, max_tokens=max_tokens, temperature=temperature)[0]
+
+    def _call(self, system: str, prompt: str, *, max_tokens: int, temperature: float) -> tuple[str | None, str | None, int]:
+        """(text, error, ms) of one call to the chosen model. error is None when the model
+        answered (text may still be None: a refusal or no words); every failure is logged
+        and kept for status(). Off or a missing key makes no call."""
         provider, model = self.choice()
         if provider == "off":
-            return None
+            return None, "the talk is off", 0
+        if provider in KEYS and key_for(provider) is None:
+            self._warn_no_key(provider)
+            return None, f"no {' or '.join(KEYS[provider])} set", 0
+        effort = self.effort()
+        timeout = max(self.timeout, timeout_for(provider, model, effort))
+        text: str | None = None
+        error: str | None = None
+        start = time.monotonic()
         try:
             if provider == "anthropic":
-                return self._anthropic(model, system, prompt, max_tokens, temperature)
-            if provider == "gemini":
-                return self._gemini(model, system, prompt, max_tokens, temperature)
-            return self._ollama(model, system, prompt, max_tokens, temperature)
+                text = self._anthropic(model, effort, system, prompt, max_tokens, temperature, timeout)
+            elif provider == "gemini":
+                text = self._gemini(model, effort, system, prompt, max_tokens, temperature, timeout)
+            else:
+                text = self._ollama(model, system, prompt, max_tokens, temperature, timeout)
         except urllib.error.HTTPError as e:
-            self._log(f"talk: {provider} answered HTTP {e.code}")
-        except (urllib.error.URLError, OSError, ValueError, KeyError, IndexError, TypeError) as e:
-            self._log(f"talk: {provider} failed ({type(e).__name__})")
-        return None
+            message = _error_message(e)
+            error = f"HTTP {e.code}: {message}" if message else f"HTTP {e.code}"
+            self._log(f"talk: {provider} answered {error}")
+        except (TimeoutError, urllib.error.URLError) as e:
+            reason = getattr(e, "reason", e)
+            error = f"no answer in {timeout:.0f} s" if isinstance(reason, TimeoutError) else _short(f"could not reach it ({reason})")
+            self._log(f"talk: {provider} {error}")
+        except (OSError, http.client.HTTPException, ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
+            error = f"failed ({type(e).__name__})"
+            self._log(f"talk: {provider} {error}")
+        ms = int((time.monotonic() - start) * 1000)
+        with self._lock:
+            self._last = {"choice": (provider, model, effort), "ok": error is None, "error": error, "at": time.time(), "ms": ms}
+        return text, error, ms
 
-    def _post(self, url: str, body: dict[str, Any], headers: dict[str, str]) -> Any:
+    def _post(self, url: str, body: dict[str, Any], headers: dict[str, str], timeout: float | None = None) -> Any:
         req = urllib.request.Request(
             url, data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json", **headers}
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as res:
+        with urllib.request.urlopen(req, timeout=timeout or self.timeout) as res:
             return json.loads(res.read())
 
-    def _anthropic(self, model: str, system: str, prompt: str, max_tokens: int, temperature: float) -> str | None:
+    def _anthropic(
+        self, model: str, effort: str, system: str, prompt: str, max_tokens: int, temperature: float, timeout: float
+    ) -> str | None:
         key = key_for("anthropic")
         if key is None:
             self._warn_no_key("anthropic")
             return None
+        headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        if workspace:  # a key not tied to a workspace (sk-ant-usr...) names one on every call
+            headers["anthropic-workspace-id"] = workspace
         answer = self._post(
             "https://api.anthropic.com/v1/messages",
-            {
-                "model": model,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "system": system,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            {"x-api-key": key, "anthropic-version": "2023-06-01"},
+            anthropic_body(model, effort, system, prompt, max_tokens, temperature),
+            headers,
+            timeout,
         )
+        if answer.get("stop_reason") == "refusal":
+            self._log("talk: anthropic refused the line")
+            return None
         parts = [c.get("text", "") for c in answer.get("content", []) if isinstance(c, dict) and c.get("type") == "text"]
-        return "".join(parts).strip() or None
+        text = "".join(parts).strip()
+        if not text and answer.get("stop_reason") == "max_tokens":
+            self._log(f"talk: {model} ran out of tokens before the line")
+        return text or None
 
-    def _gemini(self, model: str, system: str, prompt: str, max_tokens: int, temperature: float) -> str | None:
+    def _gemini(
+        self, model: str, effort: str, system: str, prompt: str, max_tokens: int, temperature: float, timeout: float
+    ) -> str | None:
         key = key_for("gemini")
         if key is None:
             self._warn_no_key("gemini")
             return None
-        config: dict[str, Any] = {"maxOutputTokens": max_tokens, "temperature": temperature}
-        if model.startswith("gemini-2.5"):
-            config["thinkingConfig"] = {"thinkingBudget": 0}  # no thinking: a quick line, not an essay
         answer = self._post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
             {
                 "system_instruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": config,
+                "generationConfig": gemini_config(model, effort, max_tokens, temperature),
             },
             {"x-goog-api-key": key},
+            timeout,
         )
         parts = answer["candidates"][0]["content"].get("parts", [])
-        return "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip() or None
+        return "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought")).strip() or None
 
-    def _ollama(self, model: str, system: str, prompt: str, max_tokens: int, temperature: float) -> str | None:
+    def _ollama(self, model: str, system: str, prompt: str, max_tokens: int, temperature: float, timeout: float) -> str | None:
         answer = self._post(
             self.ollama_url + "/api/generate",
             {
@@ -388,6 +586,7 @@ class Talk:
                 "options": {"num_predict": max_tokens, "temperature": temperature},
             },
             {},
+            timeout,
         )
         text = answer.get("response") if isinstance(answer, dict) else None
         return text.strip() if isinstance(text, str) and text.strip() else None

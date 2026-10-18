@@ -115,3 +115,54 @@ def test_resume_is_heard_and_is_not_a_pause(text):
 @pytest.mark.parametrize("text", ["player two", "applause", "let's vote", ""])
 def test_other_words_are_neither(text):
     assert not ears.wants_pause(text) and not ears.wants_resume(text)
+
+
+@pytest.mark.parametrize("text", ["Shut up.", "be quiet", "stop", "Stop, stop.", "okay stop", "wait", "rob, stop", "hush"])
+def test_a_bare_stop_or_shut_up_is_a_pause(text):
+    assert ears.wants_pause(text)
+
+
+@pytest.mark.parametrize("text", ["stop the game", "end the game", "reset", "stop it, player two", "hold on", "wait, player three did it"])
+def test_stopping_the_game_and_sentences_are_not_a_pause(text):
+    assert not ears.wants_pause(text)
+
+
+@pytest.mark.parametrize("text", ["I'm leaning in.", "i'm looking", "show me", "show my card", "I can't see it.", "let me see", "okay I'm here"])
+def test_a_player_at_the_screen_asks_for_the_card(text):
+    assert ears.wants_card(text) and not ears.saw_card(text)
+
+
+@pytest.mark.parametrize("text", ["Got it.", "i saw it", "I've seen it", "done", "next", "okay next", "next player", "move on", "skip"])
+def test_a_player_has_seen_the_card(text):
+    assert ears.saw_card(text)
+
+
+@pytest.mark.parametrize("text", ["the next morning", "I haven't seen it", "i think the next one is going to be player two for sure", "show me what you've got this time around"])
+def test_table_talk_is_not_an_answer_at_the_screen(text):
+    assert not ears.saw_card(text) and not ears.wants_card(text)
+
+
+@pytest.mark.parametrize(
+    "text, place",
+    [
+        ("change your speaker to the Mac.", "mac"),
+        ("change your speaker to the back", "mac"),  # Whisper's "Mac"
+        ("speaker mac", "mac"),
+        ("play the sound through the laptop", "mac"),
+        ("switch from the robot speaker to the macbook", "mac"),
+        ("speaker robot", "robot"),
+        ("go back to your own speaker", "robot"),
+        ("use your speaker", "robot"),
+        ("take your speakers", None),
+        ("is it a computer speaker", None),
+        ("sound like a robot", None),
+        ("let's play mafia", None),
+    ],
+)
+def test_speaker_said(text, place):
+    assert ears.speaker_said(text) == place
+
+
+def test_say_that_again():
+    assert ears.wants_repeat("Can you say that again?") and ears.wants_repeat("what did you say")
+    assert not ears.wants_repeat("player two")

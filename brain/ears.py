@@ -184,18 +184,99 @@ def wants_to_reset(text: str) -> bool:
     return bool(_RESET.search(" ".join(_tokens(text))))
 
 
-_PAUSE = re.compile(r"\b(?:pause|pause the game|hold the game)\b")
+_PAUSE = re.compile(r"\b(?:pause|pause the game|hold the game|shut up|be quiet|quiet please|stop talking|hush)\b")
 _RESUME = re.compile(r"\b(?:resume|unpause|un pause|continue|keep going|play on|we're back|were back|i'm back|im back|back to the game|let's go|lets go|go on)\b")
+_HALT = {"stop", "wait"}  # said on their own, with at most a word or two of _HALT_FILL, a pause
+_HALT_FILL = {"stop", "wait", "please", "okay", "ok", "rob", "hey", "robot"}
 
 
 def wants_pause(text: str) -> bool:
-    """"pause": the host holds the game until someone says to carry on."""
-    return bool(_PAUSE.search(" ".join(_tokens(text)))) and not wants_resume(text)
+    """"pause", "shut up", "be quiet", or a bare "stop" or "wait" ("okay stop", "rob,
+    wait"): the host holds the game until someone says to carry on. Never "stop the
+    game" (that ends it) and never a resume. "Hold on" is the welcome's "later"."""
+    if wants_to_stop(text) or wants_resume(text):
+        return False
+    tokens = _tokens(text)
+    if 0 < len(tokens) <= 4 and set(tokens) <= _HALT_FILL and _HALT & set(tokens):
+        return True
+    return bool(_PAUSE.search(" ".join(tokens)))
 
 
 def wants_resume(text: str) -> bool:
     """"resume", "unpause", "we're back", "keep going": the end of a pause."""
     return bool(_RESUME.search(" ".join(_tokens(text))))
+
+
+# --- the host's own commands: the deal, the speaker, a repeat --------------------------
+
+_SHORT = 6  # the deal's answers count only in an utterance this short, so table talk does not trigger them
+_SHOW = ("i'm leaning in", "im leaning in", "leaning in", "i'm looking", "im looking", "i am looking",
+         "i'm here", "im here", "i am here", "show me", "show it", "show the card", "show my card",
+         "i can't see it", "i cant see it", "can't see it", "cant see it", "let me see")
+_SEEN = ("got it", "saw it", "seen it", "i've seen it", "ive seen it", "move on", "next one", "next player",
+         "next turn", "next person", "i'm done", "im done", "all done")
+_SEEN_ALONE = {"done", "next", "skip"}  # these count only with nothing but _SEEN_FILL around them
+_SEEN_FILL = {"okay", "ok", "alright", "please", "rob", "yeah", "yes", "cool", "thanks", "i'm", "im", "we're", "were"}
+_NOT = ("not", "haven't", "havent", "didn't", "didnt", "can't", "cant", "don't", "dont", "never")
+
+
+def wants_card(text: str) -> bool:
+    """A player at the private screen says they are there: "I'm leaning in", "I'm
+    looking", "show me", "I can't see it". Short utterances only."""
+    return len(_tokens(text)) <= _SHORT and _has(text, _SHOW)
+
+
+def saw_card(text: str) -> bool:
+    """A player says they have seen their card: "got it", "I saw it", "done", "next",
+    "move on". Short utterances only, and never with a "not" ("I haven't seen it")."""
+    tokens = _tokens(text)
+    if not 0 < len(tokens) <= _SHORT or _has(text, _NOT):
+        return False
+    if _has(text, _SEEN):
+        return True
+    return bool(_SEEN_ALONE & set(tokens)) and set(tokens) <= _SEEN_ALONE | _SEEN_FILL
+
+
+_SPEAKER_WORDS = {"speaker", "speakers", "sound", "audio"}
+_MAC = {"mac", "mack", "macbook", "laptop", "computer"}
+_ROBOT = {"robot", "yourself", "own"}  # "your own speaker"
+_SWITCH = {"use", "switch", "change", "move", "put", "set", "play", "talk", "speak", "through", "back", "go"}
+_SPEAKER_FILL = {"the", "to", "on", "your", "voice", "please", "okay", "ok", "rob"}  # "speaker mac", "sound on the mac"
+
+
+def speaker_said(text: str) -> str | None:
+    """Where the voice should play, said out loud: "change your speaker to the Mac",
+    "play the sound through the laptop", "speaker mac" -> "mac"; "use your own
+    speaker", "speaker robot" -> "robot"; None for anything else. It needs a speaker
+    word ("speaker", "sound", "audio", or "voice" with "through", "play" or "on"), a
+    place, and a word that asks for the change ("use", "switch", "through"...) unless
+    it is only the speaker and the place ("speaker mac", "sound on the Mac"), so "is it
+    a computer speaker?" or "sound like a robot" in a game is not a command. Whisper hears "the Mac" as "the back". With both places named,
+    the last one counts ("from the robot to the Mac")."""
+    tokens = _tokens(text)
+    words = set(tokens)
+    if not (words & _SPEAKER_WORDS or ("voice" in words and words & {"through", "play", "on"})):
+        return None
+    if not words & _SWITCH and (len(tokens) > 4 or not words <= _SPEAKER_WORDS | _MAC | _ROBOT | _SPEAKER_FILL):
+        return None
+    place = None
+    for i, t in enumerate(tokens):
+        if t in _MAC or (t == "back" and i > 0 and tokens[i - 1] == "the"):
+            place = "mac"
+        elif t in _ROBOT:
+            place = "robot"
+    if place is None and words & {"your", "yours"} and words & _SWITCH:
+        place = "robot"  # "use your speaker", "switch back to yours"
+    return place
+
+
+_REPEAT = ("say that again", "say it again", "repeat that", "repeat it", "can you repeat", "could you repeat",
+           "please repeat", "what did you say", "come again")
+
+
+def wants_repeat(text: str) -> bool:
+    """"Say that again", "can you repeat", "what did you say": the host's last line again."""
+    return _has(text, _REPEAT)
 
 
 # --- the welcome's conversation (D40 to D43) ---------------------------------------------

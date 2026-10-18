@@ -10,7 +10,12 @@ it waits real time.
 
 The private screen (D7, D8) is the one tight loop: a photo every POLL seconds while a
 card is owed, the card up only while exactly one close face is in view, blanked at
-the first photo with two.
+the first photo with two. A player can answer it without the camera too: a head tap,
+or "show me" (typed, or said in a short listen while nobody leans in) puts the card up
+on trust, "got it" moves on, and "pause" or "stop the game" work there as anywhere.
+
+Every listen also takes the host's own commands, then listens again: "pause" (or
+"shut up", a bare "stop"), "change your speaker to the Mac" and "say that again".
 
 Only "idle" and "off" are ever set as the avatar outside show_private: once a game's
 set is loaded, every other face name is one of its cards.
@@ -36,17 +41,24 @@ import cv2
 import numpy as np
 
 from brain import cards as cardset
-from brain import ears, games, lines, vision
+from brain import ears, games, lines, settings, vision
 from brain.body import Body, BodyError
 from brain.clock import Clock, ClockCancelled, VirtualClock
+from brain.games.common import GameStopped
 from brain.lobby import Lobby
 from brain.table import MOODS, Card
 
 POLL = 0.25  # seconds between photos while a card is owed: well inside D8's one second
 SEEN = 1.5  # a card shown this long has been read
 LEFT = 1.0  # no close face this long after it has been read: the player leaned back
-REPROMPT = 10.0  # say "Player N, lean in." again after this long with nobody close
+REPROMPT = 10.0  # ask for the lean-in again (and teach "show me") after this long with nobody close
 GIVE_UP = 30.0  # stop waiting for a lean-in after this long
+HEAR_AFTER = 4.0  # nobody close this long after the lean-in line: a short listen for "show me"
+HEAR_EVERY = 6.0  # and again this often; photos stop while the host listens (one gateway command at a time)
+HEAR_SECONDS = 3.0  # each of those listens
+TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a tap is "show me"
+TRUST = 4.0  # seconds the card stays up on a tap or "show me", the camera or not
+SPEAKERS = ("robot", "mac")
 LISTEN_WINDOW = 4.0  # the idle loop's listening window, waiting for a game's name
 MAX_LISTEN = 30.0  # the gateway's longest listen
 TURN_RATE = 240.0  # degrees per second at speed "high"
@@ -145,6 +157,7 @@ class Host:
         self.robot_ok: bool | None = None  # the last listen reached the robot (None: not tried yet)
         self.paused = False  # someone said "pause"; the game waits for "resume" or a head tap
         self._paused_for = 0.0  # seconds spent paused, left out of now() so a game's timers stop
+        self.last_line: str | None = None  # the game's last line, for "say that again"
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._started = threading.Event()
@@ -181,6 +194,12 @@ class Host:
         self.clock.sleep(seconds)
 
     def say(self, line: str) -> None:
+        self.last_line = line
+        self._speak(line)
+
+    def _speak(self, line: str) -> None:
+        """Say a line; the host's own lines (the pause, the speaker) come here directly,
+        so "say that again" still repeats the game's."""
         self._check_stop()
         self._log(f"say: {line}")
         self._note("said", line)
@@ -221,15 +240,45 @@ class Host:
             self.feed.append({"t": time.time(), "kind": kind, "text": text})
 
     def listen(self, seconds: float) -> str:
-        """What the table says in the next `seconds`. "pause" holds everything until
-        "resume" or a tap on the head, then this listen starts over."""
+        """What the table says in the next `seconds`. The host's own commands are taken
+        here and this listen starts over: "pause" holds everything until "resume" or a
+        tap on the head, a speaker change moves the voice, "say that again" repeats the
+        game's last line."""
         while True:
             text = self._hear(seconds)
-            if not ears.wants_pause(text):
+            if ears.wants_pause(text):
+                text = self._pause()
+                if text:  # "stop the game" or "reset" said while paused: the game hears it
+                    return text
+            elif not self._command(text):
                 return text
-            text = self._pause()
-            if text:  # "stop the game" or "reset" said while paused: the game hears it
-                return text
+
+    def _command(self, text: str) -> bool:
+        """A speaker change or "say that again", done; False for anything else."""
+        if self._speaker_change(text):
+            return True
+        if ears.wants_repeat(text) and self.last_line:
+            self._speak(self.last_line)
+            return True
+        return False
+
+    def set_speaker(self, speaker: str) -> None:
+        """Where the voice plays from the next line on: "robot", or "mac" (this Mac's
+        audio output, the robot moving its mouth); kept with ROB's saved settings."""
+        if speaker not in SPEAKERS:
+            raise ValueError(f"speaker must be one of {SPEAKERS}")
+        self.body.speaker = speaker
+        settings.update(speaker=speaker)
+        self._log(f"speaker: {speaker}")
+
+    def _speaker_change(self, text: str) -> bool:
+        """"Change your speaker to the Mac": the speaker changed and a line through it."""
+        speaker = ears.speaker_said(text)
+        if speaker is None:
+            return False
+        self.set_speaker(speaker)
+        self._speak(lines.SPEAKER_MAC if speaker == "mac" else lines.SPEAKER_ROBOT)
+        return True
 
     def _pause(self) -> str:
         """Hold until "resume", a head tap or the page's Resume; what was said instead
@@ -240,7 +289,7 @@ class Host:
         if self.dash is not None:
             self.dash.record("game", "paused")
         try:
-            self.say(PAUSED)
+            self._speak(PAUSED)
             self.body.leds([PAUSED_LEDS])
             self._listening = False
             while True:
@@ -258,22 +307,22 @@ class Host:
                 self.dash.record("game", "resumed")
         self.body.leds([self.ring])
         self._listening = False
-        self.say(RESUMED)
+        self._speak(RESUMED)
         return ""
 
-    def _hear(self, seconds: float) -> str:
+    def _hear(self, seconds: float, typed_too: bool = True) -> str:
+        """The robot's microphone for `seconds`, or a line typed on the dashboard. With
+        typed_too False (the deal's short listens, which read typed lines on their own)
+        only the microphone."""
         self._check_stop()
         self._cue(True)
-        typed = self._take_injected()
-        if not typed and self.dash is not None:
+        typed = self._take_injected() if typed_too else ""
+        if typed_too and not typed and self.dash is not None:
             typed = (self.dash.take_typed() or "").lower()  # the operator typed what the table said
             if typed and self.virtual:
                 self.clock.sleep(max(0.1, seconds))
         if typed:
-            self._log(f"heard (dashboard): {typed}")
-            self._note("heard", typed)
-            if self.dash is not None:
-                self.dash.record("typed", typed)
+            self._heard_typed(typed)
             return typed
         heard: list[str] = []
         left = max(0.1, seconds)
@@ -288,7 +337,8 @@ class Host:
                 raise
             self.robot_ok = True
             left -= chunk
-        heard.append(self._take_injected())  # typed on the dashboard during the window
+        if typed_too:
+            heard.append(self._take_injected())  # typed on the dashboard during the window
         text = " ".join(h.strip() for h in heard if h and h.strip()).lower()
         if text:
             self._log(f"heard: {text}")
@@ -436,57 +486,123 @@ class Host:
             self._log(f"cards failed to load: {e}")
 
     def show_private(self, seat: int, card: Card) -> bool:
+        """The card for `seat` on the private screen; True once it has been read (D7,
+        D8). The camera decides as the rules have it, and the player can answer without
+        it: a head tap or "show me" puts the card up on trust for TRUST seconds (still
+        blanked while two close faces show), "got it" moves on. Each pass reads what was
+        typed; with nobody close it reads the head's touch, and now and then listens for
+        HEAR_SECONDS. A stop ends the game here (GameStopped), a pause holds it and
+        asks for the lean-in again. A typed line not meant for the deal is heard at the
+        next listen."""
         manifest = self._wait_for_cards()
         slot = cardset.slot_of(manifest, card)
         self.look(seat)
         self.say(lines.lean_in(seat))
-        start = self.clock.now()
-        prompted = start
+        start = prompted = last_close = touch_checked = self.clock.now()
+        next_hear = start + HEAR_AFTER
         showing = False
         shown_for = 0.0
         shown_at = 0.0
-        last_close = start
+        trusted: float | None = None  # the card is up on trust until then
         crowded = False
         blinking_off = False
+        held: list[str] = []  # typed lines that were not for the deal
+
+        def show(now: float) -> None:
+            nonlocal showing, shown_at, blinking_off
+            if not showing:
+                if not blinking_off:
+                    self.body.blink(False)
+                    blinking_off = True
+                self._avatar(slot, "card")
+                showing, shown_at = True, now
+
+        def hide(now: float) -> None:
+            nonlocal showing, shown_for
+            if showing:
+                self._avatar("off", "off")
+                showing, shown_for = False, shown_for + (now - shown_at)
+
         try:
             while True:
                 self._check_stop()
                 now = self.clock.now()
                 n = len(vision.close(self._look("deal")))
-                if n == 1:
+                if trusted is not None and now >= trusted:
+                    hide(now)
+                    return True
+                if n >= 2:
                     last_close = now
-                    crowded = False
-                    if not showing:
-                        if not blinking_off:
-                            self.body.blink(False)
-                            blinking_off = True
-                        self._avatar(slot, "card")
-                        showing, shown_at = True, now
-                elif n >= 2:
-                    last_close = now
-                    if showing:
-                        self._avatar("off", "off")
-                        showing, shown_for = False, shown_for + (now - shown_at)
+                    hide(now)
                     if not crowded:
                         crowded = True
                         self.say(lines.ONE_AT_A_TIME)
+                elif n == 1 or trusted is not None:
+                    if n == 1:
+                        last_close = now
+                    crowded = False
+                    show(now)
                 else:
                     crowded = False
-                    if showing:
-                        self._avatar("off", "off")
-                        showing, shown_for = False, shown_for + (now - shown_at)
+                    hide(now)
                     if shown_for >= SEEN and now - last_close >= LEFT:
                         return True
                     if now - start >= GIVE_UP:
                         return shown_for >= SEEN
                     if shown_for == 0 and now - prompted >= REPROMPT:
                         prompted = now
-                        self.say(lines.lean_in(seat))
-                if now - start >= GIVE_UP + SEEN:  # still reading, or still crowded: enough
-                    if showing:
-                        self._avatar("off", "off")
-                        showing, shown_for = False, shown_for + (now - shown_at)
+                        self.say(lines.lean_in_again(seat))
+                if trusted is None and now - start >= GIVE_UP + SEEN:  # still reading, or still crowded: enough
+                    hide(now)
                     return shown_for >= SEEN
+                if n:
+                    next_hear = max(next_hear, now + HEAR_AFTER)
+
+                answers = [(text, True) for text in self._typed()]
+                if not showing and trusted is None:
+                    if now - touch_checked >= TOUCH_EVERY:
+                        if self.body.touched(now - touch_checked + 0.5):
+                            self._log("head tapped: the card goes up")
+                            answers.append(("show me", False))
+                        touch_checked = now
+                    if n == 0 and now >= next_hear and now + HEAR_SECONDS <= start + GIVE_UP:
+                        next_hear = now + HEAR_EVERY
+                        try:
+                            answers.append((self._hear(HEAR_SECONDS, typed_too=False), False))
+                        except BodyError as e:  # the robot dropped off Wi-Fi: the camera carries on
+                            self._log(f"listen failed during the deal ({e})")
+                        self._cue(False)
+                for text, typed in answers:
+                    what = self._deal_answer(text)
+                    if what is None:
+                        if typed:
+                            held.append(text)
+                        continue
+                    if typed:
+                        self._heard_typed(text)
+                    now = self.clock.now()
+                    if what == "stop":
+                        raise GameStopped(reset=ears.wants_to_reset(text))
+                    if what == "seen":
+                        hide(now)
+                        return True
+                    if what == "show" and trusted is None:
+                        trusted = now + TRUST
+                        if not crowded:
+                            show(now)
+                    elif what == "speaker":
+                        self._speaker_change(text)
+                    elif what == "repeat":
+                        self.say(lines.lean_in(seat))
+                    elif what == "pause":
+                        hide(now)
+                        trusted = None
+                        stopped = self._pause()
+                        if stopped:  # "stop the game" or "reset" said while paused
+                            raise GameStopped(reset=ears.wants_to_reset(stopped))
+                        self.say(lines.lean_in(seat))
+                        start = prompted = last_close = touch_checked = self.clock.now()
+                        next_hear = start + HEAR_AFTER
                 self.clock.sleep(POLL)
         finally:
             if showing:
@@ -494,6 +610,43 @@ class Host:
             self._avatar("idle", "idle")
             if blinking_off:
                 self.body.blink(True)
+            for text in held:  # heard at the next listen, so the game still hears it
+                self.inject(text)
+
+    def _deal_answer(self, text: str) -> str | None:
+        """What a line heard or typed at the private screen asks of the deal: "stop",
+        "pause", "speaker", "repeat", "seen" or "show"; None when it is not for the deal."""
+        if not text:
+            return None
+        if ears.wants_to_stop(text):
+            return "stop"
+        if ears.wants_pause(text):
+            return "pause"
+        if ears.speaker_said(text) is not None:
+            return "speaker"
+        if ears.wants_repeat(text):
+            return "repeat"
+        if ears.saw_card(text):
+            return "seen"
+        if ears.wants_card(text):
+            return "show"
+        return None
+
+    def _typed(self) -> list[str]:
+        """Every line typed on the dashboard and not heard yet, each on its own."""
+        with self._lock:
+            out = list(self._injected)
+            self._injected.clear()
+        if self.dash is not None:
+            while (typed := self.dash.take_typed()) is not None:
+                out.append(typed.strip().lower())
+        return [t for t in out if t]
+
+    def _heard_typed(self, text: str) -> None:
+        self._log(f"heard (dashboard): {text}")
+        self._note("heard", text)
+        if self.dash is not None:
+            self.dash.record("typed", text)
 
     def _avatar(self, face: str, shown: str) -> None:
         """Put a face on the screen; the dashboard mirrors what it shows (idle, card, off)."""

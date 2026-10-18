@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import os
 import random
 import socket
@@ -64,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--token", default=os.environ.get("STACKCHAN_TOKEN") or None, help="bearer token (default $STACKCHAN_TOKEN)")
     p.add_argument("--flip-yaw", action="store_true", help="the head turns the other way: negate every yaw")
     p.add_argument("--pitch", type=int, default=25, help="the head's pitch while it works, 5..85, lower looks down (at 45 the camera sees the ceiling; 25 framed a seated player)")
-    p.add_argument("--speaker", choices=("robot", "mac"), default="robot", help="where the host's voice plays: the robot's speaker, or this Mac's audio output (any speaker connected to it) while the robot moves its mouth")
+    p.add_argument("--speaker", choices=("robot", "mac"), default=None, help="where the host's voice plays: the robot's speaker, or this Mac's audio output (any speaker connected to it) while the robot moves its mouth (default: the last one picked, else robot)")
     p.add_argument("--hfov", type=float, default=vision.HFOV_DEG, help="the camera's horizontal field of view, degrees")
     p.add_argument("--keep-photos", type=Path, default=None, metavar="DIR", help="save every photo the host takes in DIR, with the faces it found drawn on (named by time, count|deal|night, head angle)")
     p.add_argument("--day-seconds", type=float, default=None, help="Mafia's discussion time (default 120; D18)")
@@ -75,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--eleven-model", default=ELEVEN_MODEL, help=f"the ElevenLabs model (default {ELEVEN_MODEL})")
     p.add_argument("--sets-dir", type=Path, default=None, help="where card sets are written (default .cache/sets)")
     p.add_argument("--banter", default="http://127.0.0.1:11434", help="Ollama's URL for quips, or none")
-    p.add_argument("--talk", choices=("anthropic", "gemini", "ollama", "off"), default="anthropic", help="who writes the host's small talk and quips (brain/talk.py): anthropic needs ANTHROPIC_API_KEY, gemini needs GEMINI_API_KEY (environment or .env.local); without a key, scripted lines")
+    p.add_argument("--talk", choices=("anthropic", "gemini", "ollama", "off"), default=None, help="who writes the host's small talk and quips (brain/talk.py): anthropic needs ANTHROPIC_API_KEY, gemini needs GEMINI_API_KEY (environment or .env.local); without a key, scripted lines (default: the last one picked, else anthropic)")
     p.add_argument("--talk-model", default=None, metavar="MODEL", help=f"the talk model (defaults: {', '.join(f'{k} {v}' for k, v in DEFAULT_MODELS.items())}; claude-sonnet-5-5 also works)")
     p.add_argument("--welcome", choices=("on", "off"), default="on", help="greet and count the table when the host starts (D38; test mode: only when a reset asks)")
     p.add_argument("--seed", type=int, default=None, help="the rng's seed (test mode: 0)")
@@ -91,13 +92,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.test:
         return _test(args, options)
 
+    rob_file = ROOT / "gamemaster.rob.json"
+    settings.load(rob_file)  # ROB's picks as last made (personality, voice, talk, speaker); a flag given overrides one
+    saved = _saved(rob_file)
+    if args.speaker:
+        settings.update(speaker=args.speaker)
     pcm = args.pcm or _pcm_beside(args.gateway)
     gateway = Gateway(args.gateway, token=args.token)
-    body = Body(gateway, pcm, token=args.token, flip_yaw=args.flip_yaw, pitch=args.pitch, speaker=args.speaker)
+    body = Body(gateway, pcm, token=args.token, flip_yaw=args.flip_yaw, pitch=args.pitch, speaker=settings.current.speaker or "robot")
 
     try:
         eleven_key = env("ELEVENLABS_API_KEY")
-        settings.update(voice=args.voice or ("eleven" if eleven_key else "piper"))
+        if args.voice or "voice" not in saved:
+            settings.update(voice=args.voice or ("eleven" if eleven_key else "piper"))
         voice = make_voice(
             args.voice_dir if args.voice_dir.is_dir() else None,
             args.piper_model,
@@ -113,9 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     banter = NoBanter() if args.banter == "none" else Banter(args.banter)
     if isinstance(banter, Banter):
         threading.Thread(target=banter.warm, name="banter-warm", daemon=True).start()
-    settings.update(talk=args.talk, talk_model=args.talk_model)
-    if not args.test:
-        settings.load(ROOT / "gamemaster.rob.json")  # ROB's personality and voice, as last picked
+    if args.talk or args.talk_model:  # a model given alone keeps the provider; a provider alone takes its default model
+        settings.update(talk=args.talk or settings.current.talk, talk_model=args.talk_model)
     talk = Talk(args.banter if args.banter != "none" else "http://127.0.0.1:11434")  # reads brain.settings at each call
     seed = args.seed if args.seed is not None else random.randrange(1 << 30)
     host = Host(
@@ -310,6 +316,15 @@ def _test(args: argparse.Namespace, options: games.Options) -> int:
     finally:
         brain.server.server_close()
     return 0
+
+
+def _saved(path: Path) -> set[str]:
+    """The settings ROB's file holds, so a default does not replace a pick."""
+    try:
+        saved = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return set()
+    return set(saved) if isinstance(saved, dict) else set()
 
 
 def _pcm_beside(mcp_url: str) -> str:

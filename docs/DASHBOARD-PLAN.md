@@ -104,3 +104,19 @@ Why it chimes: the firmware plays a sound each time the gateway opens its microp
 | P5 | Merge to `gamemaster` and into the ROB repo; restart the game | done (tests stopped at Rex's word after P3: the Python tests passed then; the ROB name, the five voices and Customize ROB ran untested) |
 
 **ROB (Rex, 05:20).** The robot is named ROB: the greetings and the talk's house rules say so. "Customize ROB" on the lobby picks one of five personalities (`brain/personas.py` PERSONAS) and five ElevenLabs voices (`personas.VOICES`; `settings.eleven_voice`, which turns ElevenLabs on when the key is set); both are kept in `gamemaster.rob.json` (gitignored) across starts.
+
+## Voice control, the talk fixed, tabbed settings (Rex, 05:30)
+
+Rex, after a test game: ROB waits for exactly one response (the lean-in above all); "pause", "stop" and "shut up" went unheard while it waited for a lean-in; the settings are confusing; he does not think the Anthropic key is used; he wants to say "change your speaker to the Mac" and have a speaker setting; and more choices: provider, model, effort, voice, personality. Fast, parallel, few tests.
+
+What the log showed: the key loads, but every Anthropic call answered HTTP 400 (the talk sends `temperature`, which Claude Haiku 5.5 refuses at a non-default value), so every line was scripted. `show_private` only takes photos; it never listens, so nothing said during a lean-in is heard.
+
+**Done when.** A lean-in can be answered by voice ("I'm looking" or "show me" shows the card, "got it" or "next" moves on), a head tap or the page; "pause", "shut up", a bare "stop", "stop the game" and "reset" work during a lean-in; "change your speaker to the Mac" switches the speaker live, and so does the page; the talk reaches Claude (Haiku, Sonnet or Opus 5.5, with an effort) and the page can test it and shows the last error; the settings are tabs. Targeted tests pass, then `npm run test:fast`.
+
+| Step | What | State |
+|---|---|---|
+| V1 | Talk: the Anthropic request shape per model (no temperature on Claude 4.7 and later, effort, thinking off where the model allows it), the error's message in the log and on the page, a test call, a model and effort catalog; `effort` and `speaker` in `brain/settings.py`, saved with the rest of ROB's picks | done (stubbed HTTP only: no real call to Anthropic or Gemini yet) |
+| V2 | Host: commands at every listen (pause by "shut up" or a bare "stop", the speaker, "say that again"); `show_private` listens for "show me", "got it", pause and stop, takes typed lines and a head tap; a stop during the deal ends the game, over the remote Table too | done (not tried on the robot) |
+| V3 | `/dashboard`: tabs, the provider, model, effort, speaker and a test button; `POST /dashboard/talk-test` | done |
+| V4 | `/dash`: the settings drawer in tabs (ROB, AI, Keys, Game, Camera, Log), Customize ROB opens the ROB tab, the deal's buttons ("Show the card", "They've seen it") | done (the Working and No key cards and a real Test answer not seen yet: test mode has no talk) |
+| V5 | Review, `npm run test:fast`, copy into the hackathon checkout and restart the brain | review and `npm run test:fast` done (467 Python tests, 33 feature tests); the copy and the restart to do |

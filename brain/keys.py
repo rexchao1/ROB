@@ -38,6 +38,10 @@ KEYS: tuple[Key, ...] = (
     Key("STACKCHAN_TOKEN", "Robot gateway token", "now", "The bearer token the stackchan-mcp gateway expects, if it has one."),
     Key("GM_TABLE_TOKEN", "Referee table token", "next start", "The token the QNX referee must send to play through this brain."),
     Key("ANTHROPIC_API_KEY", "Anthropic API key", "now", "The host's talk with --talk anthropic: the welcome chat, quips, 20 Questions, Hot Seat."),
+    Key(
+        "ANTHROPIC_WORKSPACE_ID", "Anthropic workspace ID", "now",
+        "Only for a key that is not tied to a workspace (one starting sk-ant-usr): the workspace's ID (wrkspc_...) from the Anthropic Console.",
+    ),
     Key("GEMINI_API_KEY", "Gemini API key", "now", "The host's talk with --talk gemini."),
     Key("ELEVENLABS_API_KEY", "ElevenLabs API key", "next start", "The live ElevenLabs voice, and recording the fixed lines (scripts/make-voice.py)."),
     Key("ELEVENLABS_VOICE_ID", "ElevenLabs voice", "next start", "The voice id, when the personality names none."),

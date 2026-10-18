@@ -104,7 +104,14 @@ def lean_in(seat: int) -> str:
     return f"{player(seat)}, lean in."
 
 
+def lean_in_again(seat: int) -> str:
+    """The lean-in asked again, with the way round the camera: "show me" puts the card up."""
+    return f"{player(seat)}, lean in close, or say show me."
+
+
 ONE_AT_A_TIME = "One at a time."
+SPEAKER_MAC = "Okay, I'll talk through the Mac."  # "change your speaker to the Mac"
+SPEAKER_ROBOT = "Okay, back to my own speaker."
 
 
 def come_back(seat: int) -> str:
@@ -587,7 +594,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         PICK_LIVING, NO_VOTES, DEAL_ROLES, HEADS_DOWN, MAFIA_WHISPER, MAFIA_AGAIN, MAFIA_DOWN,
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
-        WAVELENGTH_TALK, WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60),
+        WAVELENGTH_TALK, WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
     ]
     out += [mafia_intro(1), mafia_intro(2)]
     out += [too_few(g, m) for g, m in MINIMUM.items()]
@@ -595,7 +602,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         out += variations
     for n in range(1, max_seats + 1):
         out += [count_line(n), only_see(n), see_more(n)]
-        out += [lean_in(n), come_back(n), who(n), who_again(n), voted_out(n), warn(n), sit_out(n), killed(n)]
+        out += [lean_in(n), lean_in_again(n), come_back(n), who(n), who_again(n), voted_out(n), warn(n), sit_out(n), killed(n)]
         out += [was(n, MAFIA), was(n, DOCTOR), was(n, VILLAGER), village_wins(n), mafia_were([n])]
         out += [clue(n), was_imposter(n), imposter_survives(n), psychic_clue(n)]
     out += [target_was(t) for t in range(1, 11)]
