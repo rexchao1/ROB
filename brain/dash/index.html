@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Game master</title>
+<title>R.O.B</title>
 <link rel="icon" href="data:,">
 <style>
 /* Tokens. Spacing: 4 8 12 16 24 32 48. Type: 13 15 17 20 28 40 + display. Radius: 8 small, 12 everything else, 50% seats. */
@@ -63,7 +63,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
 /* ---------- top bar ---------- */
 .top { display: flex; align-items: center; gap: 12px; padding: max(16px, env(safe-area-inset-top)) 32px 0; position: relative; z-index: 5; }
-.brand { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.brand { font-weight: 700; font-size: 15px; letter-spacing: .12em; white-space: nowrap; }
 .top .spacer { flex: 1; }
 .conn { font-size: 15px; font-weight: 600; color: var(--red); }
 .iconbtn {
@@ -74,10 +74,21 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .iconbtn svg { width: 18px; height: 18px; }
 .vol { position: relative; }
 .volpop {
-  position: absolute; top: 48px; right: 0; width: 240px; display: flex; align-items: center; gap: 12px;
-  padding: 8px 16px; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); z-index: 6;
+  position: absolute; top: 48px; right: 0; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 16px 0 12px; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); z-index: 6;
 }
-.volpop .v { width: 32px; text-align: right; font-weight: 600; }
+.volpop .vwrap { position: relative; width: 24px; height: 160px; }
+.volpop .vwrap::before { content: ""; position: absolute; left: 10px; top: 10px; bottom: 10px; width: 4px; border-radius: 2px; background: var(--line-2); }
+.volpop input { position: relative; z-index: 1; }
+.volpop input {
+  position: absolute; left: 50%; top: 50%; width: 160px; height: 24px; margin: 0; transform: translate(-50%, -50%) rotate(-90deg);
+  -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer;
+}
+.volpop input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: transparent; }
+.volpop input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%; background: var(--text); border: 0; box-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.volpop input::-moz-range-track { height: 4px; border-radius: 2px; background: transparent; }
+.volpop input::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--text); border: 0; }
+.volpop .v { font-weight: 600; font-size: 15px; }
 .stop {
   height: 40px; padding: 0 16px; border-radius: var(--r); font-weight: 600; font-size: 15px;
   background: var(--over); color: var(--red); border: 1px solid rgba(255,69,58,.6);
@@ -121,8 +132,17 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   height: calc(100dvh - 56px); min-height: 600px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 16px 32px max(24px, env(safe-area-inset-bottom));
 }
-.meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 17px; color: var(--text-2); }
-.meta b { color: var(--text); font-weight: 600; }
+.meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 14px; color: var(--text-2); }
+.meta b, .meta .chip { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.meta b { color: var(--ink); background: var(--text); }
+.meta .chip { color: var(--text); background: var(--over); border: 1px solid var(--line-2); }
+/* the round, step by step: Mafia's night, morning, day and vote */
+.steps { display: flex; gap: 16px; margin-top: 12px; }
+.steps:empty { display: none; }
+.step { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.step::after { content: ""; height: 3px; width: 56px; border-radius: 2px; background: var(--line); }
+.step.done { color: var(--text-2); } .step.done::after { background: var(--line-2); }
+.step.now { color: var(--text); } .step.now::after { background: var(--accent); }
 .phase {
   font-size: max(56px, min(10vw, 15vh, 144px)); font-weight: 800; letter-spacing: -0.035em; line-height: .95; margin: 4px 0 0;
 }
@@ -540,14 +560,14 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
 <div class="scrim"></div>
 
 <header class="top">
-  <div class="brand">Game master</div>
+  <div class="brand">R.O.B</div>
   <span class="spacer"></span>
   <span class="conn" id="conn" role="status" hidden></span>
   <button class="pausebtn" id="pauseBtn" hidden>Pause</button>
   <button class="stop" id="stopBtn" hidden>Stop game</button>
   <div class="vol">
     <button class="iconbtn" id="volBtn" aria-label="Volume" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
-    <div class="volpop" id="volPop" hidden><input type="range" id="vol" min="0" max="100" step="1" value="50" aria-label="Volume"><span class="v num" id="volV">-</span></div>
+    <div class="volpop" id="volPop" hidden><div class="vwrap"><input type="range" id="vol" min="0" max="100" step="1" value="50" aria-label="Volume" aria-orientation="vertical"></div><span class="v num" id="volV">-</span></div>
   </div>
   <button class="iconbtn" id="gear" aria-label="Settings" aria-expanded="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
@@ -593,6 +613,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   <div>
     <div class="meta"><b id="gName">Mafia</b><span id="meta"></span></div>
     <h1 class="phase" id="phase">Night</h1>
+    <div class="steps" id="steps" aria-label="The round"></div>
   </div>
 
   <div class="ring" id="ring">
@@ -981,7 +1002,7 @@ document.querySelectorAll(".gcard").forEach((c) => c.addEventListener("click", a
 // ---------- in game ----------
 let lastPhaseKey = "", actionsKey = "", countN = null;
 function renderGame(s, g, name) {
-  $("gName").textContent = GAME_NAMES[name] || "New game";
+  $("gName").textContent = GAME_NAMES[name] || ""; $("gName").hidden = !GAME_NAMES[name];
   const ph = $("phase"), label = PHASES[g.phase] || g.phase || "Starting";
   if (ph.textContent !== label) { ph.textContent = label; ph.classList.remove("swap"); void ph.offsetWidth; ph.classList.add("swap"); }
   // only what the seat ring cannot show
@@ -989,7 +1010,8 @@ function renderGame(s, g, name) {
   if (g.round > 0) f.push("Round " + g.round);
   if (g.living && g.living.length && g.seats && name === "mafia" && !g.over) f.push(g.living.length + " left");
   if (g.scores && g.scores.length) f.push("Score " + (g.total || 0));
-  $("meta").textContent = f.join(", ");
+  $("meta").innerHTML = f.map((t) => '<span class="chip">' + esc(t) + "</span>").join("");
+  renderSteps(g, name);
 
   // winner
   const b = $("banner");
@@ -1008,6 +1030,16 @@ function renderGame(s, g, name) {
   $("foldWrap").hidden = !!g.over;
 }
 
+const ROUND = ["night", "morning", "day", "vote"];
+let stepsKey = "";
+function renderSteps(g, name) {
+  const on = name === "mafia" && !g.over && ROUND.includes(g.phase);
+  const key = on ? g.phase : "";
+  if (key === stepsKey) return;
+  stepsKey = key;
+  const i = ROUND.indexOf(g.phase);
+  $("steps").innerHTML = on ? ROUND.map((k, j) => '<span class="step' + (j < i ? " done" : j === i ? " now" : "") + '">' + PHASES[k] + "</span>").join("") : "";
+}
 function renderActions(s, g) {
   const phase = g.over ? "over" : g.phase;
   const seatsFound = (s.seats || []).length || g.seats || 0;
