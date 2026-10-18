@@ -40,7 +40,8 @@ if [ -n "$p" ]; then
   fi
   echo "game: the gateway is already running (pid $p), VISION_HOST=$host"
 else
-  VISION_HOST=$IP stackchan-mcp serve --transport streamable-http >> "$LOGS/gateway.log" 2>&1 &
+  # scripts/gateway.py: the same gateway, with each listen ending when the talker stops
+  VISION_HOST=$IP "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http >> "$LOGS/gateway.log" 2>&1 &
   STARTED="$STARTED $!"
   echo "game: gateway started (pid $!, VISION_HOST=$IP, log $LOGS/gateway.log)"
 fi

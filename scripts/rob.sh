@@ -173,7 +173,8 @@ start() {
     fi
   fi
   if [ -z "$p" ]; then
-    VISION_HOST=$IP nohup stackchan-mcp serve --transport streamable-http >> "$LOGS/gateway.log" 2>&1 &
+    # scripts/gateway.py: the same gateway, with each listen ending when the talker stops
+    VISION_HOST=$IP nohup "$(uv tool dir)/stackchan-mcp/bin/python" scripts/gateway.py serve --transport streamable-http >> "$LOGS/gateway.log" 2>&1 &
     echo $! >> "$PIDS"
   fi
   [ -n "$(listening 8768)" ] || { nohup python3 scripts/ota-stub.py --port 8768 >> "$LOGS/ota-stub.log" 2>&1 & echo $! >> "$PIDS"; }

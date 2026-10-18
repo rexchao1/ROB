@@ -33,7 +33,8 @@ fi
 step "apt packages"
 sudo apt-get update
 # libopus0: the gateway encodes the voice to Opus for the robot. network-manager: hotspot.sh.
-sudo apt-get install -y curl git ca-certificates libopus0 network-manager avahi-daemon
+# python3-gpiozero, python3-lgpio: the status light (pi/status-led.py) on the Pi 5.
+sudo apt-get install -y curl git ca-certificates libopus0 network-manager avahi-daemon python3-gpiozero python3-lgpio
 
 step "uv"
 if ! command -v uv >/dev/null; then
@@ -87,11 +88,12 @@ fi
 
 if [[ $SERVICES -eq 1 ]]; then
   step "systemd services"
-  sed -e "s|@USER@|$USER|g" -e "s|@HOME@|$HOME|g" "$REPO/pi/stackchan-gateway.service" | sudo tee /etc/systemd/system/stackchan-gateway.service >/dev/null
+  sed -e "s|@USER@|$USER|g" -e "s|@GATEWAY_PY@|$GATEWAY_PY|g" -e "s|@REPO@|$REPO|g" "$REPO/pi/stackchan-gateway.service" | sudo tee /etc/systemd/system/stackchan-gateway.service >/dev/null
   sed -e "s|@USER@|$USER|g" -e "s|@REPO@|$REPO|g" "$REPO/pi/gamemaster-brain.service" | sudo tee /etc/systemd/system/gamemaster-brain.service >/dev/null
+  sed -e "s|@USER@|$USER|g" -e "s|@REPO@|$REPO|g" "$REPO/pi/status-led.service" | sudo tee /etc/systemd/system/status-led.service >/dev/null
   sudo systemctl daemon-reload
-  sudo systemctl enable stackchan-gateway.service gamemaster-brain.service
-  echo "enabled; start them with: sudo systemctl start stackchan-gateway gamemaster-brain"
+  sudo systemctl enable stackchan-gateway.service gamemaster-brain.service status-led.service
+  echo "enabled; start them with: sudo systemctl start stackchan-gateway gamemaster-brain status-led"
 fi
 
 step "done"
