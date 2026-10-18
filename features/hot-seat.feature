@@ -66,3 +66,12 @@ Feature: Hot Seat
     Given Player three is out and Players one and two have answered in time for twelve rounds
     Then the players hear the host say "You're all too good at this. I'm calling it a tie."
     And the game is over with no winner
+
+  @D106 @D104
+  Scenario: A model's no makes the host ask the table
+    Given a fake talk model answers the host with "no"
+    And Player one has said "apple"
+    When Player two says "rambutan"
+    Then the players hear the host say "Rambutan? Does that count?"
+    When the table says "yes"
+    Then Player two is still in

@@ -26,7 +26,32 @@ const FEATURE_DIR = join(ROOT, 'features')
 // The four signed features are bound. The seven below were written by the review
 // of 2026-10-18 from the code built in workstreams W and X and the pause work
 // (DOCKET.md D45 onward); they describe what was built and bind nothing yet.
-const WIP: WipEntry[] = ['welcome', 'twenty-questions', 'hot-seat', 'wordle', 'pausing', 'host-character', 'operator-dashboard']
+const WIP: WipEntry[] = [
+  'welcome', 'twenty-questions', 'hot-seat', 'wordle', 'pausing', 'host-character', 'operator-dashboard',
+  // Review R's proposals (DOCKET.md D85 onward): scenarios in the bound features that
+  // would change the code, held open until the rulings are ratified and abdd/3-src binds them.
+  { feature: 'hosting', scenarios: [
+    'The host counts the table and numbers the seats', // D96: "sweep the whole table" replaces "turn a full circle"
+    'A disagreement without a number gets a second sweep', 'After three disagreements the host gives up',
+    'A count below the host\'s gets a second sweep', 'Each game has a smallest table',
+    'A vote that names two seats is asked for again', 'Me too is not a vote',
+    'A top seat short of a majority eliminates nobody', 'Players sitting out do not count toward the majority',
+    // Rex's 3ae4edc, transcribed (D109 to D112): a lean-in by voice, the speaker by voice, say that again
+    'Show me puts the card up for a few seconds without a close face', 'Got it moves the deal on',
+    'A lean-in nobody answers is asked again with the way round the camera',
+    'The speaker moves to the Mac and back by voice', 'Say that again repeats the last line',
+  ] },
+  { feature: 'mafia', scenarios: [
+    'A sentence that mentions starting over is talk, not a reset', 'Restart the round starts the night again',
+    'The group may vote early by saying so', 'A sentence about not being ready does not end the day',
+    'Ten rounds without a win is a draw', 'The Doctor is asked every night, dead or alive',
+  ] },
+  { feature: 'wavelength', scenarios: [
+    'A guess is read from a short answer', 'A number inside a longer sentence is talk', 'No guess the host can read scores zero',
+    'The psychic rotates and the total is announced after three rounds', // D103: "Player five was the psychic in the first round" replaces the rigged reading
+  ] },
+  { feature: 'imposter', scenarios: ['A tied vote lets the Imposter survive'] },
+]
 
 const definers: Record<string, Definer<World>> = { hosting, imposter, mafia, wavelength }
 
