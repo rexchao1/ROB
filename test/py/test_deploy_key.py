@@ -34,6 +34,7 @@ def test_deploy_key_is_opt_in_and_never_in_output_or_arguments(tmp_path):
     (tmp_path / "qnx/ap/net.conf").write_text("MAC_ADDR=10.77.0.2\nPI_ADDR=10.77.0.1\n")
     (tmp_path / "brain/__init__.py").touch()
     (tmp_path / "brain/referee.py").touch()
+    shutil.copyfile(ROOT / "brain/keys.py", tmp_path / "brain/keys.py")  # deploy reads the table token with it
     (tmp_path / ".env.local").write_text("ANTHROPIC_API_KEY=fake-test-secret\nELEVENLABS_API_KEY=other-secret\n")
     ssh = tmp_path / "bin/ssh"
     ssh.write_text(f'#!{sys.executable}\nimport os, sys\nfrom pathlib import Path\n'
