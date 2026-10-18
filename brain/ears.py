@@ -184,6 +184,20 @@ def wants_to_reset(text: str) -> bool:
     return bool(_RESET.search(" ".join(_tokens(text))))
 
 
+_PAUSE = re.compile(r"\b(?:pause|pause the game|hold the game)\b")
+_RESUME = re.compile(r"\b(?:resume|unpause|un pause|continue|keep going|play on|we're back|were back|i'm back|im back|back to the game|let's go|lets go|go on)\b")
+
+
+def wants_pause(text: str) -> bool:
+    """"pause": the host holds the game until someone says to carry on."""
+    return bool(_PAUSE.search(" ".join(_tokens(text)))) and not wants_resume(text)
+
+
+def wants_resume(text: str) -> bool:
+    """"resume", "unpause", "we're back", "keep going": the end of a pause."""
+    return bool(_RESUME.search(" ".join(_tokens(text))))
+
+
 # --- the welcome's conversation (D40 to D43) ---------------------------------------------
 
 _YES = ("yes", "yeah", "yep", "yup", "yea", "ya", "sure", "okay", "ok", "alright", "all right", "sounds good",

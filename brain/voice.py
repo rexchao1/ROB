@@ -319,7 +319,8 @@ class ElevenVoice:
 
         if settings.current.voice != "eleven":
             return None
-        return personas.get(settings.current.persona).eleven_voice or self.voice_id
+        picked = personas.VOICES.get(settings.current.eleven_voice or "")
+        return picked.eleven_id if picked else personas.get(settings.current.persona).eleven_voice or self.voice_id
 
     def _fall_back(self, text: str) -> bytes:
         if self.fallback is None:

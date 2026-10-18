@@ -191,6 +191,7 @@ class Device:
             self.default_frame: np.ndarray | None = None
             self.scene: list[table.Face] | None = None
             self.heard: list[str] = []
+            self.touching = False  # a hand on the head
             self.calls: list[dict[str, Any]] = []
             self.seq = 0
             self.epoch = time.monotonic()
@@ -287,7 +288,8 @@ class Device:
         return {"ok": True}, None
 
     def _get_touch_state(self, _: dict[str, Any]):
-        return {"head": False, "zones": {"front": False, "middle": False, "back": False}, "raw": 0, "ms_since_last": None}, None
+        t = self.touching  # the real robot's shape (stackchan-mcp 0.18)
+        return {"available": True, "zone0": t, "zone1": False, "zone2": False, "raw": int(t), "last_event": "idle", "last_event_age_ms": -1}, None
 
     def _say(self, args: dict[str, Any]):
         # Present because the gateway has it; the brain speaks through /pcm instead.

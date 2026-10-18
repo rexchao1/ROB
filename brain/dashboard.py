@@ -17,6 +17,7 @@ model name only.
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
@@ -69,6 +70,7 @@ def state(host: Any) -> dict[str, Any]:
         "games": [{"key": g, "label": LABELS.get(g, g.replace("_", " ").title())} for g in games.GAMES],
         "talks": list(TALKS),
         "voices": list(VOICES),
+        "eleven_voices": [{"key": v.key, "label": v.label, "blurb": v.blurb} for v in personas.VOICES.values()],
         "state": game,
         "feed": feed,
     }
@@ -86,6 +88,11 @@ def change(body: dict[str, Any]) -> dict[str, Any]:
         elif name == "voice":
             if value not in VOICES:
                 raise ValueError(f"voice is one of {', '.join(VOICES)}")
+        elif name == "eleven_voice":
+            if value is not None and value not in personas.VOICES:
+                raise ValueError(f"no voice {value!r}")
+            if os.environ.get("ELEVENLABS_API_KEY"):
+                changes["voice"] = "eleven"  # picking one turns ElevenLabs on
         elif name == "talk_model":
             if value in (None, ""):
                 value = None

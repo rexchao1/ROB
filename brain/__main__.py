@@ -114,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     if isinstance(banter, Banter):
         threading.Thread(target=banter.warm, name="banter-warm", daemon=True).start()
     settings.update(talk=args.talk, talk_model=args.talk_model)
+    if not args.test:
+        settings.load(ROOT / "gamemaster.rob.json")  # ROB's personality and voice, as last picked
     talk = Talk(args.banter if args.banter != "none" else "http://127.0.0.1:11434")  # reads brain.settings at each call
     seed = args.seed if args.seed is not None else random.randrange(1 << 30)
     host = Host(

@@ -13,10 +13,14 @@ from brain import cards, games, lines, vision
 from brain.banter import NoBanter
 from brain.clock import VirtualClock
 from brain.body import BodyError
-from brain.lobby import PAUSE
+from brain.lobby import PAUSE, QUIET, QUIET_WINDOW
 from brain.host import (
     GIVE_UP,
     MOOD_LEDS,
+    PAUSED,
+    PAUSED_LEDS,
+    PAUSED_WINDOW,
+    RESUMED,
     PHOTO_TRIES,
     RECOVERY,
     REPROMPT,
@@ -328,3 +332,57 @@ def test_stop_ends_a_game_wherever_it_is_without_a_word(host, fake, clock, monke
     host.stop()
     assert _said(fake) == []
     assert clock.reset() == 0  # refused if the loop were still asleep on the clock
+
+
+def test_pause_holds_the_listen_and_the_games_clock_until_resume(host, fake, clock):
+    fake.device.heard.append("pause")
+    w = Worker(clock, host.listen, 4)
+    clock.advance(4)
+    assert host.paused and _said(fake) == [PAUSED]
+    assert fake.device.leds == [list(PAUSED_LEDS)] * 12
+    clock.advance(PAUSED_WINDOW * 3)  # nothing said: still paused
+    assert host.paused and not w.done
+    fake.device.heard.append("okay resume")
+    clock.advance(PAUSED_WINDOW)
+    assert not host.paused and _said(fake) == [PAUSED, RESUMED]
+    fake.device.heard.append("player two")
+    clock.advance(4)
+    assert w.done and w.result == "player two"
+    assert host.now() == pytest.approx(clock.now() - PAUSED_WINDOW * 4, abs=0.01)  # the paused time is left out
+
+
+def test_a_tap_on_the_head_ends_the_pause(host, fake, clock):
+    fake.device.heard.append("pause")
+    w = Worker(clock, host.listen, 4)
+    clock.advance(4 + PAUSED_WINDOW)
+    assert host.paused
+    fake.device.touching = True
+    clock.advance(PAUSED_WINDOW)
+    assert not host.paused and _said(fake)[-1] == RESUMED
+    fake.device.touching = False
+    clock.advance(4)
+    assert w.done and w.result == ""
+
+
+def test_stop_said_while_paused_reaches_the_game(host, fake, clock):
+    fake.device.heard.append("pause")
+    w = Worker(clock, host.listen, 4)
+    clock.advance(4)
+    fake.device.heard.append("stop the game")
+    clock.advance(PAUSED_WINDOW)
+    assert w.done and w.result == "stop the game" and not host.paused
+    assert RESUMED not in _said(fake)
+
+
+def test_a_quiet_lobby_listens_in_longer_windows_and_closely_again_once_it_hears(host, fake, clock):
+    host.start()
+    try:
+        clock.settle()
+        clock.advance(QUIET + QUIET_WINDOW + host.listen_window * 2)  # the fake records a listen as it ends
+        windows = [c["args"]["duration_ms"] for c in _calls(fake, "listen")]
+        assert windows[0] == host.listen_window * 1000 and windows[-1] == QUIET_WINDOW * 1000
+        fake.device.heard.append("hello")
+        clock.advance(QUIET_WINDOW * 2)
+        assert _calls(fake, "listen")[-1]["args"]["duration_ms"] == host.listen_window * 1000
+    finally:
+        host.stop()

@@ -62,3 +62,23 @@ DEFAULT = "host"
 
 def get(key: str | None) -> Persona:
     return PERSONAS.get(key or DEFAULT, PERSONAS[DEFAULT])
+
+
+@dataclass(frozen=True)
+class Voice:
+    key: str
+    label: str
+    blurb: str
+    eleven_id: str  # an ElevenLabs premade voice
+
+
+VOICES: dict[str, Voice] = {
+    v.key: v
+    for v in (
+        Voice("chris", "Chris", "Casual, American", "iP95p4xoKVk53GoZ742B"),
+        Voice("jessica", "Jessica", "Bright, playful", "cgSgspJ2msm6clMCkdW9"),
+        Voice("george", "George", "Warm, British", "JBFqnCBsd6RMkjVDRZzb"),
+        Voice("charlie", "Charlie", "Laid-back, Australian", "IKne3meq5aSn9XLyUdCD"),
+        Voice("brian", "Brian", "Deep, narrator", "nPczCjzI2devNBz1zQrb"),
+    )
+}

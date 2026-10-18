@@ -10,6 +10,9 @@ seconds and listens again, and the log says when the robot answers. What does en
 is the caller's own BaseException: the host being stopped (a test's reset), the table
 starting over or going away (brain/remote.py).
 
+The robot chimes each time its microphone opens, so after QUIET seconds with nothing
+heard the lobby listens in QUIET_WINDOW windows instead, until it hears something.
+
 Standard library only: the referee imports it.
 """
 
@@ -26,6 +29,8 @@ from brain.games.welcome import RESTART, Choice, Welcome
 from brain.table import Table
 
 PAUSE = 3.0  # seconds after a body error before listening again; the robot reconnects on its own
+QUIET = 30.0  # seconds with nothing heard before the lobby listens in longer windows
+QUIET_WINDOW = 10.0  # the longer window: the robot chimes each time its microphone opens
 
 
 class Lobby:
@@ -53,6 +58,7 @@ class Lobby:
         self.playing: str | None = None  # the game being played
         self._log = log
         self._failing = False
+        self._heard_at: float | None = None  # the last time the lobby heard anything
 
     def run(self, welcome: bool = False) -> None:
         """Listen for a game's name and play it, until stopped(); the welcome first when
@@ -69,8 +75,14 @@ class Lobby:
 
     def _idle_listen(self) -> bool:
         """One idle listen; True when the welcome comes next."""
-        heard = self.table.listen(self.listen_window)
+        now = self.table.now()
+        if self._heard_at is None:
+            self._heard_at = now
+        quiet = now - self._heard_at >= QUIET
+        heard = self.table.listen(max(self.listen_window, QUIET_WINDOW) if quiet else self.listen_window)
         self._answered()
+        if heard.strip():
+            self._heard_at = self.table.now()
         if ears.wants_to_reset(heard):
             return True
         name = ears.game_named(heard)
@@ -114,6 +126,7 @@ class Lobby:
             except Exception:
                 pass
         self.playing = None
+        self._heard_at = None  # a game just ended: listen closely again
         self.idle()
         return outcome
 

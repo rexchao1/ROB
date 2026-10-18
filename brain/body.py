@@ -340,6 +340,20 @@ class Body:
         else:
             self.gateway.call("set_leds", {"colors": [[int(c) for c in rgb] for rgb in colors[:12]]})
 
+    def touched(self, within: float) -> bool:
+        """The head was touched now or in the last `within` seconds (get_touch_state); a
+        robot that cannot say counts as not touched."""
+        try:
+            data = self.gateway.call("get_touch_state").data
+        except BodyError:
+            return False
+        if not isinstance(data, dict):
+            return False
+        if any(data.get(f"zone{i}") for i in range(3)):
+            return True
+        age = data.get("last_event_age_ms")
+        return data.get("last_event") not in (None, "idle") and isinstance(age, (int, float)) and 0 <= age <= within * 1000
+
     def clear_leds(self) -> None:
         self.gateway.call("clear_leds")
 

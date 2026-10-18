@@ -100,3 +100,18 @@ def test_agreeing_stopping_and_voting_early():
     assert not ears.wants_to_stop("stop it, player two")
     assert ears.wants_to_vote("okay let's vote")
     assert not ears.wants_to_vote("i think it's player two")
+
+
+@pytest.mark.parametrize("text", ["Pause.", "can you pause the game", "pause please"])
+def test_pause_is_heard(text):
+    assert ears.wants_pause(text)
+
+
+@pytest.mark.parametrize("text", ["Resume.", "okay unpause", "we're back", "keep going", "continue"])
+def test_resume_is_heard_and_is_not_a_pause(text):
+    assert ears.wants_resume(text) and not ears.wants_pause(text)
+
+
+@pytest.mark.parametrize("text", ["player two", "applause", "let's vote", ""])
+def test_other_words_are_neither(text):
+    assert not ears.wants_pause(text) and not ears.wants_resume(text)

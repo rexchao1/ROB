@@ -248,6 +248,7 @@ class Dash:
             "referee": self.referee,
             "photo": self.photo_info(),
             "typed_pending": pending,
+            "paused": bool(getattr(host, "paused", False)),
             "robot": self.robot(),
             "face_style": FACE_STYLE,
             "seats_info": self.seats_info(seats),

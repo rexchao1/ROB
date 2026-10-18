@@ -335,11 +335,11 @@ def flavor(moment: str, rng: random.Random) -> str:
 # --- the welcome (D38 to D43) ------------------------------------------------------------
 
 GREETINGS = (
-    "Hey, what's up, everyone? Let me see who we've got.",
-    "Hey hey, it's game night! Hold still, I'm counting heads.",
-    "Hey, everybody! Give me a sec to see who's here.",
-    "Hey, what's going on? Let me get a look at you all.",
-    "Hey there! Okay, let's see who showed up.",
+    "Hey, what's up, everyone? I'm ROB. Let me see who we've got.",
+    "Hey hey, it's game night! ROB here. Hold still, I'm counting heads.",
+    "Hey, everybody! I'm ROB, your host. Give me a sec to see who's here.",
+    "Hey, what's going on? ROB here. Let me get a look at you all.",
+    "Hey there, I'm ROB! Okay, let's see who showed up.",
 )
 
 
@@ -508,7 +508,7 @@ def later(rng: random.Random) -> str:
 def _nudges(game: str | None) -> tuple[str, ...]:
     plain = (
         "No rush. Just say a game's name when you're ready.",
-        "I'm just gonna sit here looking cute until someone picks a game.",
+        "Whenever you're ready, just name a game.",
     )
     if game is None:
         return plain

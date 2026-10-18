@@ -36,7 +36,7 @@ import cv2
 import numpy as np
 
 from brain import cards as cardset
-from brain import games, lines, vision
+from brain import ears, games, lines, vision
 from brain.body import Body, BodyError
 from brain.clock import Clock, ClockCancelled, VirtualClock
 from brain.lobby import Lobby
@@ -59,6 +59,10 @@ SCAN_ON = (0, 22, 40)  # the ring's colour for the part of the counting sweep do
 SCAN_SEEN = (0, 90, 30)  # the ring's colour where the sweep saw a face
 RING = 12  # LEDs on the ring
 RECOVERY = "Sorry, I lost my place. Say a game's name to start again."
+PAUSED_WINDOW = 10.0  # seconds per listen while paused: the robot chimes each time its microphone opens
+PAUSED_LEDS = (6, 6, 10)  # the ring while paused
+PAUSED = "Paused. Say resume or tap my head when you're ready."
+RESUMED = "Okay, back to it."
 
 
 def glide_seconds(travel: float, speed: float) -> float:
@@ -139,6 +143,8 @@ class Host:
         self.feed: deque[dict[str, Any]] = deque(maxlen=15)  # the dashboard's last lines heard and said
         self._injected: deque[str] = deque()  # the dashboard's typed lines, heard at the next listen
         self.robot_ok: bool | None = None  # the last listen reached the robot (None: not tried yet)
+        self.paused = False  # someone said "pause"; the game waits for "resume" or a head tap
+        self._paused_for = 0.0  # seconds spent paused, left out of now() so a game's timers stop
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._started = threading.Event()
@@ -167,7 +173,8 @@ class Host:
     # --- Table: time, voice, ears ------------------------------------------------
 
     def now(self) -> float:
-        return self.clock.now()
+        """The game's clock: it stops while the game is paused."""
+        return self.clock.now() - self._paused_for
 
     def wait(self, seconds: float) -> None:
         self._check_stop()
@@ -190,7 +197,10 @@ class Host:
             self.dash.spoken(token)
 
     def _cue(self, listening: bool) -> None:
-        """The ring: "listening" while the host listens, else the mood's colour (D43)."""
+        """The ring: "listening" while the host listens, else the mood's colour (D43);
+        dim and steady while paused."""
+        if self.paused:
+            return
         if listening != self._listening:
             self.body.leds([MOOD_LEDS["listening"] if listening else self.ring])
             self._listening = listening
@@ -211,6 +221,47 @@ class Host:
             self.feed.append({"t": time.time(), "kind": kind, "text": text})
 
     def listen(self, seconds: float) -> str:
+        """What the table says in the next `seconds`. "pause" holds everything until
+        "resume" or a tap on the head, then this listen starts over."""
+        while True:
+            text = self._hear(seconds)
+            if not ears.wants_pause(text):
+                return text
+            text = self._pause()
+            if text:  # "stop the game" or "reset" said while paused: the game hears it
+                return text
+
+    def _pause(self) -> str:
+        """Hold until "resume", a head tap or the page's Resume; what was said instead
+        when it was a stop or a reset."""
+        self._log("paused")
+        start = self.clock.now()
+        self.paused = True
+        if self.dash is not None:
+            self.dash.record("game", "paused")
+        try:
+            self.say(PAUSED)
+            self.body.leds([PAUSED_LEDS])
+            self._listening = False
+            while True:
+                checked = self.clock.now()
+                text = self._hear(PAUSED_WINDOW)
+                if ears.wants_to_stop(text):
+                    return text
+                if ears.wants_resume(text) or (self.body.touched(self.clock.now() - checked + 1.0)):
+                    break
+        finally:
+            self.paused = False
+            self._paused_for += self.clock.now() - start
+            self._log("resumed")
+            if self.dash is not None:
+                self.dash.record("game", "resumed")
+        self.body.leds([self.ring])
+        self._listening = False
+        self.say(RESUMED)
+        return ""
+
+    def _hear(self, seconds: float) -> str:
         self._check_stop()
         self._cue(True)
         typed = self._take_injected()

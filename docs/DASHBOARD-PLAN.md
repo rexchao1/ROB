@@ -88,3 +88,19 @@ The robot runs the game by voice; the page stays out of the way. **The rule: eve
 - "More time" during the day, and a deadline in the reported state so the page can show a countdown.
 - A wrong heads-up warning cannot be taken back (vision misread a face); a spoken "I was down" or an operator undo.
 - The reported state does not say what the host is listening for right now; the page guesses from the phase. A `listening_for` field ("count", "agree", "vote", "whisper", "guess", "game") would make the buttons exact.
+
+## Pause, a quieter lobby, simpler settings (Rex, 05:10)
+
+Rex: the settings have too much in them; "pause" should hold the game until he says so or taps the robot; the robot chimes every few seconds while it waits; drop "I'm just gonna sit here looking cute until someone picks a game".
+
+Why it chimes: the firmware plays a sound each time the gateway opens its microphone (`listen` sends listen.start, then listen.stop), and the lobby listens in back-to-back 4 s windows. There is no setting to silence it, so the lobby opens the microphone less often once the table has been quiet.
+
+| Step | What | State |
+|---|---|---|
+| P1 | Pause: "pause" (or "hold on") at any listen holds the game; the ring dims, the host says it is paused; "resume", "unpause", "we're back", a tap on the robot's head or the page's Resume button carries on, and the listen that was interrupted runs again. The game's clock (`host.now()`) stops while paused, so the day timer does not run out. `paused` in `/dash/api/state` | done |
+| P2 | Quieter lobby: idle listens grow from `listen_window` to 10 s after 30 s with nothing heard, and back on the next word; paused listens are 10 s | done |
+| P3 | The "sit here looking cute" nudge removed | done |
+| P4 | Settings drawer: one short panel instead of four tabs. Host (personality, voice, talk, from `/dashboard/state`), Volume, Camera (head pitch, scan step), Keys; the rest of the tuning, the log and the camera photo folded under "More". Content, rigs, head nudge and the duplicate typing boxes leave the page (their APIs stay). Pause/Resume on the in-game screen | done |
+| P5 | Merge to `gamemaster` and into the ROB repo; restart the game | done (tests stopped at Rex's word after P3: the Python tests passed then; the ROB name, the five voices and Customize ROB ran untested) |
+
+**ROB (Rex, 05:20).** The robot is named ROB: the greetings and the talk's house rules say so. "Customize ROB" on the lobby picks one of five personalities (`brain/personas.py` PERSONAS) and five ElevenLabs voices (`personas.VOICES`; `settings.eleven_voice`, which turns ElevenLabs on when the key is set); both are kept in `gamemaster.rob.json` (gitignored) across starts.

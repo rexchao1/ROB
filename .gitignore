@@ -14,3 +14,7 @@ voice/piper/
 # Alternate backdrops the page does not use (brain/dash/art/CREDITS.md lists them).
 brain/dash/art/alt/
 .DS_Store
+
+# The operator's picks, saved by the brain (tuning, and ROB's personality and voice).
+gamemaster.settings.json
+gamemaster.rob.json

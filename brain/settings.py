@@ -4,8 +4,10 @@ moment of use, so a change applies to the next line."""
 
 from __future__ import annotations
 
+import json
 import threading
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -15,10 +17,31 @@ class Settings:
     talk: str = "anthropic"  # anthropic | gemini | ollama | off
     talk_model: str | None = None  # None: the provider's default
     voice: str = "piper"  # piper | eleven (ElevenLabs live, needs ELEVENLABS_API_KEY)
+    eleven_voice: str | None = None  # a key of brain.personas.VOICES; None: the personality's or the default
+
+
+SAVED = ("persona", "eleven_voice")  # ROB's personality and voice, kept across starts
 
 
 current = Settings()
 _lock = threading.Lock()
+
+
+file: Path | None = None  # where SAVED is kept (gamemaster.rob.json); None keeps nothing
+
+
+def load(path: Path) -> None:
+    """Read ROB's saved personality and voice, and keep later changes there."""
+    global file
+    file = path
+    try:
+        saved = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return
+    with _lock:
+        for name in SAVED:
+            if name in saved:
+                setattr(current, name, saved[name])
 
 
 def update(**changes: Any) -> dict[str, Any]:
@@ -28,7 +51,13 @@ def update(**changes: Any) -> dict[str, Any]:
             if not hasattr(current, name):
                 raise KeyError(name)
             setattr(current, name, value)
-        return asdict(current)
+        snap = asdict(current)
+    if file is not None and any(n in SAVED for n in changes):
+        try:
+            file.write_text(json.dumps({n: snap[n] for n in SAVED}) + "\n")
+        except OSError:
+            pass
+    return snap
 
 
 def snapshot() -> dict[str, Any]:
