@@ -8,3 +8,7 @@ We are building quickly. Keep checks proportional and do not slow the work down 
 - A big review is only for a big-scope change: a new subsystem, a rework that touches many modules, or a change to how the parts talk to each other. Even then, do it yourself in one pass.
 - Everything else finishes after you read your own diff and run the focused test for what changed, if there is one.
 - Skip `/verify` unless the user asks for it.
+
+## Plans
+
+- Work that spans sessions has a plan in `docs/*-PLAN.md`. Read `docs/CONTROL-PLAN.md` before touching how ROB takes commands (stop, pause, sleep, interrupting him), the welcome, Wavelength or the head count.

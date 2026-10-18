@@ -940,6 +940,8 @@ class Host:
         while not self._stop.is_set():
             try:
                 self.body.setup()
+                if not self.virtual:  # ROB's own face from the start, not the robot's stock one (a test's calls stay as they were)
+                    self.prepare([])
                 self.mood("idle")
                 self._turn(0.0)
                 return

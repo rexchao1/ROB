@@ -342,11 +342,11 @@ def flavor(moment: str, rng: random.Random) -> str:
 # --- the welcome (D38 to D43) ------------------------------------------------------------
 
 GREETINGS = (
-    "Hey, everybody! I'm ROB, and I'm hosting tonight. What are we playing? Name a game, or tell me how many of you there are and I'll pick.",
-    "Oh good, people! Hi, I'm ROB. What are we in the mood for? Name a game, or tell me how many you are and I'll pick one.",
-    "Hey hey, it's game night! ROB here, and I've been waiting all day. What sounds fun? Name a game, or tell me how many of you there are.",
-    "Hi, friends! I'm ROB, your host. So, what are we playing? Say a game, or how many of you there are.",
-    "Well, look who showed up! I'm ROB. What do you feel like playing? Name a game, or tell me how many you are.",
+    "Hey, everybody! I'm ROB, and I'm so glad you're here. Pull up a chair, tonight is game night!",
+    "Oh good, people! Hi, I'm ROB, your host. Welcome, welcome, make yourselves at home.",
+    "Hey hey, it's game night! I'm ROB, and I've been waiting all day for you. Come on in.",
+    "Hi, friends! I'm ROB, and I'll be your host tonight. It's really good to see you.",
+    "Well, look who showed up! Welcome! I'm ROB, and I promise to keep score honestly. Mostly.",
 )
 LOOKING = (
     "Okay, let me get a look at you all.",
@@ -492,7 +492,15 @@ def fits(seats: int) -> list[str]:
 
 def games_any() -> str:
     """Asked what the host has before anyone said how many: every game built."""
-    return f"I've got {game_names()}. Which one sounds good?"
+    return f"I've got {game_names()}. {MAFIA_NEEDS} Which one sounds good?"
+
+
+MAFIA_NEEDS = "Mafia needs at least four of you."
+
+
+def games_menu() -> str:
+    """The welcome's second line: every game built, Mafia's minimum, and the question."""
+    return f"Tonight I can host {game_names()}. {MAFIA_NEEDS} Pick one, or tell me how many of you there are and I'll choose."
 
 
 def games_list(seats: int) -> str:
@@ -663,7 +671,7 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
         WAVELENGTH_TALK, WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
-        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(),
+        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(), games_menu(),
     ]
     out += [mafia_intro(1), mafia_intro(2)]
     out += [too_few(g, m) for g, m in MINIMUM.items()]

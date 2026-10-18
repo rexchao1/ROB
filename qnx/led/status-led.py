@@ -29,10 +29,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 PINS = {"red": 17, "yellow": 27, "green": 22}
-POLL = 3.0  # seconds between checks
+POLL = 1.0  # seconds between checks
 PING_WAIT = 2  # seconds a ping waits: the robot's Wi-Fi power save answers in up to ~1 s
 MISSES = 3  # pings in a row the robot may miss before the light goes back to yellow
-SWEEP_EVERY = 20.0  # seconds between looks for the robot's address when it is not known
+SWEEP_EVERY = 10.0  # seconds between looks for the robot's address when it is not known
 SWEEP_MAX = 256  # addresses at most in one look (the gamemaster network is a /24)
 
 

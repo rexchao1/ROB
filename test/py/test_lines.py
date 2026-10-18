@@ -92,7 +92,9 @@ def test_fixed_lines_cover_the_per_seat_lines_once_each():
 
 
 def test_the_welcome_greets_as_rob_and_every_game_says_what_it_is():
-    assert all("ROB" in line and "?" in line for line in lines.GREETINGS)
+    assert all("ROB" in line for line in lines.GREETINGS)
+    menu = lines.games_menu()
+    assert all(lines.game_name(g) in menu for g in lines.MINIMUM) and "Mafia needs at least four" in menu
     assert all(game in lines.RULES for game in lines.MINIMUM)
     assert "Easier to show you" not in lines.games_about() and "Want to play it?" not in lines.games_about()
 

@@ -117,7 +117,8 @@ class Welcome:
         self.table.mood("idle")
         State(phase="welcome", seats=0).report(self.table)
         self.memory.clear()
-        self._ask(self._opening("welcome.greeting", named=True) or lines.greeting(self.rng))
+        self._say(self._opening("welcome.greeting", named=True) or lines.greeting(self.rng))
+        self._ask(lines.games_menu())
         self.later = lines.nudges(None, self.rng)
 
     def wake(self) -> None:
@@ -128,10 +129,11 @@ class Welcome:
         self.later = lines.nudges(None, self.rng)
 
     def _opening(self, situation: str, named: bool = False) -> str | None:
-        """The talk model's greeting or wake-up line, written ahead, if it fits and asks
-        what they want to play (and, `named`, says it is ROB); else None."""
+        """The talk model's greeting or wake-up line, written ahead, if it fits: the
+        greeting (`named`) says it is ROB, the wake-up asks what they want to play;
+        else None."""
         line = _fit(self.table.chat(situation, games=lines.game_names(), remembered=self.facts.remembered()))
-        if line is None or "?" not in line or (named and not re.search(r"\brob\b", line, re.IGNORECASE)):
+        if line is None or (not named and "?" not in line) or (named and not re.search(r"\brob\b", line, re.IGNORECASE)):
             return None
         return line
 

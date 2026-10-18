@@ -23,7 +23,7 @@ def test_the_greeting_asks_and_listens_with_no_sweep():
     w = _welcome(table)
     w.greet()
     choice = w.converse()
-    assert table.said[0] in lines.GREETINGS
+    assert table.said[0] in lines.GREETINGS and table.said[1] == lines.games_menu()
     assert "count" not in _kinds(table)
     assert choice == Choice("imposter", "let's play imposter", None, False)
 
@@ -52,7 +52,7 @@ def test_count_us_sweeps_says_hello_and_suggests():
     w = _welcome(table)
     w.greet()
     choice = w.converse()
-    assert table.said[1] in lines.LOOKING
+    assert table.said[2] in lines.LOOKING  # after the greeting and the games
     assert "count" in _kinds(table)
     assert any(line.startswith(("Hi,", "You're")) for line in table.said)
     assert choice == Choice("mafia", "let's play mafia", 5, True)
@@ -100,11 +100,11 @@ class ChattyTable(FakeTable):
         return queue.pop(0) if queue else None
 
 
-def test_the_greeting_is_the_models_when_it_names_rob_and_asks():
-    table = ChattyTable(welcome_greeting=["Evening, legends! I'm ROB. What are we playing?"])
+def test_the_greeting_is_the_models_when_it_names_rob_then_the_games():
+    table = ChattyTable(welcome_greeting=["Evening, legends! I'm ROB, so glad you came."])
     _welcome(table).greet()
-    assert table.said == ["Evening, legends! I'm ROB. What are we playing?"]
-    table = ChattyTable(welcome_greeting=["Evening, legends. Let the games begin."])  # no name, no question
+    assert table.said == ["Evening, legends! I'm ROB, so glad you came.", lines.games_menu()]
+    table = ChattyTable(welcome_greeting=["Evening, legends. Let the games begin."])  # no name
     _welcome(table).greet()
     assert table.said[0] in lines.GREETINGS
 
@@ -115,10 +115,10 @@ def test_a_hello_and_how_are_you_get_answers_with_the_talk_so_far():
     w = _welcome(table)
     w.greet()
     w.converse()
-    assert table.said[1:3] == ["Hey yourself! What are we playing?", "Doing great, just itching to host. You?"]
+    assert table.said[2:4] == ["Hey yourself! What are we playing?", "Doing great, just itching to host. You?"]
     (_, heard, facts) = table.calls[-1]
     assert heard == "uh, how are you?" and facts["answering"] is True
-    assert facts["transcript"][-3:] == [["ROB", table.said[0]], ["them", "hello."], ["ROB", "Hey yourself! What are we playing?"]]
+    assert facts["transcript"][-3:] == [["ROB", table.said[1]], ["them", "hello."], ["ROB", "Hey yourself! What are we playing?"]]
 
 
 def test_a_yes_to_a_chatty_question_is_talk_but_a_yes_to_the_game_picks_it():
@@ -140,7 +140,7 @@ def test_scripted_replies_answer_the_small_talk_and_never_repeat():
     w = _welcome(table)
     w.greet()
     w.converse()
-    replies = table.said[1:5]
+    replies = table.said[2:6]
     assert replies[0].startswith(("I'm ROB", "Name's ROB"))
     assert len(set(replies[1:])) == 3
 
@@ -150,7 +150,7 @@ def test_junk_from_the_transcriber_gets_nothing():
     w = _welcome(table)
     w.greet()
     w.converse()
-    assert table.said[1] not in lines._chat_fallbacks(None)  # noqa: SLF001 - a nudge, not a reply
+    assert table.said[2] not in lines._chat_fallbacks(None)  # noqa: SLF001 - a nudge, not a reply
     assert ["them", "the name. the name. the name. the name."] not in [list(e) for e in w.memory]
 
 
@@ -163,7 +163,7 @@ def test_a_nap_keeps_the_talk_and_a_greeting_clears_it():
     woken.wake()
     assert ("them", "we just got back from the beach") in woken.memory
     _welcome(table).greet()
-    assert ("them", "we just got back from the beach") not in woken.memory and len(woken.memory) == 1
+    assert ("them", "we just got back from the beach") not in woken.memory and len(woken.memory) == 2  # the greeting and the games
 
 
 def test_explicit_memory_precedes_game_names_and_uses_scripted_confirmation():
