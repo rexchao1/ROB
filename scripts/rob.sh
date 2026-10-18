@@ -47,7 +47,8 @@ pi_up() { ping -c 1 -t 1 "$PI_ADDR" > /dev/null 2>&1; }
 # The Pi as a client of the iPhone hotspot (no gamemaster, so no referee from boot):
 # start runs one over ssh, and stop ends it, since a referee alone retries forever.
 HOTSPOT_PI=qnxuser@172.20.10.14
-hotspot_pi_up() { ping -c 1 -t 1 "${HOTSPOT_PI#*@}" > /dev/null 2>&1; }
+# Up to three pings: on the hotspot the Pi's Wi-Fi dozes and often misses the first.
+hotspot_pi_up() { ping -c 3 -o -t 3 "${HOTSPOT_PI#*@}" > /dev/null 2>&1; }
 pi_ssh() { ssh -o BatchMode=yes -o ConnectTimeout=5 ${GM_SSH_OPTS:-} "$HOTSPOT_PI" "$@"; }
 stop_hotspot_referee() {
   pi_ssh 'for p in $(pidin -f aen ar 2>/dev/null | awk "/brain.referee/ && !/awk/ { print \$1 }"); do kill $p; done' 2>/dev/null || true
