@@ -10,9 +10,9 @@ The orienting document for the agents that build the game master, with the human
 
 ## Shape
 
-- Two parts and nothing else: the **body**, a StackChan CoreS3 (camera, turning head, screen, microphone, speaker), and the **brain**, a Raspberry Pi 5. No laptop, no second camera, no phone. [ruled: D29]
+- Three boxes: the **body**, the StackChan K151 (camera, turning head, screen, microphone, speaker, light ring, head touch) running the stackchan-mcp firmware and gateway; the **brain** in two parts, a Mac (the gateway, speech-to-text, the voice, vision, the host) and a Raspberry Pi running QNX (the referee: the rules, the lobby, the parsing; and the game's own Wi-Fi network). No phone, no second camera. [ruled: D29, amended by D45]
 - Every game runs offline: the brain is its own wireless network; speech-to-text and a local voice run on the brain; no game needs the internet. Only the host's talk may use it: small-talk replies and quips from a cloud model (Anthropic's Claude by default, Gemini as the option) when a key is set, scripted lines otherwise. [ruled: D28, D40]
-- Raspberry Pi OS on the brain, not QNX. [ruled: D31]
+- The Pi runs QNX and stays on it: the referee and the access point are standard-library Python; speech-to-text, the voice and vision, which have no QNX port, run on the Mac and serve the Table over HTTP. [ruled: D31, amended by D46]
 - The body streams camera frames and microphone audio to the brain and plays back audio, shows a face or a private screen, and turns its head on the brain's command; it holds no game state. [chosen]
 - The brain holds all game state as deterministic code; models transcribe, synthesize and decorate, never decide. A model only writes words, and the host sounds like a person running game night, not an assistant. [ruled: D14, D42]
 - The host's voice: fixed lines generated once with ElevenLabs and cached on the brain; composed lines by ElevenLabs live when a key and the internet are there, else a local voice; the two must sound like one host in the demo. [ruled: D30, D41]
@@ -37,11 +37,39 @@ The orienting document for the agents that build the game master, with the human
 - Noise is anything short of three real words, or one right after the host asked something, and never Whisper's phantoms ("you", "thank you", "oh"). [chosen]
 - In test mode a reset skips the startup welcome unless it asks for it, so the bound scenarios keep their meaning. [chosen]
 
+## Pausing and the quiet lobby
+
+- "Pause" at any listen holds the game and its clock; "resume", a head tap or the page's Resume carries on and the interrupted listen runs again; a stop or a reset said while paused is heard. [ruled: D72]
+- After thirty quiet seconds the lobby listens in ten-second windows, because the robot chimes each time its microphone opens. [ruled: D73]
+
+## The host's character
+
+- The host is ROB and says so only when asked. [ruled: D76]
+- Every model line passes the house rules (two sentences, about fifteen words, no assistant phrases, no emoji, one exclamation mark, no seat named) or a scripted line is said instead; a slow answer is a scripted line. [ruled: D74]
+- Five personalities (game-show host, deadpan roaster, hype man, spooky narrator, chill friend) change the talk's style, the ring's colour and the voice, never a rule or a ruled line; five ElevenLabs voices; both kept across starts. [ruled: D75, D77]
+
+## More games, for small tables
+
+- Twenty Questions for one player or a group as one, either way round; the host counts out loud only at ten, fifteen and the last question; a hint costs a question; the built-in table answers where it can and a model answer never outranks it. [ruled: D61, D62, D63, D64, D65]
+- Hot Seat for two or more: five seconds in the first round, a second less each round, never under three; out on silence, a pass, a repeat or an answer that does not count; a tie after twelve rounds. [ruled: D66, D67, D68]
+- Wordle, out loud, for one or more: six guesses said or spelled, feedback spoken short with the heard word first, a word not known uses no guess, the last guess confirmed, turns for a group; the grid reaches the dashboard, not the robot's screen. [ruled: D69, D70, D71]
+- Every game plays offline from its built-in tables; a model only words a question or picks from a fixed set of answers. [ruled: D42, D63]
+
+## The operator's dashboard
+
+- One page on the brain's HTTP server, reachable from a phone on the game's network: the game as it happens, polled about once a second, nothing from the internet. [ruled: D78]
+- Every in-game button is a phrase the robot understands by voice, sent as typed hearing that the next listen drains before the microphone. [ruled: D79]
+- API keys are written to the brain's environment file and never shown again; a request from another site is refused. [ruled: D80]
+- Tuning applies live and is saved beside the brain; a saved setting overrides the matching flag; the volume is the robot's own and is never saved. [ruled: D81]
+- The brain serves two pages today, `/dashboard` (workstream X: personality, talk, voice, games, the feed) and `/dash` (the dashboard plan: lobby, game screen, settings drawer, keys, tuning). The plan names one. [chosen]
+
 ## Numbers the build meets
 
 - Five players: one Mafia, one Doctor, three Villagers; seven or more: two Mafia. [ruled: D15]
 - Two minutes of discussion with a one-minute call. [ruled: D18]
 - Wavelength: one to ten, ten minus the distance, three rounds, the psychic rotates. [ruled: D21]
+- Hot Seat: five seconds, then four, then three, never under three; twelve rounds at most. [ruled: D66, D68]
+- Twenty Questions: twenty questions; the welcome's nudges at twenty-five seconds; the game's at eight and twenty, gone at three minutes. [ruled: D56, D64, D65]
 
 ## Build choices
 
@@ -64,3 +92,4 @@ Wavelength, then the live banter model, then Imposter. Never cut: Mafia with the
 - 2026-10-18 — initial draft (scope interview, compressed; docket D1–D32; electives D28–D31).
 - 2026-10-18 — signed at D37 after ratifications D34–D36; the build's amended choices added after the StackChan was identified as the official K151 (BUILD-PLAN.md PB, rewritten). No `ruled` line changed.
 - 2026-10-18 — workstream W, Rex's rulings: the welcome and its conversation (D38, D39), seat numbers and the listening ring (D43), the extras deferred (D44); cloud talk amends D28 (D40), the live ElevenLabs voice amends D30 (D41), a human-sounding host whose models only write words amends D14 (D42). The Shape lines for D28, D14 and D30 restated to match.
+- 2026-10-18 — review R (Linus): Rex's reversal of D29 and D31 recorded as amendments D45 and D46 and the Shape lines restated; the welcome's lines (D47 to D60), the three new games (D61 to D71), pausing (D72, D73), the host's character (D74 to D77) and the dashboard (D78 to D81) added as the build's record, each awaiting Rex's ratification; the fence gained D82 to D84. The two `ruled` lines changed here changed on Rex's reversal, not the agent's call.
