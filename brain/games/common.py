@@ -21,11 +21,18 @@ from brain.table import Card, Table
 
 class GameStopped(Exception):
     """The group asked to stop or restart (D27); the game ends where it is. reset: they
-    said "reset", "start over" or "restart", and the welcome comes next (D38)."""
+    said "reset", "start over" or "restart", and the welcome comes next (D38). sleep:
+    they told the host to go to sleep, and it naps next."""
 
-    def __init__(self, reset: bool = False) -> None:
-        super().__init__("reset" if reset else "stop")
+    def __init__(self, reset: bool = False, sleep: bool = False) -> None:
+        super().__init__("reset" if reset else "sleep" if sleep else "stop")
         self.reset = reset
+        self.sleep = sleep and not reset
+
+    @classmethod
+    def heard(cls, text: str) -> "GameStopped":
+        """The stop that `text` asks for."""
+        return cls(reset=ears.wants_to_reset(text), sleep=ears.wants_sleep(text))
 
 
 @dataclass
@@ -98,7 +105,7 @@ def hear(table: Table, seconds: float) -> str:
     """table.listen, except that a request to stop ends the game (GameStopped)."""
     heard = table.listen(seconds)
     if ears.wants_to_stop(heard):
-        raise GameStopped(reset=ears.wants_to_reset(heard))
+        raise GameStopped.heard(heard)
     return heard
 
 

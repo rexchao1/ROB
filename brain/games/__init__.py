@@ -95,6 +95,6 @@ def play(
         state.over = True
         state.phase = "over"
         state.report(table)
-        outcome = "reset" if stop.reset else "stopped"
+        outcome = "reset" if stop.reset else "slept" if stop.sleep else "stopped"
     table.mood("idle")
     return outcome

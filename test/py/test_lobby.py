@@ -153,3 +153,11 @@ def test_a_stopped_game_goes_back_to_listening_awake_then_naps_after_the_quiet(m
     kinds = _kinds(table)
     first_sleep = kinds.index("sleep")
     assert kinds[1:first_sleep].count("listen") >= 2  # awake and listening for a game's name first
+
+
+def test_go_to_sleep_mid_game_naps_right_after_the_stop(monkeypatch):
+    _played(monkeypatch, outcome="slept")
+    table = FakeTable().hear("let's play imposter")
+    _lobby(table).run()
+    assert table.said == [lines.NAP]
+    assert _kinds(table)[-1] == "sleep" and "listen" not in _kinds(table)[_kinds(table).index("say"):]

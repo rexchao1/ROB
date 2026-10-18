@@ -226,7 +226,7 @@ class Host:
         if text:
             while self._take_command() is not None:  # a second press of Stop is the same stop
                 pass
-            raise GameStopped(reset=ears.wants_to_reset(text))
+            raise GameStopped.heard(text)
 
     def _take_command(self) -> str | None:
         """The first typed line that pauses or stops the game, taken out; the rest wait
@@ -718,7 +718,7 @@ class Host:
                         self._heard_typed(text)
                     now = self.clock.now()
                     if what == "stop":
-                        raise GameStopped(reset=ears.wants_to_reset(text))
+                        raise GameStopped.heard(text)
                     if what == "seen":
                         hide(now)
                         return True
@@ -735,7 +735,7 @@ class Host:
                         trusted = None
                         stopped = self._pause()
                         if stopped:  # "stop the game" or "reset" said while paused
-                            raise GameStopped(reset=ears.wants_to_reset(stopped))
+                            raise GameStopped.heard(stopped)
                         self.say(lines.lean_in(seat))
                         start = prompted = last_close = touch_checked = self.clock.now()
                         next_hear = start + HEAR_AFTER

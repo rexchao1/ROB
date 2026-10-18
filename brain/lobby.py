@@ -163,7 +163,7 @@ class Lobby:
     def _after(self, outcome: str, game: str) -> str:
         """After a game: the welcome again on "reset"; the talk, offering a game this
         count can play, on "too few"; else a nap (the recovery line already says to tap
-        when the game failed). A game someone stopped goes back to listening for a game's
+        when the game failed; "slept", told to go to sleep mid-game, naps too). A game someone stopped goes back to listening for a game's
         name, awake, and naps only after NAP_AFTER quiet seconds."""
         self._played = True
         if outcome == "reset":
@@ -199,7 +199,7 @@ class Lobby:
         finally:
             # A game boundary drops the preceding lobby's dialogue, even on reset/loss.
             clear_memory(self.table)
-        if state.game == name and outcome in ("played", "stopped", "reset"):
+        if state.game == name and outcome in ("played", "stopped", "slept", "reset"):
             try:
                 self.facts.played(name, state.winner if outcome == "played" else None)
             except OSError:

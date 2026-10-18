@@ -42,7 +42,12 @@ _SPLIT_GAMES.update({("twenty", "questions"): "twenty", ("20", "questions"): "tw
 _STOP = (
     "stop the game", "end the game", "quit the game", "cancel the game", "restart the game",
     "restart the round", "start over", "stop playing",
+    "stop this game", "end this game", "quit this game", "cancel this game", "exit the game",
+    "exit this game", "leave the game", "end game", "exit game", "quit game", "stop game",
+    "we're done", "were done", "i'm done playing", "im done playing", "let's stop", "lets stop",
+    "no more games", "enough of this game",
 )
+_SLEEP = ("go to sleep", "go to bed", "take a nap", "nap time", "time for bed", "good night rob", "goodnight rob", "go to sleep rob")
 _VOTE_NOW = ("let's vote", "lets vote", "ready to vote", "vote now", "we're ready", "were ready", "time to vote")
 _AGREE = ("okay", "ok", "fine", "yes", "yeah", "yep", "sure", "start", "go ahead", "let's go", "lets go",
           "never mind", "nevermind", "that's right", "thats right", "correct", "right")
@@ -175,7 +180,18 @@ def agrees(text: str) -> bool:
 def wants_to_stop(text: str) -> bool:
     """The group asks to stop or restart (D27: the group may restart by saying so)."""
     t = " ".join(_tokens(text))
-    return wants_to_reset(text) or any(p in t for p in _STOP)
+    return wants_to_reset(text) or wants_sleep(text) or _phrase(t, _STOP)
+
+
+def _phrase(t: str, phrases: tuple[str, ...]) -> bool:
+    """One of `phrases` in the joined tokens `t`, as whole words ("end game", not "weekend games")."""
+    padded = f" {t} "
+    return any(f" {p} " in padded for p in phrases)
+
+
+def wants_sleep(text: str) -> bool:
+    """"Go to sleep", "take a nap": the host ends any game and naps until a tap."""
+    return _phrase(" ".join(_tokens(text)), _SLEEP)
 
 
 _RESET = re.compile(r"\b(?:reset|restart|start (?:over|again)|begin again)\b")  # not "restarted": "you never restarted?" is talk
