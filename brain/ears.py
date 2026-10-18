@@ -430,3 +430,23 @@ def wants_to_vote(text: str) -> bool:
     """The group is ready to vote before the day's time is up."""
     t = " ".join(_tokens(text))
     return any(p in t for p in _VOTE_NOW)
+
+
+# --- deliberately selected lasting facts -----------------------------------------
+
+def memory_command(text: str) -> tuple[str, str] | None:
+    """An explicit remember/forget/recall command, before game-name parsing.
+
+    Keep the selected fact's words, but normalize spaces. Never infer a fact from chat.
+    """
+    text = " ".join(text.split()).strip()
+    text = re.sub(r"^(?:(?:hey|okay|please)[, ]+)*(?:rob[, ]+)?", "", text, flags=re.IGNORECASE)
+    plain = text.casefold().rstrip(".!?")
+    if plain in ("forget everything", "forget it all", "forget all your memories"):
+        return "clear", ""
+    if plain in ("forget that", "forget the last thing", "forget the last fact"):
+        return "forget", ""
+    if plain in ("what do you remember", "what do you remember about us", "what have you remembered"):
+        return "recall", ""
+    match = re.fullmatch(r"remember\s+(?:that\s+)?(.+)", text, re.IGNORECASE)
+    return ("remember", match[1].strip()) if match else None

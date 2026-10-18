@@ -164,3 +164,32 @@ def test_a_nap_keeps_the_talk_and_a_greeting_clears_it():
     assert ("them", "we just got back from the beach") in woken.memory
     _welcome(table).greet()
     assert ("them", "we just got back from the beach") not in woken.memory and len(woken.memory) == 1
+
+
+def test_explicit_memory_precedes_game_names_and_uses_scripted_confirmation():
+    table = FakeTable()
+    w = _welcome(table)
+    assert w._hear("ROB, remember that we hate Wordle", 0) is None
+    assert w.facts.remembered() == ["we hate Wordle"]
+    assert table.said == [lines.MEMORY_SAVED]
+    assert w._hear("what do you remember?", 1) is None
+    assert "we hate Wordle" in table.said[-1]
+    w._hear("forget that", 2)
+    assert w.facts.remembered() == []
+    assert table.said[-1] == lines.MEMORY_FORGOT
+
+
+def test_remembered_facts_go_to_each_lobby_model_reply_and_survive_reset():
+    table = FakeTable()
+    calls = []
+    table.chat = lambda situation, heard="", **facts: calls.append((situation, facts))
+    w = _welcome(table)
+    w._hear("remember we love games", 0)
+    w.greet()
+    w._chat("hello ROB", False, 10, [])
+    assert all(f["remembered"] == ["we love games"] for _, f in calls)
+    w._hear("reset", 11)
+    assert not w.memory
+    assert w.facts.remembered() == ["we love games"]
+    w._hear("forget everything", 12)
+    assert w.facts.remembered() == []

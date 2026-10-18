@@ -1,7 +1,7 @@
 """What the dashboard can change while the host runs: the personality, the talk (its
-provider, model and effort), the voice and the speaker. Mac only (the referee never
-reads it). One shared object, read at the moment of use, so a change applies to the
-next line."""
+provider, model and effort), the voice and the speaker. The referee mirrors only the
+talk choices in RAM. One shared object, read at the moment of use, so a change
+applies to the next line."""
 
 from __future__ import annotations
 
@@ -84,3 +84,14 @@ def update(**changes: Any) -> dict[str, Any]:
 def snapshot() -> dict[str, Any]:
     with _lock:
         return asdict(current)
+
+
+TALK = ("talk", "talk_model", "effort", "persona")
+
+
+def apply_talk(choices: dict[str, Any]) -> None:
+    """Mirror the Mac's choices on the Pi, without a settings file or any disk write."""
+    with _lock:
+        for name in TALK:
+            if name in choices and _fits(name, choices[name]):
+                setattr(current, name, choices[name])

@@ -696,3 +696,18 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
             seen.add(line)
             unique.append(line)
     return unique
+
+
+# --- selected group facts --------------------------------------------------------
+MEMORY_SAVED = "Got it. I'll remember that."
+MEMORY_DUPLICATE = "I already remember that."
+MEMORY_FULL = "My memory's full. Ask me to forget something first."
+MEMORY_INVALID = "Keep it to a short group fact, without names, seats or private roles."
+MEMORY_FORGOT = "Forgot the last fact you asked me to remember."
+MEMORY_CLEARED = "Forgot everything, including our game totals."
+MEMORY_EMPTY = "I don't remember any facts yet."
+MEMORY_UNAVAILABLE = "I couldn't save that. Try again later."
+
+
+def memories_remembered(facts: list[str]) -> str:
+    return "Here's what I remember. " + " ".join(facts) if facts else MEMORY_EMPTY

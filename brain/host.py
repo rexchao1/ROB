@@ -763,6 +763,14 @@ class Host:
         if line:
             self.say(line)
 
+    def talk_settings(self) -> dict[str, Any]:
+        """The Pi's talk follows the dashboard's choices; keys never travel here."""
+        snapshot = settings.snapshot()
+        choices = {name: snapshot[name] for name in settings.TALK}
+        if self.talk is None:
+            choices["talk"] = "off"
+        return choices
+
     def chat(self, situation: str, heard: str = "", **facts: Any) -> str | None:
         self._check_stop()
         if self.talk is None:

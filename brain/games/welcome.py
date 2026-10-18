@@ -42,7 +42,9 @@ does not fit is replaced by a scripted one.
 The talk is remembered: the last MEMORY lines, both what the group said and what the
 host said (scripted lines too), go to the model with each reply, so it holds a
 conversation and never says the same thing twice. The memory belongs to the table: a
-nap keeps it, and a greeting (the start, "reset") clears it.
+nap keeps it, and a greeting (the start, "reset") clears it. Game end clears it too,
+so the next lobby cannot carry dialogue or game context forward. Nothing is persisted;
+process exit drops all dialogue. Only selected facts and public totals can be durable.
 """
 
 from __future__ import annotations
@@ -54,7 +56,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-from brain import ears, lines
+from brain import ears, facts, lines
 from brain.games.common import Options, State
 from brain.table import Table
 
@@ -72,6 +74,11 @@ def _memory(table: Table) -> deque[tuple[str, str]]:
         return deque(maxlen=MEMORY)
 
 
+def clear_memory(table: Table) -> None:
+    """Drop dialogue on reset, game end or lobby teardown; RAM vanishes on exit."""
+    _memory(table).clear()
+
+
 @dataclass
 class Choice:
     """The group picked a game: what was heard, and the welcome's count if it still stands."""
@@ -83,7 +90,7 @@ class Choice:
 
 
 class Welcome:
-    def __init__(self, table: Table, rng: random.Random, options: Options, listen_window: float) -> None:
+    def __init__(self, table: Table, rng: random.Random, options: Options, listen_window: float, remembered: facts.Facts | None = None) -> None:
         self.table = table
         self.rng = rng
         self.options = options
@@ -94,6 +101,7 @@ class Welcome:
         self.quiet_since = self.asked_at = float("-inf")
         self.offered_at = float("-inf")  # the last question offered the suggestion, so a yes takes it
         self.memory = _memory(table)
+        self.facts = remembered if remembered is not None else facts.for_table(table)
         self.later: list[str] = []
         self.suggestion: str | None = None
         self.nudged = 0
@@ -122,7 +130,7 @@ class Welcome:
     def _opening(self, situation: str, named: bool = False) -> str | None:
         """The talk model's greeting or wake-up line, written ahead, if it fits and asks
         what they want to play (and, `named`, says it is ROB); else None."""
-        line = _fit(self.table.chat(situation, games=lines.game_names()))
+        line = _fit(self.table.chat(situation, games=lines.game_names(), remembered=self.facts.remembered()))
         if line is None or "?" not in line or (named and not re.search(r"\brob\b", line, re.IGNORECASE)):
             return None
         return line
@@ -208,7 +216,12 @@ class Welcome:
     def _hear(self, heard: str, now: float) -> Choice | str | None:
         """What to do with one listen's words: a Choice, RESTART, "" (wait quietly), or
         None (keep talking)."""
+        command = ears.memory_command(heard)
+        if command is not None:
+            self._remember(*command)
+            return None
         if ears.wants_to_reset(heard):
+            self.memory.clear()
             return RESTART
         before = list(self.memory)
         if ears.meaningful(heard, answering=True):
@@ -261,6 +274,29 @@ class Welcome:
             self._chat(heard, answering, now, before)
         return None  # noise
 
+    def _remember(self, command: str, text: str) -> None:
+        """Scripted confirmations, never let a model decide what goes on disk."""
+        try:
+            if command == "remember":
+                result = self.facts.remember(text)
+                line = {"saved": lines.MEMORY_SAVED, "duplicate": lines.MEMORY_DUPLICATE,
+                        "full": lines.MEMORY_FULL, "invalid": lines.MEMORY_INVALID}[result]
+            elif command == "forget":
+                line = lines.MEMORY_FORGOT if self.facts.forget_last() else lines.MEMORY_EMPTY
+                self.memory.clear()  # a forgotten fact must not survive in recent dialogue
+            elif command == "clear":
+                self.facts.forget_all()
+                self.memory.clear()
+                line = lines.MEMORY_CLEARED
+            else:
+                line = lines.memories_remembered(self.facts.remembered())
+        except OSError:
+            line = lines.MEMORY_UNAVAILABLE
+        # Recall may be long and carries facts: keep it out of the dialogue buffer.
+        self.table.say(line)
+        self.quiet_since = self.table.now()
+        self.offered_at = float("-inf")
+
     def _spoken(self, spoken: int) -> None:
         """A headcount said in the welcome: agreed, or a second look (D39, D6)."""
         n = self.seats
@@ -285,7 +321,7 @@ class Welcome:
         question back offers the suggestion only when it names it."""
         if self.chats >= self.options.max_chats or now - self.replied_at < self.options.reply_gap_seconds:
             return
-        facts: dict[str, Any] = {"answering": answering, "games": lines.game_names(), "transcript": [list(e) for e in before]}
+        facts: dict[str, Any] = {"remembered": self.facts.remembered(), "answering": answering, "games": lines.game_names(), "transcript": [list(e) for e in before]}
         if self.seats > 0:
             facts["players"] = self.seats
         if self.suggestion is not None:

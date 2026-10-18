@@ -12,6 +12,41 @@ The referee can start before or after the brain and survives either restarting: 
 
 In test mode (`--test --referee remote`) the brain's virtual clock waits for an attached referee between its calls, so a game played from the Pi tells the fake gateway exactly what the brain alone would (`test/integration/referee.test.ts` runs the referee as a separate process over loopback).
 
+## Facts and talk on the Pi
+
+The Pi runs the lobby, welcome and every game's rules. It also calls the talk model
+when it has internet and a key. It reads the Mac's provider, model, effort and
+personality before each reply. When talk is off, the key is missing or a call fails,
+it asks the Mac's Table instead. A failed Pi call pauses local attempts for a minute.
+Hearing, voice, camera and the robot connection stay on the Mac.
+
+Say "ROB, remember that we hate Wordle", "forget that" for the last selected fact,
+"forget everything" for facts and game totals, or "what do you remember?" in the
+welcome. ROB keeps at most 30 entries, each at most 100 characters. Each game's play
+count and public side-win totals take one entry; a full store rejects new entries.
+Seats, named winners and private assignments never enter those totals.
+
+Facts live in `~/gm-memory/facts.json`, outside `~/gm`, which deploy replaces.
+`--facts-file PATH` or `GM_FACTS_FILE` changes that path. Writes are atomic and happen
+only when facts or totals change. Without the Pi, facts stay in RAM for that Mac
+session. Recent dialogue is RAM only, bounded to 12 lines, kept through naps and
+cleared on greeting/reset, game end and lobby teardown; process exit drops it too.
+Game end clears dialogue so the next lobby cannot inherit the previous conversation.
+ROB keeps no transcripts, turn summaries or private roles on disk and does not
+recognize people across sessions. Only selected group facts and public game totals
+are durable memory.
+
+To give the Pi the Anthropic key deliberately, run on the Mac:
+
+    qnx/deploy.sh --with-key
+
+This deploys the code and copies only `ANTHROPIC_API_KEY` and, when present,
+`ANTHROPIC_WORKSPACE_ID` from the Mac's `.env.local` to `~/gm-memory/talk.env`, mode
+600. Values are never printed. Normal deploys neither copy nor remove keys. The
+referee reads that file at startup; `--key-file PATH` or `GM_PI_KEY_FILE` changes its
+location. No settings file is written on the Pi. After deployment, restart the
+referee with `qnx/ap.sh referee-restart` to load the new code and key.
+
 ## The Pi's own network
 
 The Pi hosts the game's Wi-Fi network itself and stays on QNX; the robot, the Mac and the Pi all join it. `qnx/ap/net.conf` holds the numbers: `gamemaster`, 2.4 GHz channel 6, WPA2 (CCMP), the Pi at 10.77.0.1, the Mac at 10.77.0.2 (set by hand: its Wi-Fi uses a private MAC per network), the robot and anything else from 10.77.0.100-199. No router and no DNS are handed out, so the Mac keeps its internet on the iPhone's USB link. The subnet is not the hotspot's 172.20.10.0/28: the iPhone gives the Mac that same subnet over USB, and the same subnet on two interfaces would send the Pi's traffic to the phone. The password is `GM_WIFI_PASSWORD` in `.env.local` (gitignored; `qnx/ap.sh install` makes one if it is missing).

@@ -197,3 +197,16 @@ def test_a_short_mumble_counts_only_as_an_answer():
 def test_small_talk_kinds():
     assert [ears.small_talk(t) for t in ("hey rob", "how's it going?", "who are you", "tell us a joke", "pass the chips")] == [
         "hello", "how", "who", "joke", None]
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("ROB, remember that we hate Wordle", ("remember", "we hate Wordle")),
+    ("remember we love Mafia", ("remember", "we love Mafia")),
+    ("forget that", ("forget", "")),
+    ("ROB, forget everything!", ("clear", "")),
+    ("what do you remember?", ("recall", "")),
+    ("do you remember Mafia?", None),
+    ("I remember the last game", None),
+])
+def test_memory_commands(text, expected):
+    assert ears.memory_command(text) == expected

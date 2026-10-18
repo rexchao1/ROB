@@ -508,3 +508,18 @@ def test_the_referee_needs_nothing_but_the_standard_library():
     assert done.returncode == 0 and "--table" in done.stdout, done.stderr
     done = subprocess.run([sys.executable, "-S", "-m", "brain.referee", "--table", "ftp://x"], cwd=ROOT, capture_output=True, text=True, timeout=30)
     assert done.returncode == 2 and "http://HOST:PORT" in done.stderr
+
+
+def test_talk_settings_snapshot_travels_without_keys():
+    class Table(FakeTable):
+        def talk_settings(self):
+            return {"talk": "gemini", "talk_model": "gemini-2.5-flash", "effort": "high", "persona": "host"}
+    server = TableServer(Table(), RealClock(), "127.0.0.1", 0).start()
+    remote = RemoteTable(server.url)
+    try:
+        hello = remote.hello()
+        assert hello["talk_settings"] == server.table.talk_settings()
+        assert remote.talk_settings() == server.table.talk_settings()
+    finally:
+        remote.close()
+        server.stop()

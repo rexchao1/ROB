@@ -494,3 +494,13 @@ def test_a_quiet_lobby_listens_in_longer_windows_and_closely_again_once_it_hears
         assert _calls(fake, "listen")[-1]["args"]["duration_ms"] == host.listen_window * 1000
     finally:
         host.stop()
+
+
+def test_talk_settings_snapshot_contains_only_choices(host, monkeypatch):
+    monkeypatch.setattr(settings, "current", settings.Settings(
+        talk="gemini", talk_model="gemini-2.5-flash", effort="high", persona="spooky"))
+    host.talk = object()
+    assert host.talk_settings() == {
+        "talk": "gemini", "talk_model": "gemini-2.5-flash", "effort": "high", "persona": "spooky"}
+    host.talk = None
+    assert host.talk_settings()["talk"] == "off"
