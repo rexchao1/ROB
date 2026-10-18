@@ -108,7 +108,7 @@ class Twenty:
         self.state.report(self.table)
         self.table.mood("win")
         self.table.say(line)
-        self.table.quip("win", game="twenty")
+        self.table.quip("win", game="twenty", outcome="you won this one" if winner == "robot" else "the player beat you")
         self.table.say("Good game." if self.seats == 1 else lines.GOOD_GAME)
 
     def _await(self, nudge: str, ease: str, usable) -> str:
