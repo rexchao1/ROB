@@ -145,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             host, host.clock, args.table_host or "0.0.0.0", args.table_port, args.table_token,
             setup=host._setup, rigs=_rigs(host), hello=_hello(host, args.seed),  # noqa: SLF001
         ).start()
+        host.dash.table = table
         print(f"gamemaster: table for the referee at {_reachable(table)}", flush=True)
     server = serve(host, args.host, args.port)
     print(f"gamemaster: listening on http://{args.host}:{server.server_address[1]} (gateway {args.gateway}, pcm {pcm})", flush=True)
@@ -228,6 +229,7 @@ def make_test_brain(
             host, clock, table_address, table_port, table_token,
             setup=host._setup, rigs=_rigs(host), hello=_hello(host, seed, test=True),  # noqa: SLF001
         )
+        host.dash.table = table
 
         def reset_remote(welcome: bool = False) -> None:
             with resetting:

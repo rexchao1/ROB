@@ -498,10 +498,14 @@ def build_app(device: Device):
     async def healthz(_request: Request) -> Response:
         return JSONResponse({"ok": True})
 
+    async def status(_request: Request) -> Response:  # the real gateway's page: is the robot on it
+        return JSONResponse({"esp32_connected": True})
+
     server = Server("stackchan-mcp", on_list_tools=list_tools, on_call_tool=call_tool)
     routes = [
         Route("/pcm", pcm, methods=["POST"]),
         Route("/healthz", healthz, methods=["GET"]),
+        Route("/status", status, methods=["GET"]),
         Route("/mock/reset", mock_reset, methods=["POST"]),
         Route("/mock/table", mock_table, methods=["POST"]),
         Route("/mock/frame", mock_frame, methods=["POST"]),

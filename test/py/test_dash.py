@@ -56,6 +56,11 @@ def test_state_reports_the_mode_the_referee_and_no_photo_yet(brain):
     assert state["photo"] is None and state["typed_pending"] == 0 and state["yaw"] == 0.0
 
 
+def test_state_reports_the_robot_on_the_gateway_and_no_pi_on_a_local_referee(brain):
+    assert _until(lambda: call(brain.url, "GET", "/dash/api/state")[1]["links"]["rob"] == "connected")
+    assert call(brain.url, "GET", "/dash/api/state")[1]["links"]["pi"] == "unused"
+
+
 def test_what_the_host_says_and_hears_comes_back_as_events_after_an_id(brain, fake):
     call(brain.url, "POST", "/test/hear", {"text": "Hello there"})
     call(brain.url, "POST", "/test/advance", {"seconds": 5})

@@ -66,6 +66,13 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .brand { font-weight: 600; font-size: 15px; white-space: nowrap; }
 .top .spacer { flex: 1; }
 .conn { font-size: 15px; font-weight: 600; color: var(--red); }
+.links { display: flex; gap: 6px; }
+.link { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 16px; background: var(--over); border: 1px solid var(--line); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.link .lv { color: var(--text-2); font-weight: 500; }
+.link[data-s="ok"] .dot { background: var(--green); box-shadow: 0 0 8px rgba(48,209,88,.7); }
+.link[data-s="warn"] .dot { background: var(--amber); }
+.link[data-s="bad"] .dot { background: var(--red); }
 .iconbtn {
   width: 40px; height: 40px; border-radius: var(--r); display: grid; place-items: center; padding: 0;
   background: var(--over); border: 1px solid var(--line-2); color: var(--text);
@@ -482,6 +489,7 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   .lobby { padding: 24px 16px; }
   .lobby .hint { font-size: 15px; }
   .check { padding-right: 8px; }
+  .link .lv { display: none; }
   .check + .check { padding-left: 12px; }
   .game { padding: 8px 16px max(16px, env(safe-area-inset-bottom)); height: auto; min-height: calc(100dvh - 56px); grid-template-rows: auto 1fr auto; }
   .meta { font-size: 15px; gap: 8px; }
@@ -526,6 +534,10 @@ body.is-paused .actions, body.is-paused .fold { visibility: hidden; }
   <div class="brand">Game master</div>
   <span class="spacer"></span>
   <span class="conn" id="conn" role="status" hidden></span>
+  <div class="links" role="status">
+    <span class="link" id="lnRob"><span class="dot"></span>ROB <span class="lv">Checking</span></span>
+    <span class="link" id="lnPi"><span class="dot"></span>Pi <span class="lv">Checking</span></span>
+  </div>
   <button class="pausebtn" id="pauseBtn" hidden>Pause</button>
   <button class="stop" id="stopBtn" hidden>Stop game</button>
   <div class="vol">
@@ -860,6 +872,7 @@ function render() {
   setScene(inGame ? sceneFor(name, g.phase) : "lobby");
   if (inGame) { starting = null; renderGame(s, g, name); } else renderLobby(s);
   renderRobot(s);
+  renderLinks(s);
   renderDrawer(s);
 }
 
@@ -934,14 +947,26 @@ function renderLobby(s) {
   const now = Date.now() / 1000;
   const p = s.photo;
   const robotRecent = (p && now - p.t < 60) || (lastEventT && now - lastEventT < 60);
-  setCheck("ckRobot", !connected ? "bad" : robotRecent || s.mode === "test" ? "" : "idle",
-    !connected ? "Offline" : s.mode === "test" ? "Test mode" : robotRecent ? "Ready" : "Quiet");
+  const away = s.links && (s.links.rob === "away" || s.links.rob === "no gateway");
+  setCheck("ckRobot", !connected || away ? "bad" : robotRecent || s.mode === "test" ? "" : "idle",
+    !connected ? "Offline" : away ? "Not connected" : s.mode === "test" ? "Test mode" : robotRecent ? "Ready" : "Quiet");
   if (p) {
     const n = (p.faces || []).length, old = now - p.t > 90;
     setCheck("ckCam", n ? "" : "warn", !n ? "Nobody seen" : (old ? "Saw " : "Sees ") + n + (n === 1 ? " person" : " people"));
   } else setCheck("ckCam", "idle", "No photo yet");
   setCheck("ckVoice", lastSayT ? "" : "idle", lastSayT ? "Working" : "Not heard yet");
 }
+// the robot on the gateway and the Pi's referee, from state.links
+const ROB_LINK = { connected: ["ok", "Connected"], away: ["bad", "Not on Wi-Fi"], "no gateway": ["bad", "No gateway"], checking: ["", "Checking"] };
+const PI_LINK = { connected: ["ok", "Connected"], waiting: ["warn", "Waiting"], unused: ["", "Not used"] };
+function renderLinks(s) {
+  const l = s.links || {};
+  const rob = !connected ? ["bad", "Unknown"] : ROB_LINK[l.rob] || ["", l.rob || "Unknown"];
+  const pi = !connected ? ["bad", "Unknown"] : PI_LINK[l.pi] || ["", l.pi || "Unknown"];
+  setLink("lnRob", rob, l.rob === "away" ? "The robot is off the gateway: check its power and Wi-Fi" : l.rob === "no gateway" ? "The gateway is not answering" : "");
+  setLink("lnPi", pi, l.pi === "unused" ? "The games run on this Mac" : l.pi === "waiting" ? "Waiting for the Pi's referee to call in" : "");
+}
+function setLink(id, [cls, text], title) { const el = $(id); el.dataset.s = cls; el.lastElementChild.textContent = text; el.title = title; }
 function setCheck(id, cls, text) { const el = $(id); el.className = "check " + cls; el.lastElementChild.textContent = text; }
 function fmtAge(a) { a = Math.max(0, Math.round(a)); return a < 60 ? a + " s" : a < 3600 ? Math.floor(a / 60) + " min" : Math.floor(a / 3600) + " h"; }
 document.querySelectorAll(".gcard").forEach((c) => c.addEventListener("click", async () => {

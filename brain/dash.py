@@ -24,6 +24,11 @@ worker thread of the Dash crops each seat's best sighting and reads its colours 
 avatar (brain/portraits.py), so the sweep is not slowed. The crops live in memory only,
 replaced at the next count and dropped by host.clear(); they never leave this machine
 except to the dashboard's page.
+
+The links, for the page's ROB and Pi lights: the robot is asked of the gateway's own
+/status page (not a tool call, so it never waits behind a listen), at most every
+LINK_EVERY seconds while the page is open; the Pi is the referee's Table, attached
+while the referee has called within its lease (only under --referee remote).
 """
 
 from __future__ import annotations
@@ -33,6 +38,8 @@ import json
 import queue
 import threading
 import time
+import urllib.parse
+import urllib.request
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
@@ -58,6 +65,7 @@ SETTINGS_FILE = Path(__file__).resolve().parent.parent / "gamemaster.settings.js
 VOLUME_RETRY = 30.0  # seconds between tries at reading the volume while it is unknown
 ROBOT_FACES = ("idle", "card", "off")
 SWEEP_MAX = 64  # photos kept from one counting sweep (it takes 7 to 19)
+LINK_EVERY = 3.0  # seconds between checks of the robot's link while the page asks
 
 
 def _hex(rgb: tuple[int, int, int]) -> str:
@@ -149,6 +157,10 @@ class Dash:
         self._volume: int | None = None
         self._volume_reading = False
         self._volume_tried = 0.0
+        self.table: Any = None  # the referee's TableServer under --referee remote, set by the caller
+        self._rob_link = "checking"  # "connected", "away" (the gateway has no robot), "no gateway", "checking"
+        self._rob_checking = False
+        self._rob_checked = 0.0
         # The seats' faces: the counting sweep's photos, then the worker's crops and avatars.
         self._sweep: list[tuple[np.ndarray, list[vision.Face], float]] | None = None
         self._count_id = 0  # one per count, never reset: the avatars' seeds
@@ -271,7 +283,55 @@ class Dash:
             "robot": self.robot(),
             "face_style": face_style(),
             "seats_info": self.seats_info(seats),
+            "links": self.links(),
         }
+
+    # --- the robot's and the Pi's links ---------------------------------------------
+
+    def links(self) -> dict[str, str]:
+        """{"rob": "connected"|"away"|"no gateway"|"checking", "pi": "connected"|"waiting"|"unused"}:
+        whether the robot is on the gateway, and whether the Pi's referee is attached."""
+        self._check_rob_soon()
+        if self.referee != "remote":
+            pi = "unused"
+        else:
+            pi = "connected" if self.table is not None and self.table.attached() else "waiting"
+        with self._lock:
+            return {"rob": self._rob_link, "pi": pi}
+
+    def _check_rob_soon(self) -> None:
+        with self._lock:
+            if self._rob_checking or time.monotonic() - self._rob_checked < LINK_EVERY:
+                return
+            self._rob_checking = True
+            self._rob_checked = time.monotonic()
+
+        def check() -> None:
+            link = self._rob_status()
+            with self._lock:
+                self._rob_link = link
+                self._rob_checking = False
+
+        threading.Thread(target=check, name="dash-rob-link", daemon=True).start()
+
+    def _rob_status(self) -> str:
+        gateway = getattr(self.host.body, "gateway", None)
+        url = getattr(gateway, "url", None)
+        if not url:
+            return "connected" if self.mode == "test" else "no gateway"
+        u = urllib.parse.urlsplit(url)
+        req = urllib.request.Request(f"{u.scheme}://{u.netloc}/status")
+        if getattr(gateway, "token", None):
+            req.add_header("Authorization", f"Bearer {gateway.token}")
+        try:
+            with urllib.request.urlopen(req, timeout=2) as res:
+                data = json.loads(res.read() or b"{}")
+        except Exception:
+            return "no gateway"
+        if not isinstance(data, dict):
+            return "no gateway"
+        on = data.get("esp32_connected", data.get("connected"))
+        return "connected" if on else "away"
 
     def say(self, text: str) -> None:
         """Speak a line now, on its own thread, through the host's voice and body."""
