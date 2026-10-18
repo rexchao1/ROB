@@ -287,13 +287,34 @@ def echoes_prompt(text: str) -> bool:
     return bool(said) and said in " ".join(plain(PROMPT)) and sum(game in said for game in GAMES) >= 3
 
 
+# What Whisper says over silence or room noise, learned from subtitled video, as the
+# whole of a segment. Nobody needs these to play: no game answers with them.
+STOCK = {
+    "you", "thank you", "thanks", "thank you very much", "thank you so much", "thanks for watching",
+    "thank you for watching", "thanks for listening", "please subscribe", "like and subscribe",
+    "please wait", "bye", "bye bye", "we'll be right back", "see you next time",
+    "see you in the next video", "all in the community", "subtitles by the amara org community",
+}
+
+
+def stock(text: str) -> str:
+    """Why a segment's text is Whisper filling a quiet room, or "" when it may be someone:
+    no word in it at all ("!", "! ."), or one of the STOCK lines."""
+    words = plain(text)
+    if not words:
+        return "no words in it"
+    if " ".join(words) in STOCK:
+        return "a stock line Whisper makes up from silence"
+    return ""
+
+
 def judge(segments: list[dict], seconds: float) -> tuple[str, str]:
     """Whisper's segments for `seconds` of speech, to the words someone said and a note on
     what was thrown out and why ("" when nothing was)."""
     kept, notes = [], []
     for segment in segments:
         text = str(segment.get("text", "")).strip()
-        why = failed(segment) if text else ""
+        why = (failed(segment) or stock(text)) if text else ""
         if why:
             notes.append(f"dropped {text[:80]!r} as made up: {why}")
         elif text:
@@ -305,6 +326,10 @@ def judge(segments: list[dict], seconds: float) -> tuple[str, str]:
         text = short
     if echoes_prompt(text):
         notes.append(f"dropped {text!r} as the prompt read back")
+        text = ""
+    said = plain(text)
+    if len(said) == 1 and len(said[0]) == 1 and not said[0].isdigit():  # "d": a lone letter answers nothing
+        notes.append(f"dropped {text!r} as a lone letter")
         text = ""
     words = len(plain(text))
     if words > 4 + WORDS_PER_S * seconds:

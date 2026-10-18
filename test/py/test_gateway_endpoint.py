@@ -154,3 +154,30 @@ def test_a_hallucinated_loop_is_dropped(monkeypatch):
     stubs.voice = [{"start": 0, "end": 48000}]
     stubs.said = [seg("The name." * 60, logprob=-0.4, ratio=12.0)]
     assert stubs.hear() == ""
+
+
+def test_what_whisper_made_of_a_quiet_room_is_dropped():
+    # As logged live, right after ROB woke with nobody talking to it, with confident
+    # stats: only the text gives these away.
+    for junk in ("!", "! .", " ! ", "...", "d", "D.", "Thank you.", "thank you", "Thanks for watching!", "Please wait.",
+                 "You", "Bye.", "All in the community.", "Subtitles by the Amara.org community"):
+        assert gateway.judge([seg(junk)], 1.0)[0] == "", junk
+    assert "no words" in gateway.judge([seg("!")], 1.0)[1]
+    assert "lone letter" in gateway.judge([seg("d")], 1.0)[1]
+    assert "stock line" in gateway.judge([seg("Thank you.")], 1.0)[1]
+    # a stock line tacked onto real words goes, the words stay
+    assert gateway.judge([seg("Wordle."), seg("Thank you.")], 1.0)[0] == "Wordle."
+
+
+def test_short_real_answers_are_kept():
+    for said in ("Yes.", "No.", "Next.", "Yeah.", "Nope.", "7", "Seven.", "Three!", "10", "Maya.", "Sam?", "Okay.",
+                 "Got it.", "Show me.", "Resume.", "Mafia", "c r a n e", "Thank you, next.", "Bye, ROB."):
+        assert gateway.judge([seg(said)], 1.0)[0] == said, said
+
+
+def test_a_window_whisper_hears_as_punctuation_is_silence(monkeypatch):
+    stubs = Stubs(monkeypatch)
+    stubs.voice = [{"start": 0, "end": 16000}]
+    for junk in ("!", "d", "Thank you."):
+        stubs.said = [seg(junk)]
+        assert stubs.hear() == "", junk
