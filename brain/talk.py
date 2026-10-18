@@ -630,8 +630,8 @@ class Talk:
                 f"The games you can host are {lines.game_names()}.\n"
                 "Exactly two short sentences, under twenty words in all. First, hi the way this personality "
                 f"would, saying you're ROB, with one small funny touch about {random.choice(GREETING_TOUCHES)}. "
-                "Then ask what they want to play, or how many of them there are so you can pick. Fresh words, "
-                "not a stock opener; name no other game and use no numbers. "
+                "Then make them feel welcome. Ask nothing: your next line lists the games. Fresh words, "
+                "not a stock opener; name no game and use no numbers. "
                 "Output only the line."
             )
         if situation == "welcome.woke":

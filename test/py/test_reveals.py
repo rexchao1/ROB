@@ -124,24 +124,31 @@ def test_imposter_surviving_shows_their_seat_then_the_word():
 ROUNDS = [{"spectrum": "cold - hot", "target": 7}, {"spectrum": "bad - good", "target": 3}, {"spectrum": "quiet - loud", "target": 9}]
 
 
-def test_wavelength_each_target_and_the_total_show_on_the_screen():
+WAVELENGTH_ROUNDS = [{"target": 7}, {"target": 3}, {"target": 9}]
+
+
+def test_wavelength_each_number_and_the_total_show_on_the_screen():
     t = FakeTable(5)
-    t.reply(lines.WAVELENGTH_TALK, "six", "three", "five")
-    games.play("wavelength", t, random.Random(2), rig={"psychic": 2, "rounds": ROUNDS})
+    t.reply(lines.guesser_number(2), "six")
+    t.reply(lines.guesser_number(3), "three")
+    t.reply(lines.guesser_number(4), "five")
+    games.play("wavelength", t, random.Random(2), rig={"guesser": 2, "rounds": WAVELENGTH_ROUNDS})
     shown = _revealed(t)
-    assert shown[lines.target_was(7)] == Card("7", "cold - hot", "target")
-    assert shown[lines.target_was(9)] == Card("9", "quiet - loud", "target")
+    assert shown[lines.target_was(7)] == Card("7", "out of ten", "target")
+    assert shown[lines.target_was(9)] == Card("9", "out of ten", "target")
     assert shown[lines.total(9 + 10 + 6)] == Card("25", "points", "score")
     _prepared_before_each_reveal(t)
 
 
 def test_wavelength_the_total_is_prepared_as_soon_as_the_last_guess_is_in():
     t = FakeTable(5)
-    t.reply(lines.WAVELENGTH_TALK, "six", "three", "five")
-    games.play("wavelength", t, random.Random(2), rig={"psychic": 2, "rounds": ROUNDS})
+    t.reply(lines.guesser_number(2), "six")
+    t.reply(lines.guesser_number(3), "three")
+    t.reply(lines.guesser_number(4), "five")
+    games.play("wavelength", t, random.Random(2), rig={"guesser": 2, "rounds": WAVELENGTH_ROUNDS})
     entries = [(kind, value) for _, kind, value in t.log]
     last = max(i for i, (kind, _) in enumerate(entries) if kind == "prepare")
-    assert entries[last][1] == [Card("9", "quiet - loud", "target"), wavelength.total_card(25)]
+    assert entries[last][1] == [Card("9", "out of ten", "target"), wavelength.total_card(25)]
     # Before the round's points line, so the upload runs while it is said.
     assert entries[last + 1] == ("say", "Six points.")
 

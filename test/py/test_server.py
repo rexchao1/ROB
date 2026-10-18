@@ -130,7 +130,7 @@ def test_python_m_brain_test_runs_against_the_fake_gateways_cli():
         assert call(url, "POST", "/test/reset") == (200, {"ok": True, "now": 0.0})
         assert call(url, "POST", "/test/advance", {"seconds": 5}) == (200, {"now": 5.0})
         status, calls = call(fake_url, "GET", "/mock/calls")
-        assert status == 200 and [c["tool"] for c in calls][-1] == "listen"
+        assert status == 200 and [c["tool"] for c in calls][-2:] == ["listen", "get_touch_state"]
     finally:
         for proc in (brain, fake):
             if proc is not None:

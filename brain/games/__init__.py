@@ -17,7 +17,7 @@ comes from the rng:
 
   mafia       {"mafia": [1], "doctor": 5}
   imposter    {"word": "beach", "imposter": 3}
-  wavelength  {"psychic": 2, "rounds": [{"spectrum": "cold - hot", "target": 7}, ...]}
+  wavelength  {"guesser": 2, "rounds": [{"target": 7}, ...]}
 
 The state each game reports (Table.report, served at GET /test/state):
 
@@ -34,7 +34,7 @@ The state each game reports (Table.report, served at GET /test/state):
   over         True once the game has ended
   winner       "mafia" | "village" | "players" | "imposter", or None (no winner, or
                Wavelength, or a stopped game)
-  psychic, next_psychic, scores, total    Wavelength only
+  guesser, next_guesser, scores, total    Wavelength only
 """
 
 from __future__ import annotations
@@ -95,6 +95,6 @@ def play(
         state.over = True
         state.phase = "over"
         state.report(table)
-        outcome = "reset" if stop.reset else "stopped"
+        outcome = "reset" if stop.reset else "slept" if stop.sleep else "stopped"
     table.mood("idle")
     return outcome

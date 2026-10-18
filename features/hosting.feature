@@ -12,34 +12,17 @@ Feature: Hosting the table
     Then the players see the host sweep the whole table, far left to far right
     And the players hear the host say "Five of you. Player one is on my left, then two, three, four, five going clockwise."
 
-  @D6
-  Scenario: A spoken count that disagrees with the host's count stops the start
+  @D116 @D6
+  Scenario: A spoken count that disagrees with the host's count wins
     Given the host has counted five faces
     When someone says "there are six of us"
-    Then the players hear the host say "I only see five. Who's hiding?"
-    And no game has started
+    Then the game starts with six players
 
-  @D89 @D6
-  Scenario: A disagreement without a number gets a second sweep
-    Given the host has counted five faces
-    When someone says "there are six of us" and then "no, that's not right"
-    Then the players hear the host say "I only see five. Who's hiding?"
-    And the players see the host sweep the whole table again
-    And no game has started
-
-  @D89
-  Scenario: After three disagreements the host gives up
-    Given the host has counted five faces
-    When someone says "there are six of us" three times over
-    Then the players hear the host say "Let's try again when everyone's ready."
-    And no game has started
-
-  @D90
-  Scenario: A count below the host's gets a second sweep
+  @D116 @D90
+  Scenario: A count below the host's wins too
     Given the host has counted five faces
     When someone says "we're four"
-    Then the players hear the host say "I see five. Is someone just watching?"
-    And the players see the host sweep the whole table again
+    Then the game starts with four players
 
   @D98
   Scenario Outline: Each game has a smallest table

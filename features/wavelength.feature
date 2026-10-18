@@ -1,24 +1,31 @@
 Feature: Wavelength
-  The psychic sees a target number on the private screen and gives a clue;
-  the group guesses; the host scores by distance. Three rounds, the psychic
-  rotates. Serves N1.
+  Everyone but the guesser sees a secret number from one to ten on the private
+  screen. The guesser gives each of them a category and each names something in
+  it that fits the number (one the least, ten the most); then the guesser says the
+  number and the host scores by distance. Three rounds, the guesser rotates.
+  Serves N1.
 
   Background:
     Given five friends are playing Wavelength with the host in the middle
 
-  @D21
-  Scenario: The psychic alone sees the target
-    Given Player two is the psychic this round and the spectrum is "cold - hot"
-    And the target is 7 on a scale of one to ten
-    When the host turns to Player two and says "Player two, lean in."
-    And only Player two's face is close to the host and facing it
-    Then Player two sees "7" and "cold - hot" on the host's screen
+  @D117
+  Scenario: Everyone but the guesser sees the number
+    Given Player two is the guesser this round and the number is 7
+    When the round's number is dealt
+    Then Players three, four, five and one each saw "7" and "out of ten" alone on the host's screen
+    And Player two was not called to lean in
 
-  @D21 @D103
-  Scenario Outline: A spoken guess scores by distance from the target
-    Given Player two is the psychic this round and the spectrum is "cold - hot"
-    And the target is 7 on a scale of one to ten
-    And Player two has given a clue
+  @D117
+  Scenario: The guesser gives each player a category
+    Given Player two is the guesser this round and the number is 7
+    When the round's number is dealt
+    Then the players hear the host say "Player two, give Player three a category."
+    And the players hear the host say "Player three, name something that fits the number."
+
+  @D21 @D103 @D117
+  Scenario Outline: The guesser's number scores by distance from the secret number
+    Given Player two is the guesser this round and the number is 7
+    And every player has named something for Player two
     When someone says "<guess>"
     Then the players hear the host say "<score>"
 
@@ -31,9 +38,8 @@ Feature: Wavelength
 
   @D95
   Scenario Outline: A guess is read from a short answer
-    Given Player two is the psychic this round and the spectrum is "cold - hot"
-    And the target is 7 on a scale of one to ten
-    And Player two has given a clue
+    Given Player two is the guesser this round and the number is 7
+    And every player has named something for Player two
     When someone answers "<said>"
     Then the players hear the host say "<score>"
 
@@ -45,24 +51,22 @@ Feature: Wavelength
 
   @D95
   Scenario: A number inside a longer sentence is talk
-    Given Player two is the psychic this round and the spectrum is "cold - hot"
-    And the target is 7 on a scale of one to ten
-    And Player two has given a clue
-    When someone says "it's definitely hot, like an eight, or maybe more"
+    Given Player two is the guesser this round and the number is 7
+    And every player has named something for Player two
+    When someone says "it's definitely big, like an eight, or maybe more"
     Then the players hear the host say "What's your number?" before any points
 
   @D100
   Scenario: No guess the host can read scores zero
-    Given Player two is the psychic this round and the spectrum is "cold - hot"
-    And the target is 7 on a scale of one to ten
-    And Player two has given a clue
+    Given Player two is the guesser this round and the number is 7
+    And every player has named something for Player two
     When nobody says a number for eight listens
     Then the players hear the host say "No guess. Zero points."
     And the players hear the host say "It was seven."
 
-  @D103 @D21
-  Scenario: The psychic rotates and the total is announced after three rounds
-    Given Player five was the psychic in the first round and the spectrum is "cold - hot"
+  @D103 @D21 @D117
+  Scenario: The guesser rotates and the total is announced after three rounds
+    Given Player two is the guesser this round and the number is 7
     And three rounds have been played scoring nine, ten and four
     Then the players hear the host say "Twenty-three points. Nice work."
-    And the psychic for the next round would be Player three
+    And the guesser for the next round would be Player three

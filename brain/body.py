@@ -43,6 +43,8 @@ SAMPLE_RATE = 16_000
 QUEUE_FULL = -32000
 TOUCH_SAME_EVENT = 0.5  # seconds: two reports of an event this close are the same event
 TOUCH_SLACK = 1.5  # seconds: an event this close to a counted hold is that hold ending
+STREAM_STEP = 0.1  # seconds of audio per piece when a line is streamed so it can be cut off
+STREAM_LEAD = 1.0  # seconds a streamed line runs ahead of real time, so the gateway never runs dry
 PLAYED_AFTER = 0.2  # seconds past a line's length by which this Mac has played it: afplay starts in about 60 ms, the built-in speakers add 13 (measured 2026-10-18)
 
 
@@ -69,11 +71,20 @@ class Gateway:
         self._protocol = PROTOCOL_VERSION
         self._lock = threading.Lock()  # the session handshake and the request ids
         self._next_id = 0
+        self.dropped = False  # a call found the robot gone: on its return it shows its stock face until ROB's set is loaded again
 
     # --- tools -------------------------------------------------------------------
 
     def call(self, name: str, args: dict[str, Any] | None = None, timeout: float | None = None) -> ToolResult:
         """Call one tool and return its answer; raise BodyError on any refusal."""
+        try:
+            return self._call(name, args, timeout)
+        except BodyError as e:
+            if "ESP32" in str(e):
+                self.dropped = True
+            raise
+
+    def _call(self, name: str, args: dict[str, Any] | None, timeout: float | None) -> ToolResult:
         result = self._request("tools/call", {"name": name, "arguments": args or {}}, timeout)
         text = "\n".join(item.get("text", "") for item in result.get("content", []) if item.get("type") == "text")
         images = [base64.b64decode(item["data"]) for item in result.get("content", []) if item.get("type") == "image"]
@@ -279,24 +290,31 @@ class Body:
         return image
 
     def listen(self, seconds: float) -> str:
-        """Transcribe the next `seconds` of the microphone (faster-whisper on the gateway)."""
+        """Transcribe the next `seconds` of the microphone (faster-whisper on the gateway).
+        With the mic setting on "mac" the gateway records this Mac's microphone instead
+        of the robot's (scripts/gateway.py; a plain gateway ignores the ask)."""
+        from brain import settings
+
         ms = int(min(30_000, max(100, round(seconds * 1000))))
-        answer = self.gateway.call(
-            "listen",
-            {"duration_ms": ms, "engine": "faster-whisper", "language": "en", "motion": "none"},
-            timeout=ms / 1000 + 60,
-        )
+        args: dict[str, Any] = {"duration_ms": ms, "engine": "faster-whisper", "language": "en", "motion": "none"}
+        if settings.current.mic == "mac":
+            args["source"] = "mac"
+        answer = self.gateway.call("listen", args, timeout=ms / 1000 + 60)
         text = answer.data.get("text", "") if isinstance(answer.data, dict) else ""
         return text if isinstance(text, str) else ""
 
-    def play(self, pcm: bytes, mouth: bool = True) -> None:
+    def play(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
         """Play 16 kHz mono s16le PCM on the speaker; returns once it has played. mouth:
         on the Mac's speaker, move the robot's mouth with it (False while a card is up,
-        since a mouth frame is the whole face and would cover the card)."""
+        since a mouth frame is the whole face and would cover the card). abort: setting
+        it cuts the line off (within about STREAM_LEAD seconds on the robot, at once on
+        the Mac); the robot's line is then streamed at the pace it plays."""
         if not pcm:
             return
         if self.speaker == "mac":
-            if mouth:
+            if abort is not None:
+                self._play_here(pcm, mouth=mouth, abort=abort)
+            elif mouth:
                 self._play_here(pcm)
             else:
                 self._play_here(pcm, mouth=False)
@@ -305,7 +323,8 @@ class Body:
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         seconds = len(pcm) / (SAMPLE_RATE * 2)
-        req = urllib.request.Request(self.pcm_url, data=pcm, method="POST", headers=headers)
+        data: Any = pcm if abort is None else _paced(pcm, abort)  # an iterable goes out chunked
+        req = urllib.request.Request(self.pcm_url, data=data, method="POST", headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=seconds + 15) as res:
                 res.read()
@@ -314,7 +333,7 @@ class Body:
         except (urllib.error.URLError, OSError) as e:
             raise BodyError(f"POST /pcm: {e}") from None
 
-    def _play_here(self, pcm: bytes, mouth: bool = True) -> None:
+    def _play_here(self, pcm: bytes, mouth: bool = True, abort: threading.Event | None = None) -> None:
         """Play on this machine's audio output (afplay) while the robot moves its mouth;
         returns once the line has played. afplay lingers about 0.8 s after the sound
         ends before it exits, so it is waited for only the line's length and
@@ -337,6 +356,10 @@ class Body:
                     self.gateway.call("set_mouth_sequence", {"steps": mouth_steps(pcm)})
             except BodyError:
                 pass  # the line still plays; only the mouth stays still
+            if abort is not None and abort.wait(max(0.0, played - time.monotonic())):
+                player.terminate()  # cut off
+                threading.Thread(target=player.wait, name="afplay", daemon=True).start()
+                return
             try:
                 code = player.wait(timeout=max(0.0, played - time.monotonic()))
             except subprocess.TimeoutExpired:
@@ -472,3 +495,16 @@ def mouth_steps(pcm: bytes, step_ms: int = 100, max_steps: int = 256) -> list[di
     for step in steps:
         step["duration_ms"] = min(10_000, step["duration_ms"])
     return steps
+
+
+def _paced(pcm: bytes, abort: threading.Event):
+    """`pcm` in STREAM_STEP pieces, sent no more than STREAM_LEAD seconds ahead of the
+    time it plays; ends early, cutting the line off, once `abort` is set."""
+    step = int(SAMPLE_RATE * STREAM_STEP) * 2
+    start = time.monotonic()
+    for i in range(0, len(pcm), step):
+        ahead = i / (SAMPLE_RATE * 2) - (time.monotonic() - start) - STREAM_LEAD
+        if (ahead > 0 and abort.wait(ahead)) or abort.is_set():
+            return
+        yield pcm[i : i + step]
+

@@ -60,9 +60,12 @@ export const hosting: Definer<World> = (reg) => {
     expect((await state(w)).seats).toBe(n)
   })
 
-  reg.define(/^no game has started$/, async (w) => {
-    expect((await state(w)).game, 'the game').toBeNull()
-    expect((await heard(w)).filter((line) => LEAN_IN.test(line)), 'anyone called to lean in').toEqual([])
+  reg.define(/^the game starts with (\w+) players$/, async (w, players) => {
+    const n = numberFrom(players)
+    await until(w, `the game started with ${n} players`, async () => {
+      const s = await state(w)
+      return s.game !== null && s.seats === n
+    }, 10)
   })
 
   // --- D7, D8: the private screen ----------------------------------------------------------

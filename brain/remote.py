@@ -535,7 +535,7 @@ class RemoteTable:
                 raise TableRefused("another referee took the table")
             type_name, message = str(answer.get("type") or "Error"), str(answer.get("message") or "")
             if type_name == "GameStopped":  # a stop said during the deal: the game ends, as at any listen
-                raise GameStopped(reset=message == "reset")
+                raise GameStopped(reset=message == "reset", sleep=message == "sleep")
             raise RemoteError(type_name, message)
 
     def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:

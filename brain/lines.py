@@ -287,8 +287,9 @@ def word_was(word: str) -> str:
 # --- Wavelength (D21) --------------------------------------------------------------
 
 WAVELENGTH_INTRO = (
-    "Let's play Wavelength. One of you sees a number from one to ten on a scale. "
-    "Give a clue, and everyone else guesses the number."
+    "Let's play Wavelength. Each round, everyone but the guesser sees a secret number from one to ten. "
+    "The guesser gives each of you a category, and you name something in it that fits the number: "
+    "one is the least, ten is the most. Then the guesser says the number."
 )
 
 
@@ -296,11 +297,22 @@ def round_line(n: int) -> str:
     return f"Round {number_word(n)}."
 
 
-def psychic_clue(seat: int) -> str:
-    return f"{player(seat)}, give us your clue."
+def guesser_turn(seat: int) -> str:
+    return f"{player(seat)}, you're guessing this round. No peeking at my screen."
 
 
-WAVELENGTH_TALK = "Everyone else, talk it over. Tell me your number when you're ready."
+def ask_category(guesser: int, seat: int) -> str:
+    return f"{player(guesser)}, give {player(seat)} a category."
+
+
+def category_answer(seat: int) -> str:
+    return f"{player(seat)}, name something that fits the number."
+
+
+def guesser_number(seat: int) -> str:
+    return f"{player(seat)}, what's the number?"
+
+
 WAVELENGTH_AGAIN = "What's your number?"
 NO_GUESS = "No guess. Zero points."
 
@@ -342,11 +354,11 @@ def flavor(moment: str, rng: random.Random) -> str:
 # --- the welcome (D38 to D43) ------------------------------------------------------------
 
 GREETINGS = (
-    "Hey, everybody! I'm ROB, and I'm hosting tonight. What are we playing? Name a game, or tell me how many of you there are and I'll pick.",
-    "Oh good, people! Hi, I'm ROB. What are we in the mood for? Name a game, or tell me how many you are and I'll pick one.",
-    "Hey hey, it's game night! ROB here, and I've been waiting all day. What sounds fun? Name a game, or tell me how many of you there are.",
-    "Hi, friends! I'm ROB, your host. So, what are we playing? Say a game, or how many of you there are.",
-    "Well, look who showed up! I'm ROB. What do you feel like playing? Name a game, or tell me how many you are.",
+    "Hey, everybody! I'm ROB, and I'm so glad you're here. Pull up a chair, tonight is game night!",
+    "Oh good, people! Hi, I'm ROB, your host. Welcome, welcome, make yourselves at home.",
+    "Hey hey, it's game night! I'm ROB, and I've been waiting all day for you. Come on in.",
+    "Hi, friends! I'm ROB, and I'll be your host tonight. It's really good to see you.",
+    "Well, look who showed up! Welcome! I'm ROB, and I promise to keep score honestly. Mostly.",
 )
 LOOKING = (
     "Okay, let me get a look at you all.",
@@ -455,8 +467,9 @@ RULES = {  # what a game is, said when someone asks; the talk model reads them t
         "You each give a one-word clue, then vote on who's faking it. Want to play it?"
     ),
     "wavelength": (
-        "In Wavelength, one of you sees a secret number on a scale and gives a clue. "
-        "Everyone else talks it over and guesses the number. Want to play it?"
+        "In Wavelength, everyone but the guesser sees a secret number from one to ten. "
+        "The guesser gives each of you a category, you name something that fits the number, "
+        "and then the guesser says it. Want to play it?"
     ),
 }
 
@@ -492,7 +505,15 @@ def fits(seats: int) -> list[str]:
 
 def games_any() -> str:
     """Asked what the host has before anyone said how many: every game built."""
-    return f"I've got {game_names()}. Which one sounds good?"
+    return f"I've got {game_names()}. {MAFIA_NEEDS} Which one sounds good?"
+
+
+MAFIA_NEEDS = "Mafia needs at least four of you."
+
+
+def games_menu() -> str:
+    """The welcome's second line: every game built, Mafia's minimum, and the question."""
+    return f"Tonight I can host {game_names()}. {MAFIA_NEEDS} Pick one, or tell me how many of you there are and I'll choose."
 
 
 def games_list(seats: int) -> str:
@@ -662,8 +683,8 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         PICK_LIVING, NO_VOTES, DEAL_ROLES, HEADS_DOWN, MAFIA_WHISPER, MAFIA_AGAIN, MAFIA_DOWN,
         DOCTOR_WHISPER, DOCTOR_AGAIN, DOCTOR_DOWN, MORNING, NOBODY_DIED, TIME_VOTE, EARLY_VOTE,
         MAFIA_WIN, VILLAGE_WINS, IMPOSTER_INTRO, DEAL_WORDS, CLUES, IMPOSTER_VOTE, WAVELENGTH_INTRO,
-        WAVELENGTH_TALK, WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
-        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(),
+        WAVELENGTH_AGAIN, NO_GUESS, discussion(120), time_left(60), SPEAKER_MAC, SPEAKER_ROBOT,
+        NAP, *WOKE, *LOOKING, HOW_MANY, games_any(), games_menu(),
     ]
     out += [mafia_intro(1), mafia_intro(2)]
     out += [too_few(g, m) for g, m in MINIMUM.items()]
@@ -673,7 +694,8 @@ def fixed_lines(max_seats: int = 10) -> list[str]:
         out += [count_line(n), only_see(n), see_more(n)]
         out += [lean_in(n), lean_in_again(n), come_back(n), who(n), who_again(n), voted_out(n), warn(n), sit_out(n), killed(n)]
         out += [was(n, MAFIA), was(n, DOCTOR), was(n, VILLAGER), village_wins(n), mafia_were([n])]
-        out += [clue(n), was_imposter(n), imposter_survives(n), psychic_clue(n)]
+        out += [clue(n), was_imposter(n), imposter_survives(n), guesser_turn(n), category_answer(n), guesser_number(n)]
+        out += [ask_category(n, k) for k in range(1, max_seats + 1) if k != n]
     out += [target_was(t) for t in range(1, 11)]
     out += [round_line(n) for n in (1, 2, 3)]
     out += [points(s) for s in range(0, 11)]

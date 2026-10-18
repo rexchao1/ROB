@@ -6,6 +6,7 @@ applies to the next line."""
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -21,14 +22,18 @@ class Settings:
     voice: str = "piper"  # piper | eleven (ElevenLabs live, needs ELEVENLABS_API_KEY)
     eleven_voice: str | None = None  # a key of brain.personas.VOICES; None: the personality's or the default
     speaker: str = "robot"  # robot | mac: where ROB's voice plays (Host.set_speaker)
+    # robot | mac: which microphone ROB hears through (Body.listen; the Mac's needs scripts/gateway.py).
+    # The Mac's by default on a Mac: the robot's beeps each time it opens and cannot hear while ROB talks.
+    mic: str = "mac" if sys.platform == "darwin" else "robot"
 
 
-SAVED = ("persona", "eleven_voice", "talk", "talk_model", "effort", "voice", "speaker")  # kept across starts
+SAVED = ("persona", "eleven_voice", "talk", "talk_model", "effort", "voice", "speaker", "mic")  # kept across starts
 CHOICES = {  # the only values these take; brain.talk.EFFORTS is the effort's
     "talk": ("anthropic", "gemini", "ollama", "off"),
     "effort": ("low", "medium", "high", "max"),
     "voice": ("piper", "eleven"),
     "speaker": ("robot", "mac"),
+    "mic": ("robot", "mac"),
 }
 _MAY_BE_NONE = ("talk_model", "eleven_voice")
 

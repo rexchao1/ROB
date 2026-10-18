@@ -55,13 +55,12 @@ Feature: The welcome
     When someone says "let's play imposter"
     Then the players hear the host say "Let's play Imposter. Everyone gets the same secret word, except one of you: the Imposter."
 
-  @D50 @D6
-  Scenario: A game named with a headcount that disagrees waits for the count to agree
+  @D50 @D116
+  Scenario: A game named with a headcount that disagrees starts on the group's number
     Given five friends are seated around a table with the host in the middle
     And the welcome has suggested Mafia and asked
     When someone says "imposter with six people"
-    Then the players hear the host say "I only see five. Who's hiding?"
-    And no game has started
+    Then the game starts with six players
 
   @D94
   Scenario: A game's name inside other talk does not start it
@@ -143,14 +142,13 @@ Feature: The welcome
     And the players hear no nudge in the next two minutes
     And the host does not listen again until someone puts a hand on top of its head
 
-  @D59 @D6
-  Scenario: A headcount above the host's gets a second look
+  @D59 @D116
+  Scenario: A headcount above the host's is taken at its word
     Given five friends are seated around a table with the host in the middle
     And the welcome has suggested Mafia and asked
     When someone says "there are six of us"
-    Then the players hear the host say "I only see five. Who's hiding?"
-    And the players see the host sweep the whole table again
-    And the players hear the host say "Hmm, still five."
+    Then the players see no second sweep
+    And the players hear the host suggest Mafia
 
   @D59
   Scenario: A headcount below the host's gets no second look

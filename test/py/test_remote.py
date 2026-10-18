@@ -132,7 +132,7 @@ def test_a_reset_mid_game_puts_the_referee_back_to_idle_listening_without_a_word
     assert _tools(fake) == SETUP
     assert call(remote.url, "GET", "/test/state") == (200, {"game": None})
     call(remote.url, "POST", "/test/advance", {"seconds": 5})
-    assert _tools(fake) == [*SETUP, "set_all_leds", "listen"]  # the ring shows it listens (D43), then the idle loop's first window, as with the host alone
+    assert _tools(fake) == [*SETUP, "set_all_leds", "listen", "get_touch_state"]  # the ring shows it listens (D43), the idle loop's first window, then a look for a hand on the head, as with the host alone
     assert remote.referee.epoch != epoch and remote.referee.playing is None
     assert _said(fake) == []
 

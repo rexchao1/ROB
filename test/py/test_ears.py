@@ -210,3 +210,17 @@ def test_small_talk_kinds():
 ])
 def test_memory_commands(text, expected):
     assert ears.memory_command(text) == expected
+
+
+@pytest.mark.parametrize("text", ["let's end this game please.", "okay, exit the game", "we're done", "stop this game"])
+def test_more_ways_to_end_the_game_are_heard(text):
+    assert ears.wants_to_stop(text) and not ears.wants_sleep(text)
+
+
+@pytest.mark.parametrize("text", ["go to sleep.", "rob, take a nap", "okay go to bed"])
+def test_go_to_sleep_ends_any_game_and_naps(text):
+    assert ears.wants_to_stop(text) and ears.wants_sleep(text) and not ears.wants_to_reset(text)
+
+
+def test_a_stop_phrase_inside_another_word_is_not_a_stop():
+    assert not ears.wants_to_stop("we had a great weekend games night")

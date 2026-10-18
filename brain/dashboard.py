@@ -117,6 +117,9 @@ def change(host: Any, body: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("speaker is robot or mac")
             speaker = value
             continue  # applied below, through the host, once everything else checks out
+        elif name == "mic":
+            if value not in settings.CHOICES["mic"]:
+                raise ValueError("mic is robot or mac")
         else:
             raise ValueError(f"no setting {name!r}")
         changes[name] = value

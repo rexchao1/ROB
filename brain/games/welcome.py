@@ -117,7 +117,8 @@ class Welcome:
         self.table.mood("idle")
         State(phase="welcome", seats=0).report(self.table)
         self.memory.clear()
-        self._ask(self._opening("welcome.greeting", named=True) or lines.greeting(self.rng))
+        self._say(self._opening("welcome.greeting", named=True) or lines.greeting(self.rng))
+        self._ask(lines.games_menu())
         self.later = lines.nudges(None, self.rng)
 
     def wake(self) -> None:
@@ -128,10 +129,11 @@ class Welcome:
         self.later = lines.nudges(None, self.rng)
 
     def _opening(self, situation: str, named: bool = False) -> str | None:
-        """The talk model's greeting or wake-up line, written ahead, if it fits and asks
-        what they want to play (and, `named`, says it is ROB); else None."""
+        """The talk model's greeting or wake-up line, written ahead, if it fits: the
+        greeting (`named`) says it is ROB, the wake-up asks what they want to play;
+        else None."""
         line = _fit(self.table.chat(situation, games=lines.game_names(), remembered=self.facts.remembered()))
-        if line is None or "?" not in line or (named and not re.search(r"\brob\b", line, re.IGNORECASE)):
+        if line is None or (not named and "?" not in line) or (named and not re.search(r"\brob\b", line, re.IGNORECASE)):
             return None
         return line
 
@@ -247,10 +249,10 @@ class Welcome:
         offered = now - self.offered_at <= self.options.answer_seconds
         spoken = ears.count_said(heard) or (ears.bare_number(heard) if answering else None)
         if spoken is not None:
-            if self.seen and self.seats > 0 and self.recounts < 1:  # one second look, then their word
+            if self.seen and spoken == self.seats:
                 self._spoken(spoken)
             else:
-                self._told(spoken)
+                self._told(spoken)  # their number wins over the sweep
             return None
         if ears.asks_games(heard):
             self._ask(lines.games_list(self.seats) if self.seats > 0 else lines.games_any())
@@ -298,22 +300,8 @@ class Welcome:
         self.offered_at = float("-inf")
 
     def _spoken(self, spoken: int) -> None:
-        """A headcount said in the welcome: agreed, or a second look (D39, D6)."""
-        n = self.seats
-        if spoken == n:
-            self._ask(lines.count_agreed(n, self.suggestion))
-            return
-        self.recounts += 1  # after this, the group's word wins (see _hear)
-        if spoken < n:
-            self._ask(lines.see_more(n))
-            return
-        self._say(lines.only_see(n))  # "I only see five. Who's hiding?"
-        self.table.wait(self.options.settle_seconds)
-        self._count()
-        self._say(lines.recounted(n, self.seats))
-        if self.seats != n:
-            self._hellos()
-        self._suggest()
+        """A headcount said in the welcome that matches the sweep: agreed (D39)."""
+        self._ask(lines.count_agreed(spoken, self.suggestion))
 
     def _chat(self, heard: str, answering: bool, now: float, before: list[tuple[str, str]]) -> None:
         """Small talk: a reply that knows the talk so far (`before`, what was said before

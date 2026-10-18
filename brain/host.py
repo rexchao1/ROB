@@ -59,6 +59,9 @@ HEAR_AFTER = 4.0  # nobody close this long after the lean-in line: a short liste
 HEAR_EVERY = 6.0  # and again this often; photos stop while the host listens (one gateway command at a time)
 HEAR_SECONDS = 3.0  # each of those listens
 TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a hand on it is "show me"
+BARGE_WINDOW = 2.0  # seconds per listen on the Mac's microphone while ROB talks, for a command over his line
+FACE_RETRY = 10.0  # seconds between tries to put ROB's face back on a robot that dropped off
+TOUCH_SINCE = 5.0  # between games, a touch this long before a listen began (while ROB talked) still counts
 TRUST = 4.0  # seconds the card stays up on a touch or "show me", the camera or not
 REVEAL_HOLD = 2.0  # seconds a reveal card stays up after its line, before the host's face comes back
 SPEAKERS = ("robot", "mac")
@@ -167,6 +170,8 @@ class Host:
         self.asleep = False  # napping between games: no listening until a tap on the head
         self._paused_for = 0.0  # seconds spent paused, left out of now() so a game's timers stop
         self.last_line: str | None = None  # the game's last line, for "say that again"
+        self._face_tried = float("-inf")  # time.monotonic() of the last reload after the robot dropped off
+        self._barged_at = float("-inf")  # time.monotonic() of the last command heard over ROB's line
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._started = threading.Event()
@@ -203,18 +208,57 @@ class Host:
 
     def wait(self, seconds: float) -> None:
         self._check_stop()
+        self._interrupt()
         self.clock.sleep(seconds)
 
     def say(self, line: str) -> None:
+        self._interrupt()
         self.last_line = line
-        self._speak(line)
+        cut = self._speak(line)
+        if cut:
+            self._interrupt()  # in a game: the stop or the pause, now
+            if self._in_game():
+                self._speak(line)  # back from a pause: the line again, whole
 
-    def _speak(self, line: str, mouth: bool = True) -> None:
+    def _interrupt(self) -> None:
+        """A pause or a stop typed on the dashboard (its Pause and Stop buttons) takes
+        effect before the game's next line or wait, not only at its next listen."""
+        if self.paused or not self._in_game():
+            return
+        text = self._take_command()
+        if text is None:
+            return
+        self._heard_typed(text)
+        if not ears.wants_to_stop(text):
+            text = self._pause()
+        if text:
+            while self._take_command() is not None:  # a second press of Stop is the same stop
+                pass
+            raise GameStopped.heard(text)
+
+    def _take_command(self) -> str | None:
+        """The first typed line that pauses or stops the game, taken out; the rest wait
+        for the next listen."""
+        def wanted(text: str) -> bool:
+            return ears.wants_to_stop(text) or ears.wants_pause(text)
+
+        with self._lock:
+            for text in self._injected:
+                if wanted(text):
+                    self._injected.remove(text)
+                    return text
+        if self.dash is None:
+            return None
+        typed = self.dash.take_first(wanted)
+        return None if typed is None else typed.strip().lower()
+
+    def _speak(self, line: str, mouth: bool = True) -> bool:
         """Say a line; the host's own lines (the pause, the speaker) come here directly,
         so "say that again" still repeats the game's. mouth=False: a card is up, so the
         robot's mouth stays still (a mouth frame would cover it). Right after a listen the ring
         turns back while the line's audio is being made, not after, which takes one robot
-        round trip (about 70 ms) off every answer."""
+        round trip (about 70 ms) off every answer. True when a command said over the line
+        cut it off (on the Mac's microphone; the command waits in the typed queue)."""
         self._check_stop()
         self._log(f"say: {line}")
         self._note("said", line)
@@ -239,21 +283,57 @@ class Host:
         else:
             pcm = self.voice.pcm(line)
 
+        cut = threading.Event()
+
         def play() -> None:
-            if mouth:
-                self.body.play(pcm)
-            else:
-                self.body.play(pcm, mouth=False)
+            if not self._barge_in():
+                if mouth:
+                    self.body.play(pcm)
+                else:
+                    self.body.play(pcm, mouth=False)
+                return
+            done = threading.Event()
+            threading.Thread(target=self._overhear, args=(line, cut, done), name="barge-in", daemon=True).start()
+            try:
+                self.body.play(pcm, mouth=mouth, abort=cut)
+            finally:
+                done.set()
 
         if self.dash is None:
             play()
-            return
+            return cut.is_set()
         self.dash.record("say", line)
         token = self.dash.speaking(line)
         try:
             play()
         finally:
             self.dash.spoken(token)
+        return cut.is_set()
+
+    def _barge_in(self) -> bool:
+        """Listen while talking: only on the Mac's microphone (the robot's cannot hear
+        while its speaker plays, and beeps each time it opens), never while paused."""
+        return not self.virtual and not self.paused and settings.current.mic == "mac"
+
+    def _overhear(self, line: str, cut: threading.Event, done: threading.Event) -> None:
+        """While `line` plays, listen in BARGE_WINDOW pieces; a hard command (ears.
+        hard_command) cuts the line off and waits at the front of the typed queue. The
+        microphone hears ROB too, so a command his own line holds is never taken."""
+        if ears.hard_command(line):
+            return
+        while not done.is_set():
+            try:
+                heard = self.body.listen(BARGE_WINDOW).strip().lower()
+            except BodyError:
+                return
+            if heard and ears.hard_command(heard):
+                self._log(f"heard over my line: {heard}")
+                self._note("heard", heard)
+                self._barged_at = time.monotonic()
+                with self._lock:
+                    self._injected.appendleft(heard)
+                cut.set()
+                return
 
     def _cue(self, listening: bool) -> None:
         """The ring: "listening" while the host listens, else the mood's colour (D43);
@@ -283,9 +363,17 @@ class Host:
         """What the table says in the next `seconds`. The host's own commands are taken
         here and this listen starts over: "pause" holds everything until "resume" or a
         tap on the head, a speaker change moves the voice, "say that again" repeats the
-        game's last line."""
+        game's last line. Between games a hand on the head is "pause": the lobby and the
+        welcome take it as a nap."""
+        self._face_back()
         while True:
+            start = self.clock.now()
             text = self._hear(seconds)
+            if not self._in_game():
+                now = self.clock.now()
+                if self.body.touched(now - start + TOUCH_SINCE, now):
+                    self._log("head touched: a nap")
+                    return "pause"
             if ears.wants_pause(text) and self._in_game():
                 text = self._pause()
                 if text:  # "stop the game" or "reset" said while paused: the game hears it
@@ -380,6 +468,7 @@ class Host:
                 woke = typed
                 break
             self.wait(TOUCH_EVERY)
+            self._face_back()
             now = self.clock.now()
             if self.body.touched(now - checked + 0.5, now):
                 woke = ""
@@ -415,10 +504,13 @@ class Host:
             if self.virtual:
                 self.clock.sleep(chunk)  # the window passes on the clock; the fake answers at once
             try:
-                heard.append(self.body.listen(chunk))
+                said = self.body.listen(chunk)
             except BodyError:
                 self.robot_ok = False
                 raise
+            if said.strip() and ears.hard_command(said) and time.monotonic() - self._barged_at < BARGE_WINDOW + 1.0:
+                said = ""  # the tail of the command already heard over ROB's line: taken once
+            heard.append(said)
             self.robot_ok = True
             left -= chunk
         if typed_too:
@@ -676,7 +768,7 @@ class Host:
                         self._heard_typed(text)
                     now = self.clock.now()
                     if what == "stop":
-                        raise GameStopped(reset=ears.wants_to_reset(text))
+                        raise GameStopped.heard(text)
                     if what == "seen":
                         hide(now)
                         return True
@@ -693,7 +785,7 @@ class Host:
                         trusted = None
                         stopped = self._pause()
                         if stopped:  # "stop the game" or "reset" said while paused
-                            raise GameStopped(reset=ears.wants_to_reset(stopped))
+                            raise GameStopped.heard(stopped)
                         self.say(lines.lean_in(seat))
                         start = prompted = last_close = touch_checked = self.clock.now()
                         next_hear = start + HEAR_AFTER
@@ -772,7 +864,26 @@ class Host:
         if self.dash is not None:
             self.dash.robot_face(shown)
 
+    def _face_back(self) -> None:
+        """The robot dropped off and came back showing its stock face: load ROB's set
+        again (the game's cards in a game, else his face alone), at most every
+        FACE_RETRY seconds while it stays away."""
+        gateway = getattr(self.body, "gateway", None)
+        if self.virtual or not getattr(gateway, "dropped", False) or time.monotonic() - self._face_tried < FACE_RETRY:
+            return
+        self._face_tried = time.monotonic()
+        gateway.dropped = False
+        self._loaded_path = None
+        if self._manifest is not None and self._in_game():
+            if self._loading is not None:
+                self._loading.join()
+                self._loading = None
+            self._load(self._manifest_path())
+        else:
+            self.prepare([])
+
     def _wait_for_cards(self) -> dict[str, Any]:
+        self._face_back()
         if self._manifest is None:
             raise HostError("show_private before prepare")
         if self._loading is not None:
@@ -799,6 +910,7 @@ class Host:
         self.asleep = False  # the ring is the mood's again; a nap after this dims it anew
         if name == "idle":
             self.recap.clear()  # every game ends on the idle look (games.play), so its recap goes with it
+        self._face_back()
         self._avatar("idle", "idle")
         self.ring = MOOD_LEDS[name]
         self.body.leds([self.ring])
@@ -898,6 +1010,8 @@ class Host:
         while not self._stop.is_set():
             try:
                 self.body.setup()
+                if not self.virtual:  # ROB's own face from the start, not the robot's stock one (a test's calls stay as they were)
+                    self.prepare([])
                 self.mood("idle")
                 self._turn(0.0)
                 return

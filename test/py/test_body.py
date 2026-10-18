@@ -56,13 +56,24 @@ def test_photo_with_nothing_on_the_camera_raises(body):
         body.photo()
 
 
-def test_listen_asks_for_english_from_faster_whisper_and_returns_the_text(fake, body):
+def test_listen_asks_for_english_from_faster_whisper_and_returns_the_text(fake, body, monkeypatch):
+    from brain import settings
+
+    monkeypatch.setattr(settings.current, "mic", "robot")
     fake.device.heard.append("let's play mafia")
     assert body.listen(4) == "let's play mafia"
     assert _calls(fake, "listen")[0]["args"] == {"duration_ms": 4000, "engine": "faster-whisper", "language": "en", "motion": "none"}
     assert body.listen(0.01) == ""
     assert body.listen(99) == ""
     assert [c["args"]["duration_ms"] for c in _calls(fake, "listen")] == [4000, 100, 30000]
+
+
+def test_mic_mac_asks_the_gateway_for_the_macs_microphone(fake, body, monkeypatch):
+    from brain import settings
+
+    monkeypatch.setattr(settings.current, "mic", "mac")
+    body.listen(2)
+    assert _calls(fake, "listen")[0]["args"]["source"] == "mac"
 
 
 def test_play_posts_16k_mono_pcm_and_the_fake_hears_the_line(fake, body):
@@ -221,3 +232,25 @@ def test_speaker_mac_returns_once_the_line_has_played_not_when_afplay_exits(monk
     monkeypatch.setattr(body_module.subprocess, "Popen", Failing)
     with pytest.raises(BodyError):
         Body(Mouth(), "http://127.0.0.1:9/pcm", speaker="mac").play(_tone(0.1, 10_000))
+
+
+def test_a_line_that_can_be_cut_off_streams_whole_when_nobody_cuts_it(fake, body):
+    import threading
+
+    body.play(encode_test_pcm("One at a time."), abort=threading.Event())
+    assert [c["line"] for c in fake.device.calls if c["tool"] == "pcm"] == ["One at a time."]
+
+
+def test_a_streamed_line_stops_once_it_is_cut_off():
+    import threading
+
+    from brain.body import SAMPLE_RATE, STREAM_LEAD, _paced
+
+    abort = threading.Event()
+    sent = []
+    for piece in _paced(b"\0" * SAMPLE_RATE * 2 * 10, abort):  # ten seconds of line
+        sent.append(piece)
+        if len(sent) == 3:
+            abort.set()
+    assert len(sent) == 3
+    assert sum(map(len, sent)) < SAMPLE_RATE * 2 * (STREAM_LEAD + 1)

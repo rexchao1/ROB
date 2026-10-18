@@ -32,8 +32,7 @@ const WIP: WipEntry[] = [
   // would change the code, held open until the rulings are ratified and abdd/3-src binds them.
   { feature: 'hosting', scenarios: [
     'The host counts the table and numbers the seats', // D96: "sweep the whole table" replaces "turn a full circle"
-    'A disagreement without a number gets a second sweep', 'After three disagreements the host gives up',
-    'A count below the host\'s gets a second sweep', 'Each game has a smallest table',
+    'Each game has a smallest table',
     'A vote that names two seats is asked for again', 'Me too is not a vote',
     'A top seat short of a majority eliminates nobody', 'Players sitting out do not count toward the majority',
     // Rex's 3ae4edc, transcribed (D109 to D112): a lean-in by voice, the speaker by voice, say that again
@@ -48,7 +47,6 @@ const WIP: WipEntry[] = [
   ] },
   { feature: 'wavelength', scenarios: [
     'A guess is read from a short answer', 'A number inside a longer sentence is talk', 'No guess the host can read scores zero',
-    'The psychic rotates and the total is announced after three rounds', // D103: "Player five was the psychic in the first round" replaces the rigged reading
   ] },
   { feature: 'imposter', scenarios: ['A tied vote lets the Imposter survive'] },
 ]

@@ -34,6 +34,7 @@ import queue
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -189,6 +190,15 @@ class Dash:
     def take_typed(self) -> str | None:
         with self._lock:
             return self._typed.popleft() if self._typed else None
+
+    def take_first(self, wanted: Callable[[str], bool]) -> str | None:
+        """The first typed line `wanted` picks, taken out of the queue; the rest stay."""
+        with self._lock:
+            for text in self._typed:
+                if wanted(text.lower()):
+                    self._typed.remove(text)
+                    return text
+        return None
 
     def game(self, name: str) -> int:
         if name == "stop":
