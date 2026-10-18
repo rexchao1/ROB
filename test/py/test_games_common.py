@@ -220,3 +220,18 @@ def test_a_stop_heard_during_a_vote_ends_the_game():
     voters(t, {1: "let's stop the game"})
     with pytest.raises(GameStopped):
         vote(t, started(5), Options(), random.Random(0))
+
+
+def test_a_sweep_that_sees_nobody_asks_once_and_takes_the_number():
+    t = FakeTable(counts=[0])
+    t.reply(lines.HOW_MANY, "four")
+    assert gather(t, "imposter", "", State(), Options()) == 4
+    assert [kind for _, kind, _ in t.log].count("count") == 1
+
+
+def test_a_sweep_that_sees_nobody_and_hears_nothing_stops_without_sweeping_again():
+    t = FakeTable(counts=[0])
+    state = State()
+    assert gather(t, "imposter", "", state, Options()) is None
+    assert [kind for _, kind, _ in t.log].count("count") == 1
+    assert state.stalled == "no count"

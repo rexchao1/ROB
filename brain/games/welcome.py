@@ -193,7 +193,7 @@ class Welcome:
         answering = now - self.asked_at <= self.options.answer_seconds
         spoken = ears.count_said(heard) or (ears.bare_number(heard) if answering else None)
         if spoken is not None:
-            if self.seen:
+            if self.seen and self.seats > 0 and self.recounts < 1:  # one second look, then their word
                 self._spoken(spoken)
             else:
                 self._told(spoken)
@@ -226,10 +226,10 @@ class Welcome:
         if spoken == n:
             self._ask(lines.count_agreed(n, self.suggestion))
             return
-        if spoken < n or self.recounts >= self.options.count_tries:
-            self._ask(lines.see_more(n) if spoken < n else lines.only_see(n))
+        self.recounts += 1  # after this, the group's word wins (see _hear)
+        if spoken < n:
+            self._ask(lines.see_more(n))
             return
-        self.recounts += 1
         self._say(lines.only_see(n))  # "I only see five. Who's hiding?"
         self.table.wait(self.options.settle_seconds)
         self._count()

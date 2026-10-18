@@ -166,6 +166,15 @@ def gather(
         return _start(table, game, n, state)
     if counted is None:
         n = _count(table, state)
+        if n == 0:  # the camera saw nobody: ask once, never sweep again
+            if spoken is None:
+                table.say(lines.HOW_MANY)
+                spoken = _spoken(hear(table, options.confirm_seconds))
+            if spoken is None:
+                state.stalled = "no count"
+                return None
+            table.seated(spoken)
+            return _start(table, game, spoken, state)
     else:
         n = state.seats = counted
         state.report(table)

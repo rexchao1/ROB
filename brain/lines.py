@@ -437,7 +437,7 @@ def _fewest() -> int:
     return min(MINIMUM.values())
 
 
-NOBODY_YET = "I don't see anyone yet. Sit where I can see you and say reset."
+NOBODY_YET = "I can't see anyone from here. Just tell me how many of you there are."
 
 
 def suggestion(seats: int, rng: random.Random) -> str:
@@ -491,7 +491,7 @@ def games_list(seats: int) -> str:
     have = f"I've got {_join(_registered(), 'and')}."
     game = suggested(seats)
     if game is None:
-        return f"{have} Sit where I can see you first." if seats < 1 else f"{have} You'll need at least {number_word(_fewest())} people, though."
+        return f"{have} How many of you are playing?" if seats < 1 else f"{have} You'll need at least {number_word(_fewest())} people, though."
     who = "just you" if seats == 1 else f"{number_word(seats)} of you"
     return f"{have} With {who} I'd pick {game_name(game)}. Which one?"
 

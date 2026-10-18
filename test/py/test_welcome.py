@@ -65,3 +65,21 @@ def test_what_should_we_play_with_no_count_asks_how_many():
     assert w.converse() is None
     assert lines.HOW_MANY in table.said
     assert w.seats == 4
+
+
+def test_seeing_nobody_never_loops_and_a_number_is_taken():
+    table = FakeTable(seats=0).hear("count us", "there are four of us", "sure")
+    w = _welcome(table)
+    w.greet()
+    choice = w.converse()
+    assert _kinds(table).count("count") == 1
+    assert choice == Choice("imposter", "sure", 4, False)
+
+
+def test_insisting_on_a_bigger_number_than_seen_wins_after_the_second_look():
+    table = FakeTable(counts=[3]).hear("count us", "five of us", "five of us", "five of us", "five of us", "sure")
+    w = _welcome(table)
+    w.greet()
+    choice = w.converse()
+    assert _kinds(table).count("count") == 2  # the sweep asked for, one second look
+    assert choice is not None and choice.counted == 5
