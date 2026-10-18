@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from brain import net, settings
+from brain.banter import Recap
 from brain.talk import Talk
 
 RETRY = 60.0
@@ -37,6 +38,7 @@ class PiTable:
     def __init__(self, remote: Any, talk: Talk | None = None) -> None:
         self.remote = remote
         self.talk = talk if talk is not None else PiTalk()
+        self.recap = Recap()  # the game so far for the Pi's own quips, as the Mac's Host keeps one: RAM only
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.remote, name)
@@ -69,7 +71,7 @@ class PiTable:
         self._sync()
         if self.talk.active():
             try:
-                line = self.talk.quip(slot, context)
+                line = self.recap.keep(slot, self.talk.quip(slot, context, self.recap))
                 if line:
                     self.remote.say(line)
                     return
@@ -77,6 +79,11 @@ class PiTable:
                 if isinstance(self.talk, PiTalk):
                     self.talk.unavailable_until = time.monotonic() + RETRY
         self.remote.quip(slot, **context)
+
+    def mood(self, name: str) -> None:
+        if name == "idle":
+            self.recap.clear()  # every game ends on the idle look, so its recap goes with it
+        self.remote.mood(name)
 
     def close(self) -> None:
         self.remote.close()
