@@ -17,8 +17,9 @@ on trust, "got it" moves on, and "pause" or "stop the game" work there as anywhe
 Every listen also takes the host's own commands, then listens again: "pause" (or
 "shut up", a bare "stop"), "change your speaker to the Mac" and "say that again".
 
-Only "idle" and "off" are ever set as the avatar outside show_private: once a game's
-set is loaded, every other face name is one of its cards.
+Only "idle" and "off" are ever set as the avatar outside show_private and reveal: once
+a game's set is loaded, every other face name is one of its cards. A reveal is the
+public kind: a card up while the host says the line it goes with, then the face again.
 
 While the host listens the ring shows the "listening" colour, steady across
 back-to-back listens, and goes back to the mood's colour when it next speaks or the
@@ -58,6 +59,7 @@ HEAR_EVERY = 6.0  # and again this often; photos stop while the host listens (on
 HEAR_SECONDS = 3.0  # each of those listens
 TOUCH_EVERY = 1.0  # the head's touch is read this often while no card is up: a tap is "show me"
 TRUST = 4.0  # seconds the card stays up on a tap or "show me", the camera or not
+REVEAL_HOLD = 2.0  # seconds a reveal card stays up after its line, before the host's face comes back
 SPEAKERS = ("robot", "mac")
 LISTEN_WINDOW = 4.0  # the idle loop's listening window, waiting for a game's name
 MAX_LISTEN = 30.0  # the gateway's longest listen
@@ -202,21 +204,29 @@ class Host:
         self.last_line = line
         self._speak(line)
 
-    def _speak(self, line: str) -> None:
+    def _speak(self, line: str, mouth: bool = True) -> None:
         """Say a line; the host's own lines (the pause, the speaker) come here directly,
-        so "say that again" still repeats the game's."""
+        so "say that again" still repeats the game's. mouth=False: a card is up, so the
+        robot's mouth stays still (a mouth frame would cover it)."""
         self._check_stop()
         self._log(f"say: {line}")
         self._note("said", line)
         pcm = self.voice.pcm(line)
         self._cue(False)
+
+        def play() -> None:
+            if mouth:
+                self.body.play(pcm)
+            else:
+                self.body.play(pcm, mouth=False)
+
         if self.dash is None:
-            self.body.play(pcm)
+            play()
             return
         self.dash.record("say", line)
         token = self.dash.speaking(line)
         try:
-            self.body.play(pcm)
+            play()
         finally:
             self.dash.spoken(token)
 
@@ -671,6 +681,30 @@ class Host:
                 self.body.blink(True)
             for text in held:  # heard at the next listen, so the game still hears it
                 self.inject(text)
+
+    def reveal(self, card: Card, line: str) -> None:
+        """A big moment: the card up (blinking off, the mouth still, so no face frame
+        covers it) while the line is said, held REVEAL_HOLD seconds, then the host's face.
+        The card must be in the prepared set; one still uploading is waited for (the
+        game prepares early, so the wait is what the upload has left). A card the screen
+        cannot show (not prepared, or the set would not load) is logged and the line is
+        said without it: a reveal is never worth stopping a game."""
+        self._check_stop()
+        try:
+            slot = cardset.slot_of(self._wait_for_cards(), card)
+        except (HostError, KeyError) as e:
+            self._log(f"reveal without its card ({e})")
+            self.say(line)
+            return
+        self.body.blink(False)
+        try:
+            self._avatar(slot, "card")
+            self.last_line = line
+            self._speak(line, mouth=False)
+            self.wait(REVEAL_HOLD)
+        finally:
+            self._avatar("idle", "idle")
+            self.body.blink(True)
 
     def _deal_answer(self, text: str) -> str | None:
         """What a line heard or typed at the private screen asks of the deal: "stop",

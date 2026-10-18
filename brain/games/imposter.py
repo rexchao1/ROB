@@ -5,6 +5,10 @@ IMPOSTER. Then one clue each in seat order, the host turning to each player and
 addressing each exactly once (no second ask: a missed clue is just missed), a vote,
 and the reveal: "Player three was the Imposter." when they are voted out, otherwise
 "The Imposter survives. It was Player three." (a tie or no majority included).
+
+Both endings and the word are known before the deal, so their reveal cards go up with
+the words in the one set the game prepares: the screen shows the Imposter's seat as
+the host names them, then the word.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ import random
 from typing import Any
 
 from brain import lines
-from brain.games.common import Options, State, abandon, deal, finish, hear, vote
+from brain.games.common import Options, State, abandon, deal, decided, finish, hear, vote
 from brain.table import Card, Table
 
 
@@ -22,7 +26,10 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
     imposter = int(rig.get("imposter") or rng.randint(1, seats))
     if not 1 <= imposter <= seats or word.upper() == lines.IMPOSTER:
         raise ValueError(f"a rig that does not fit {seats} seats: {rig}")
-    table.prepare([Card(word), Card(lines.IMPOSTER)])
+    caught = Card(f"PLAYER {imposter}", "was the Imposter", "out")
+    survived = Card(f"PLAYER {imposter}", "Imposter survives", "win")
+    the_word = Card(word, "was the word", "word")
+    table.prepare([Card(word), Card(lines.IMPOSTER), caught, survived, the_word])
     table.say(lines.IMPOSTER_INTRO)
     table.say(lines.DEAL_WORDS)
     table.say(lines.flavor("imposter", rng))
@@ -42,11 +49,11 @@ def run(table: Table, rng: random.Random, seats: int, rig: dict[str, Any], optio
 
     table.say(lines.IMPOSTER_VOTE)
     out = vote(table, state, options, rng)
+    winner = "players" if out == imposter else "imposter"
+    decided(table, state, winner)
     if out == imposter:
-        table.say(lines.was_imposter(imposter))
-        winner = "players"
+        table.reveal(caught, lines.was_imposter(imposter))
     else:
-        table.say(lines.imposter_survives(imposter))
-        winner = "imposter"
-    table.say(lines.word_was(word))
+        table.reveal(survived, lines.imposter_survives(imposter))
+    table.reveal(the_word, lines.word_was(word))
     finish(table, state, winner, rng)

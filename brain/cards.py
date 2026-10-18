@@ -206,7 +206,7 @@ def pack(cards: list[Card]) -> tuple[bytes, dict[str, Any]]:
     assert len(data) == SET_BYTES
     slots: dict[str, Any] = {slot: None for slot in SLOTS}
     for slot, card in zip(SLOTS, cards):
-        slots[slot] = {"text": card.text, "sub": card.sub}
+        slots[slot] = {"text": card.text, "sub": card.sub, **({"kind": card.kind} if card.kind else {})}
     manifest = {"mode": "layered", "bytes": SET_BYTES, "sha256": hashlib.sha256(data).hexdigest(), "slots": slots}
     return data, manifest
 
@@ -217,16 +217,18 @@ def manifest_path(path: Path) -> Path:
 
 def write_set(cards: list[Card], directory: Path) -> Path:
     """Write the set as <directory>/<first 12 hex of its sha256>.bin with its manifest
-    beside it (.bin.json); returns the .bin path. Writes nothing when it already exists."""
+    beside it (.bin.json); returns the .bin path. Writes nothing that is already there."""
     data, manifest = pack(cards)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{manifest['sha256'][:12]}.bin"
     side = manifest_path(path)
-    if not (path.exists() and path.stat().st_size == SET_BYTES and side.exists()):
+    if not (path.exists() and path.stat().st_size == SET_BYTES):
         tmp = path.with_suffix(".bin.tmp")
         tmp.write_bytes(data)
         tmp.replace(path)
-        side.write_text(json.dumps(manifest, indent=2) + "\n")
+    text = json.dumps(manifest, indent=2) + "\n"
+    if not side.exists() or side.read_text() != text:  # the same pixels may carry other kinds
+        side.write_text(text)
     return path.resolve()
 
 
@@ -239,7 +241,7 @@ def slot_of(manifest: dict[str, Any], card: Card) -> str:
     """The set_avatar face name that shows this card; KeyError when the set does not hold it."""
     for slot in SLOTS:
         held = manifest["slots"].get(slot)
-        if held is not None and held["text"] == card.text and held.get("sub") == card.sub:
+        if held is not None and held["text"] == card.text and held.get("sub") == card.sub and held.get("kind") == card.kind:
             return slot
     raise KeyError(f"the set does not hold {card!r}")
 
@@ -247,4 +249,4 @@ def slot_of(manifest: dict[str, Any], card: Card) -> str:
 def card_in(manifest: dict[str, Any], face: str) -> Card | None:
     """What a face name shows in this set: its card, or None for the host's face, a blank slot or "off"."""
     held = manifest["slots"].get(face) if face in SLOTS else None
-    return None if held is None else Card(held["text"], held.get("sub"))
+    return None if held is None else Card(held["text"], held.get("sub"), held.get("kind"))

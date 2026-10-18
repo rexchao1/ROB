@@ -15,6 +15,14 @@ each a night and a day:
 After every elimination the win check (D19): no Mafia left, the village wins; the Mafia
 as many as everyone else, the Mafia win. A new round clears the night's warnings and
 lets the players who sat out back in (D11).
+
+The big moments show on the host's screen while it says them (Table.reveal): the
+night's kill or "nobody died", the role of whoever is voted out, and the win. The
+role cards are needed only for the deal, so the screen's five slots then go to the
+reveals, prepared while the host is still talking: the night's set as soon as the
+whispers are in (the target is known; a Doctor or Mafia sitting out can only turn a
+save into a kill or a kill into nobody, both in the set), the day's set as the day
+begins (every role a vote can reveal, and both wins).
 """
 
 from __future__ import annotations
@@ -23,10 +31,28 @@ import random
 from typing import Any
 
 from brain import ears, lines
-from brain.games.common import Options, State, abandon, deal, finish, hear, heads_down_check, vote, whisper
+from brain.games.common import Options, State, abandon, deal, decided, finish, hear, heads_down_check, vote, whisper
 from brain.table import Card, Table
 
 MAFIA, DOCTOR, VILLAGER = lines.MAFIA, lines.DOCTOR, lines.VILLAGER
+
+
+# The reveals (Table.reveal), by what they mean.
+MAFIA_WINS_CARD = Card("MAFIA", "win", "win")
+VILLAGE_WINS_CARD = Card("VILLAGE", "wins", "win")
+NOBODY_DIED_CARD = Card("NOBODY", "died last night", "safe")
+
+
+def killed_card(seat: int) -> Card:
+    return Card(f"PLAYER {seat}", "killed in the night", "out")
+
+
+def out_card(role: str) -> Card:
+    """The role of whoever the vote put out."""
+    return Card(role, "voted out", "out")
+
+
+DAY_CARDS = [out_card(MAFIA), out_card(DOCTOR), out_card(VILLAGER), VILLAGE_WINS_CARD, MAFIA_WINS_CARD]
 
 
 def mafia_count(seats: int) -> int:
@@ -101,6 +127,9 @@ def _night(table: Table, rng: random.Random, roles: dict[int, str], state: State
     heads_down_check(table, state)
 
     save = whisper(table, lines.DOCTOR_WHISPER, lines.DOCTOR_AGAIN, state.seats, lambda s: s in state.living, options)
+    # The morning's reveals, uploaded while the night finishes: the target as whispered
+    # (a role sitting out by morning can only make it nobody), nobody, and a Mafia win.
+    table.prepare(([killed_card(target)] if target is not None else []) + [NOBODY_DIED_CARD, MAFIA_WINS_CARD])
     table.say(lines.DOCTOR_DOWN)
     table.wait(options.settle_seconds)
     heads_down_check(table, state)
@@ -118,12 +147,12 @@ def _night(table: Table, rng: random.Random, roles: dict[int, str], state: State
     if target is not None and target != save:
         state.eliminate(target)
         state.report(table)
-        table.say(lines.killed(target))
+        table.reveal(killed_card(target), lines.killed(target))
         table.say(lines.flavor("death", rng))
         table.quip("death", game="mafia")
         return _mafia_win(table, rng, roles, state)
     state.report(table)
-    table.say(lines.NOBODY_DIED)
+    table.reveal(NOBODY_DIED_CARD, lines.NOBODY_DIED)
     table.say(lines.flavor("saved", rng))
     table.quip("saved", game="mafia")
     return False
@@ -133,7 +162,8 @@ def _mafia_win(table: Table, rng: random.Random, roles: dict[int, str], state: S
     """D19, the Mafia's half: as many Mafia as everyone else still in."""
     mafia_left = [s for s in state.living if roles[s] == MAFIA]
     if mafia_left and len(mafia_left) >= len(state.living) - len(mafia_left):
-        table.say(lines.MAFIA_WIN)
+        decided(table, state, "mafia")
+        table.reveal(MAFIA_WINS_CARD, lines.MAFIA_WIN)
         table.say(lines.mafia_were(sorted(s for s, r in roles.items() if r == MAFIA)))
         finish(table, state, "mafia", rng)
         return True
@@ -164,6 +194,7 @@ def _day(table: Table, rng: random.Random, roles: dict[int, str], state: State, 
     """One day; True when the game ended."""
     state.phase = "day"
     state.report(table)
+    table.prepare(DAY_CARDS)  # uploaded during the discussion
     table.say(lines.discussion(options.day_seconds))
     _discuss(table, options)
     out = vote(table, state, options, rng)
@@ -175,9 +206,10 @@ def _day(table: Table, rng: random.Random, roles: dict[int, str], state: State, 
     state.eliminate(out)
     state.report(table)
     if role == MAFIA and not any(roles[s] == MAFIA for s in state.living):
-        table.say(lines.village_wins(out))  # D19: "Player one was the Mafia. The village wins."
+        decided(table, state, "village")
+        table.reveal(VILLAGE_WINS_CARD, lines.village_wins(out))  # D19: "Player one was the Mafia. The village wins."
         finish(table, state, "village", rng)
         return True
-    table.say(lines.was(out, role))
+    table.reveal(out_card(role), lines.was(out, role))
     table.quip("out", game="mafia")
     return _mafia_win(table, rng, roles, state)

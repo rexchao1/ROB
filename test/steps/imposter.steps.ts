@@ -3,7 +3,7 @@
 import { expect } from 'vitest'
 import type { Definer } from 'gherkin-node-test/vitest'
 import {
-  CLUE, CLUES, IMPOSTER_VOTE, brain, deal, dealtTo, defineHear, definePlaying, expectDealtAlone, expectFacing, headAt,
+  CLUE, CLUES, IMPOSTER_VOTE, brain, deal, dealtTo, defineHear, definePlaying, defineReveal, expectDealtAlone, expectFacing, headAt,
   heard, named, next, numberFrom, player, seatsFrom, start, text, voteOut, when, type World,
 } from './common.ts'
 
@@ -36,6 +36,7 @@ function expectSaw(w: World, seat: number, card: string): void {
 export const imposter: Definer<World> = (reg) => {
   definePlaying(reg)
   defineHear(reg)
+  defineReveal(reg)
 
   reg.define(/^the word is "(.+)" and Player (\w+) is the Imposter$/, (w, word, who) => {
     w.rig = { word: text(word), imposter: numberFrom(who) }

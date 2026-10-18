@@ -111,12 +111,18 @@ def abandon(table: Table, state: State) -> None:
     state.report(table)
 
 
-def finish(table: Table, state: State, winner: str | None, rng: random.Random) -> None:
-    """The game is over: report it, then a little ceremony."""
+def decided(table: Table, state: State, winner: str | None) -> None:
+    """The game is over, reported before the host reveals how (Table.reveal holds the
+    card a moment), so the state does not lag the line; finish() follows."""
     state.over = True
     state.winner = winner
     state.phase = "over"
     state.report(table)
+
+
+def finish(table: Table, state: State, winner: str | None, rng: random.Random) -> None:
+    """The game is over: report it, then a little ceremony."""
+    decided(table, state, winner)
     table.mood("win")
     table.say(lines.flavor("win", rng))
     table.quip("win", game=state.game)
