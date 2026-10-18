@@ -45,7 +45,7 @@ from brain.body import Body, Gateway
 from brain.clock import RealClock, VirtualClock
 from brain.dash import SETTINGS_FILE, Dash
 from brain.host import RECOVERY, Host
-from brain.keys import env_file, load_env
+from brain.keys import env_file, load_env, table_token
 from brain.remote import PORT as TABLE_PORT
 from brain.remote import TableServer
 from brain.server import FakeControl, serve
@@ -142,11 +142,11 @@ def main(argv: list[str] | None = None) -> int:
     Dash(host, mode="real", referee=args.referee, settings_path=SETTINGS_FILE, keys_path=env_file()).load()
     if args.referee == "remote":
         table = TableServer(
-            host, host.clock, args.table_host or "0.0.0.0", args.table_port, args.table_token,
+            host, host.clock, args.table_host or "0.0.0.0", args.table_port, args.table_token or table_token(env_file()),
             setup=host._setup, rigs=_rigs(host), hello=_hello(host, args.seed),  # noqa: SLF001
         ).start()
         host.dash.table = table
-        print(f"gamemaster: table for the referee at {_reachable(table)}", flush=True)
+        print(f"gamemaster: table for the referee at {_reachable(table)} (its token: GM_TABLE_TOKEN in .env.local; qnx/deploy.sh carries it to the Pi)", flush=True)
     server = serve(host, args.host, args.port)
     print(f"gamemaster: listening on http://{args.host}:{server.server_address[1]} (gateway {args.gateway}, pcm {pcm})", flush=True)
     dashboard_url = _dashboard_url(args.host, server.server_address[1])

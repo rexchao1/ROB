@@ -18,6 +18,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import re
+import secrets
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -112,6 +113,17 @@ def _write_env(path: Path, updates: dict[str, str | None]) -> None:
         f.write("\n".join(out) + ("\n" if out else ""))
     tmp.replace(path)
     os.chmod(path, 0o600)
+
+
+def table_token(path: Path | None = None) -> str:
+    """The token a referee needs for the brain's Table: GM_TABLE_TOKEN in .env, made
+    and saved at the first start that needs one (qnx/deploy.sh carries it to the Pi)."""
+    path = path or env_file()
+    token = read_env(path).get("GM_TABLE_TOKEN")
+    if not token:
+        token = secrets.token_urlsafe(24)
+        _write_env(path, {"GM_TABLE_TOKEN": token})
+    return token
 
 
 class Keys:

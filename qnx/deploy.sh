@@ -51,6 +51,17 @@ COPYFILE_DISABLE=1 tar --format ustar -cf - $FILES | ssh ${GM_SSH_OPTS:-} "$PI" 
   cd .. && rm -rf gm && mv gm.new gm
   echo "deploy: the referee is in ~/gm on $(hostname) ($(python3 --version))"
 '
+TOKEN=$(python3 -S -c 'import brain.keys as k; print(k.read_env().get("GM_TABLE_TOKEN", ""))')
+if [ -n "$TOKEN" ]; then
+  # On stdin, never on a command line.
+  # shellcheck disable=SC2086
+  printf '%s\n' "$TOKEN" | ssh ${GM_SSH_OPTS:-} "$PI" '
+    umask 077 && cat > .gm-table-token.new && mv -f .gm-table-token.new .gm-table-token
+  '
+  echo "deploy: the table token is in ~/.gm-table-token (mode 600)"
+else
+  echo "deploy: no GM_TABLE_TOKEN in .env.local yet: start the brain once with --referee remote, then deploy again"
+fi
 if [ "$WITH_KEY" = 1 ]; then
   # Deliberate opt-in only; ~/gm is replaced on deploy, ~/gm-memory is not.
   # shellcheck disable=SC2086
